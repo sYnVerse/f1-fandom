@@ -27,7 +27,9 @@ flags = {
         "Danish": "{{DEN}}",
         "Indonesian": "{{INA}}",
         "Swedish": "{{SWE}}",
-        "Polish": "{{POL}}"
+        "Polish": "{{POL}}",
+        "American": "{{USA}}",
+        "New Zealander": "{{NZL}}"
 }
 
 constructors = {
@@ -214,14 +216,20 @@ def qualifying(year=None, race=None):
     return
 
 # Race
-def race(year = None, race = None):
+def race(year = None, race = None, sprint = None):
     try:
-        data = f1.get_race_result(year, race)
+        if (sprint):
+            data = f1.get_sprint_result(year, race)
+        else:
+            data = f1.get_race_result(year, race)
     except:
         print("No data available.")
         return False
 
-    print("""===Results===\nThe full results for the '''{{PAGENAME}}''' are outlined below:\n{| class="wikitable"\n! <span style="cursor:help;" title=" Position">Pos.</span>\n! <span style="cursor:help;" title=" Car number">No.</span>\n! Driver\n! Constructor\n! <span style="cursor:help;" title=" Laps completed">Laps</span>\n! <span style="cursor:help;" title=" Time for winner, time or number laps behind leader or reason for retirement">Time/Retired</span>\n! <span style="cursor:help;" title=" Grid position">Grid</span>\n! <span style="cursor:help;" title=" Points gained from race">Points</span>""")
+    if (sprint):
+        print("""===Results===\nThe full Sprint results for the '''{{PAGENAME}}''' are outlined below:\n{| class="wikitable"\n! <span style="cursor:help;" title=" Position">Pos.</span>\n! <span style="cursor:help;" title=" Car number">No.</span>\n! Driver\n! Constructor\n! <span style="cursor:help;" title=" Laps completed">Laps</span>\n! <span style="cursor:help;" title=" Time for winner, time or number laps behind leader or reason for retirement">Time/Retired</span>\n! <span style="cursor:help;" title=" Grid position">Grid</span>\n! <span style="cursor:help;" title=" Points gained from race">Points</span>""")
+    else:
+        print("""===Results===\nThe full race results for the '''{{PAGENAME}}''' are outlined below:\n{| class="wikitable"\n! <span style="cursor:help;" title=" Position">Pos.</span>\n! <span style="cursor:help;" title=" Car number">No.</span>\n! Driver\n! Constructor\n! <span style="cursor:help;" title=" Laps completed">Laps</span>\n! <span style="cursor:help;" title=" Time for winner, time or number laps behind leader or reason for retirement">Time/Retired</span>\n! <span style="cursor:help;" title=" Grid position">Grid</span>\n! <span style="cursor:help;" title=" Points gained from race">Points</span>""")
 
     for x in range(0,len(data)):
         y=data.iloc[x,:]
@@ -265,18 +273,22 @@ def race(year = None, race = None):
             print("| " + time['time'])
 
         print("| " + grid)
+        # fastest lap points
         if (points != '0'):
             if (points == '26') or (points == '19') or (points == '16') or (points == '13') or (points == '11') or (points == '9') or (points == '7') or (points == '5') or (points == '3'):
-                print("! " + points + "<sup>{{abbr|FL|+1 point for achieving the fastest lap}}</sup>")
+                print("! " + points + "<sup>{{abbr|[[Fastest lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
             elif (points == '2') and (pos == '10'):
-                print("! " + points + "<sup>{{abbr|FL|+1 point for achieving the fastest lap}}</sup>")
+                print("! " + points + "<sup>{{abbr|[[Fastest lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
             else:
                 print("! " + points)
         if (x == 10):
             print("! rowspan=10 |")
 
     print('|-')
-    print('''! colspan="8" | Source:<ref name=RR>{{PAGENAME}} - Race Result, ''https://www.formula1.com/en/results.html/2022/races/1116/french/race-result.html'', (Formula One World Championship Limited, 2022), accessed on 24 July 2022)</ref>''')
+    if (sprint):
+        print('''! colspan="8" | Source:<ref name=Sprint Results>[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Sprint%20Classification.pdf {{PAGENAME}} - Final Sprint Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
+    else:
+        print('''! colspan="8" | Source:<ref name=Race Results>[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Race%20Classification.pdf {{PAGENAME}} - Final Race Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
     print('|}')
 
     return
@@ -315,12 +327,22 @@ def standings(year=None, race=None):
         if (pts != '0'):
             print("|-")
             if (pos == '1'):
-                print("| '''1'''")
-                print("| " + driver)
+                print("| {{1st}}")
+                print("| '''" + driver + "'''")
                 print("| '''" + pts + "'''")
                 print("| {{X}}") # TODO: automate comparison to previous GP
+            elif (pos == '2'):
+                print("| {{2nd}}")
+                print("| " + driver)
+                print("| " + pts)
+                print("| {{X}}") # TODO: automate comparison to previous GP
+            elif (pos == '3'):
+                print("| {{3rd}}")
+                print("| " + driver)
+                print("| " + pts)
+                print("| {{X}}") # TODO: automate comparison to previous GP
             else:    
-                print("| " + pos)
+                print("| " + pos + "th")
                 print("| " + driver)
                 print("| " + pts)
                 print("| {{X}}") # TODO: automate comparison to previous GP
@@ -352,12 +374,22 @@ def standings(year=None, race=None):
         if (pts != '0'):
             print("|-")
             if (pos == '1'):
-                print("| '''1'''")
-                print("| " + team)
+                print("| {{1st}}")
+                print("| '''" + team + "'''")
                 print("| '''" + pts + "'''")
                 print("| {{X}}") # TODO: automate comparison to previous GP
+            elif (pos == '2'):
+                print("| {{2nd}}")
+                print("| " + team)
+                print("| " + pts)
+                print("| {{X}}") # TODO: automate comparison to previous GP
+            elif (pos == '3'):
+                print("| {{3rd}}")
+                print("| " + team)
+                print("| " + pts)
+                print("| {{X}}") # TODO: automate comparison to previous GP
             else:    
-                print("| " + pos)
+                print("| " + pos + "th")
                 print("| " + team)
                 print("| " + pts)
                 print("| {{X}}") # TODO: automate comparison to previous GP
@@ -377,8 +409,10 @@ if (len(sys.argv) == 2):
         qualifying()
     elif (sys.argv[1] == 'standings'):
         standings()
+    elif (sys.argv[1] == 'sprint'):
+        race(sprint=True)
     else:
-        print("You must enter an argument (race, quali, grid, standings)!")
+        print("You must enter an argument (race, quali, sprint, grid, standings)!")
 
 elif (len(sys.argv) == 4):
     if (sys.argv[1] == 'race'):
@@ -389,6 +423,8 @@ elif (len(sys.argv) == 4):
         qualifying(int(sys.argv[2]), int(sys.argv[3]))
     elif (sys.argv[1] == 'standings'):
         standings(int(sys.argv[2]), int(sys.argv[3]))
+    elif (sys.argv[1] == 'sprint'):
+        race(int(sys.argv[2]), int(sys.argv[3]), True)
     else:
         print("You must enter 3 arguments \n arg1: race, quali, grid, standings \n arg2: Formula 1 season number (ex: 2021) \n arg3: Race number (ex. 1 -- first race of the season)")
 
