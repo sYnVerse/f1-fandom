@@ -278,9 +278,9 @@ def race(year = None, race = None, sprint = None):
         # fastest lap points
         if (points != '0'):
             if (points == '26') or (points == '19') or (points == '16') or (points == '13') or (points == '11') or (points == '9') or (points == '7') or (points == '5') or (points == '3'):
-                print("! " + points + "<sup>{{abbr|[[Fastest lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
+                print("! " + points + "<sup>{{abbr|[[Fastest Lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
             elif (points == '2') and (pos == '10'):
-                print("! " + points + "<sup>{{abbr|[[Fastest lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
+                print("! " + points + "<sup>{{abbr|[[Fastest Lap|FL]]|+1 point for achieving the fastest lap}}</sup>")
             else:
                 print("! " + points)
         if (x == 10):
