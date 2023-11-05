@@ -122,6 +122,7 @@ def qualifying(year=None, race=None):
 
     sort_Q1=q.sort_values(by=['Q1'])
     sort_Q2=q.sort_values(by=['Q2'])
+    fastestQ1 = None
     
     # Print table header
     print("""===Qualifying Results===\nThe full qualifying results for the '''{{PAGENAME}}''' are outlined below:\n\n{|class="wikitable" width=100% style="font-size:77%"\n! rowspan=2 width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! rowspan=2 width=5% | <span style="cursor:help" title="Car Number">No.</span>\n! rowspan=2 width=23% | Driver\n! rowspan=2 width=23% | Team\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 1">Q1</span>\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 2">Q2</span>\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 3">Q3</span>\n! rowspan=2 width=5% | Grid\n|-\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time""")
@@ -161,9 +162,10 @@ def qualifying(year=None, race=None):
                 q1=sort_Q1.iloc[y,:]
                 if (q1[0] == number):
                     print("! " + str(1+y))
-                if (y == 0):
+                if (fastestQ1 is None and q1[7] != ""):
                     fastestQ1 = q1[0]
 
+        # 107% time
         if (fastestQ1 == number):
             print("| '''" + str(b[7]) + "'''")
             OneZeroSeven = str(b[7])
@@ -209,7 +211,7 @@ def qualifying(year=None, race=None):
     print("|-")
     print("! colspan=14 | [[107% Time]]: " + find_107_time(OneZeroSeven))
     print("|-")
-    print("! colspan=14 | Source:<ref name=QR>{{PAGENAME}} - Qualifying, ''https://www.formula1.com/en/results.html/2022/races/1117/hungary/qualifying.html'', (Formula One World Championship Limited, 2022. Retrieved on 7 May 2022)</ref>")
+    print("! colspan=14 | Source:<ref name=QR>[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Qualifying%20Classification.pdf {{PAGENAME}} - Final Qualifying Classification] (PDF). Fédération Internationale de l'Automobile.</ref>")
     print("|}")
     print("*'''Bold''' indicates the fastest driver's time in each session.")
 
