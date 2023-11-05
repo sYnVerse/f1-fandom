@@ -401,29 +401,29 @@ def standings(year=None, race=None):
 
 # Main
 if (len(sys.argv) == 2):
-    if (sys.argv[1] == 'race'):
+    if (sys.argv[1].lower() == 'race'):
         race()
-    elif (sys.argv[1] == 'grid'):
+    elif (sys.argv[1].lower() == 'grid'):
         grid()
-    elif (sys.argv[1] == 'quali'):
+    elif (sys.argv[1].lower() == 'quali'):
         qualifying()
-    elif (sys.argv[1] == 'standings'):
+    elif (sys.argv[1].lower() == 'standings'):
         standings()
-    elif (sys.argv[1] == 'sprint'):
+    elif (sys.argv[1].lower() == 'sprint'):
         race(sprint=True)
     else:
         print("You must enter an argument (race, quali, sprint, grid, standings)!")
 
 elif (len(sys.argv) == 4):
-    if (sys.argv[1] == 'race'):
+    if (sys.argv[1].lower() == 'race'):
         race(int(sys.argv[2]), int(sys.argv[3]))
-    elif (sys.argv[1] == 'grid'):
+    elif (sys.argv[1].lower() == 'grid'):
         grid(int(sys.argv[2]), int(sys.argv[3]))
-    elif (sys.argv[1] == 'quali'):
+    elif (sys.argv[1].lower() == 'quali'):
         qualifying(int(sys.argv[2]), int(sys.argv[3]))
-    elif (sys.argv[1] == 'standings'):
+    elif (sys.argv[1].lower() == 'standings'):
         standings(int(sys.argv[2]), int(sys.argv[3]))
-    elif (sys.argv[1] == 'sprint'):
+    elif (sys.argv[1].lower() == 'sprint'):
         race(int(sys.argv[2]), int(sys.argv[3]), True)
     else:
         print("You must enter 3 arguments \n arg1: race, quali, grid, standings \n arg2: Formula 1 season number (ex: 2021) \n arg3: Race number (ex. 1 -- first race of the season)")
