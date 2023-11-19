@@ -288,9 +288,9 @@ def race(year = None, race = None, sprint = None):
 
     print('|-')
     if (sprint):
-        print('''! colspan="8" | Source:<ref name=Sprint Results>[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Sprint%20Classification.pdf {{PAGENAME}} - Final Sprint Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
+        print('''! colspan="8" | Source:<ref name="Sprint Results">[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Sprint%20Classification.pdf {{PAGENAME}} - Final Sprint Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
     else:
-        print('''! colspan="8" | Source:<ref name=Race Results>[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Race%20Classification.pdf {{PAGENAME}} - Final Race Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
+        print('''! colspan="8" | Source:<ref name="Race Results">[https://www.fia.com/sites/default/files/decision-document/{{urlencode: {{PAGENAME}} |PATH}}%20-%20Final%20Race%20Classification.pdf {{PAGENAME}} - Final Race Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
     print('|}')
 
     return
