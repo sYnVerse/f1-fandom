@@ -65,11 +65,11 @@ def get_drivers(year=None, race=None):
     [24 rows x 8 columns]
     """
     if year and race:
-        url = 'http://ergast.com/api/f1/{}/drivers.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/drivers.json?limit=1000'.format(year, race)
     elif year:
-        url = 'http://ergast.com/api/f1/{}/drivers.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/drivers.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/drivers.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/drivers.json?limit=1000'
     r = requests.get(url)
 
     assert r.status_code == 200, 'Cannot connect to Ergast API'
@@ -122,11 +122,11 @@ def get_constructors(year=None, race=None):
     9      williams  http://en.wikipedia.org/wiki/Williams_Grand_Pr...  Williams     British
     """
     if year and race:
-        url = 'http://ergast.com/api/f1/{}/constructors.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/constructors.json?limit=1000'.format(year, race)
     elif year:
-        url = 'http://ergast.com/api/f1/{}/constructors.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/constructors.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/constructors.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/constructors.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -190,11 +190,11 @@ def get_circuits(year=None, race=None):
     [16 rows x 7 columns]
     """
     if year and race:
-        url = 'http://ergast.com/api/f1/{}/circuits.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/circuits.json?limit=1000'.format(year, race)
     elif year:
-        url = 'http://ergast.com/api/f1/{}/circuits.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/circuits.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/circuits.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/circuits.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -408,9 +408,9 @@ def get_race_result(year=None, race=None):
     """
     if year or race:
         assert year and race, 'You must specify both a year and a race'
-        url = 'http://ergast.com/api/f1/{}/{}/results.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/{}/results.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/current/last/results.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current/last/results.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -494,9 +494,9 @@ def get_qualifying_result(year=None, race=None):
     """
     if year and race:
         assert year >= 1996, 'Qualifying data only available starting from 1996'
-        url = 'http://ergast.com/api/f1/{}/{}/qualifying.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/{}/qualifying.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/current/last/qualifying.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current/last/qualifying.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -566,9 +566,9 @@ def get_schedule(year=None):
     [8 rows x 9 columns]
     """
     if year:
-        url = 'http://ergast.com/api/f1/{}.json?limit=1000'.format(year)
+        url = 'http://api.jolpi.ca/ergast/f1/{}.json?limit=1000'.format(year)
     else:
-        url = 'http://ergast.com/api/f1/current.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -634,11 +634,11 @@ def driver_standings(year=None, race=None):
     [62 rows x 9 columns]
     """
     if year and race:
-        url = 'http://ergast.com/api/f1/{}/{}/driverStandings.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/{}/driverStandings.json?limit=1000'.format(year, race)
     elif year:
-        url = 'http://ergast.com/api/f1/{}/driverStandings.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/driverStandings.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/current/driverStandings.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current/driverStandings.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -706,12 +706,12 @@ def constructor_standings(year=None, race=None):
     """
     if year and race:
         assert year >= 1958, 'Constructor standings only available starting 1958'
-        url = 'http://ergast.com/api/f1/{}/{}/constructorStandings.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/{}/constructorStandings.json?limit=1000'.format(year, race)
     elif year:
         assert year >= 1958, 'Constructor standings only available starting 1958'
-        url = 'http://ergast.com/api/f1/{}/constructorStandings.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/constructorStandings.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/current/constructorStandings.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current/constructorStandings.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
@@ -777,7 +777,7 @@ def query_driver(driverid):
     16   2019    21       12           12     43    0  Kimi Räikkönen     Finnish          alfa  Alfa Romeo
     17   2020    17       16           16      4    0  Kimi Räikkönen     Finnish          alfa  Alfa Romeo
     """
-    url = 'http://ergast.com/api/f1/drivers/{}/driverStandings.json?limit=1000'.format(driverid)
+    url = 'http://api.jolpi.ca/ergast/f1/drivers/{}/driverStandings.json?limit=1000'.format(driverid)
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
     seasons = r.json()['MRData']['StandingsTable']['StandingsLists']
@@ -840,7 +840,7 @@ def query_constructor(constructorid):
     9    2019    21        8            8     57    0          alfa  Alfa Romeo     Italian
     10   2020    17        8            8      8    0          alfa  Alfa Romeo     Italian
     """
-    url = 'http://ergast.com/api/f1/constructors/{}/constructorStandings.json?limit=1000'.format(constructorid)
+    url = 'http://api.jolpi.ca/ergast/f1/constructors/{}/constructorStandings.json?limit=1000'.format(constructorid)
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
     seasons = r.json()['MRData']['StandingsTable']['StandingsLists']
@@ -945,9 +945,9 @@ def get_sprint_result(year=None, race=None):
     """
     if year or race:
         assert year and race, 'You must specify both a year and a race'
-        url = 'http://ergast.com/api/f1/{}/{}/sprint.json?limit=1000'.format(year, race)
+        url = 'http://api.jolpi.ca/ergast/f1/{}/{}/sprint.json?limit=1000'.format(year, race)
     else:
-        url = 'http://ergast.com/api/f1/current/last/sprint.json?limit=1000'
+        url = 'http://api.jolpi.ca/ergast/f1/current/last/sprint.json?limit=1000'
 
     r = requests.get(url)
     assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
