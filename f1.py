@@ -211,7 +211,7 @@ def qualifying(year=None, race=None):
     print("|-")
     print("! colspan=14 | [[107% Time]]: " + find_107_time(OneZeroSeven))
     print("|-")
-    print("! colspan=14 | Source:<ref name=QR>[https://www.fia.com/sites/default/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_qualifying_classification.pdf {{PAGENAME}} - Final Qualifying Classification] (PDF). Fédération Internationale de l'Automobile.</ref>")
+    print("! colspan=14 | Source:<ref name=QR>[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_qualifying_classification.pdf {{PAGENAME}} - Final Qualifying Classification] (PDF). Fédération Internationale de l'Automobile.</ref>")
     print("|}")
     print("*'''Bold''' indicates the fastest driver's time in each session.")
 
@@ -298,9 +298,9 @@ def race(year = None, race = None, sprint = None):
 
     print('|-')
     if (sprint):
-        print('''! colspan="8" | Source:<ref name="SR">[https://www.fia.com/sites/default/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_sprint_classification.pdf {{PAGENAME}} - Final Sprint Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
+        print('''! colspan="8" | Source:<ref name="SR">[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_sprint_classification.pdf {{PAGENAME}} - Final Sprint Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
     else:
-        print('''! colspan="8" | Source:<ref name="RR">[https://www.fia.com/sites/default/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_race_classification.pdf {{PAGENAME}} - Final Race Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
+        print('''! colspan="8" | Source:<ref name="RR">[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_race_classification.pdf {{PAGENAME}} - Final Race Classification] (PDF). Fédération Internationale de l'Automobile.</ref>''')
     print('|}')
 
     return
