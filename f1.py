@@ -30,7 +30,7 @@ flags = {
         "Polish": "{{POL}}",
         "American": "{{USA}}",
         "New Zealander": "{{NZL}}",
-        "Argentinian ": "{{ARG}}"
+        "Argentine": "{{ARG}}"
 }
 
 constructors = {
