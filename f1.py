@@ -90,6 +90,65 @@ def getFlag(flag):
     except:
         return "{{NoFlag}}"
 
+def get_previous_race(year, race):
+    """
+    Get the previous race number for comparison.
+    Returns None if this is the first race of the season.
+    """
+    if race is None or race <= 1:
+        return None
+    return race - 1
+
+def calculate_position_change(current_standings, previous_standings, entity_id, is_driver=True):
+    """
+    Calculate position change for a driver or constructor.
+    
+    Parameters:
+    - current_standings: DataFrame of current standings
+    - previous_standings: DataFrame of previous standings (can be None)
+    - entity_id: driver ID or constructor ID
+    - is_driver: True if calculating for driver, False for constructor
+    
+    Returns:
+    - Formatted position change string (e.g., "{{X}}", "{{+}}1", "{{-}}2")
+    """
+    if previous_standings is None:
+        return "{{X}}"
+    
+    # Find current position
+    current_pos = None
+    if is_driver:
+        current_row = current_standings[current_standings['driverID'] == entity_id]
+    else:
+        current_row = current_standings[current_standings['constructorID'] == entity_id]
+    
+    if len(current_row) > 0:
+        current_pos = int(current_row.iloc[0]['position'])
+    else:
+        return "{{X}}"  # Retired/not in current standings
+    
+    # Find previous position
+    previous_pos = None
+    if is_driver:
+        previous_row = previous_standings[previous_standings['driverID'] == entity_id]
+    else:
+        previous_row = previous_standings[previous_standings['constructorID'] == entity_id]
+    
+    if len(previous_row) > 0:
+        previous_pos = int(previous_row.iloc[0]['position'])
+    else:
+        return "{{X}}"  # New entry
+    
+    # Calculate difference
+    if current_pos == previous_pos:
+        return "{{X}}"
+    elif current_pos < previous_pos:
+        # Moved up (better position = lower number)
+        return "{{+}}" + str(previous_pos - current_pos)
+    else:
+        # Moved down (worse position = higher number)
+        return "{{-}}" + str(current_pos - previous_pos)
+
 
 # Grid
 def grid(year=None, race=None):
@@ -314,6 +373,19 @@ def standings(year=None, race=None):
         print("No data available.")
         return False
 
+    # Get previous race standings for comparison
+    previous_race = get_previous_race(year, race)
+    previous_ds = None
+    previous_cs = None
+    
+    if previous_race is not None:
+        try:
+            previous_ds = f1.driver_standings(year, previous_race)
+            previous_cs = f1.constructor_standings(year, previous_race)
+        except:
+            # If we can't get previous race data, we'll use None (which will show "NEW")
+            pass
+
     # start table for drivers
     print("==Standings==\n")
     print("{{Col-begin}}")
@@ -331,47 +403,51 @@ def standings(year=None, race=None):
         y=ds.iloc[x,:]
         pos=y[1]
         pts=y[2]
+        driver_id=y[4]  # driverID column
         try:
             driver=flags[y[6]] + ' [[' + y[5] + ']]'
         except KeyError:
             driver='[[' + y[5] + ']]'
+        
+        # Calculate position change
+        pos_change = calculate_position_change(ds, previous_ds, driver_id, is_driver=True)
         
         print("|-")
         if (pos == '1'):
             print("| {{1st}}")
             print("| '''" + driver + "'''")
             print("| '''" + pts + "'''")
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '2'):
             print("| {{2nd}}")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '3'):
             print("| {{3rd}}")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '21'):
             print("| " + pos + "st")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '22'):
             print("| " + pos + "nd")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '23'):
             print("| " + pos + "rd")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         else:    
             print("| " + pos + "th")
             print("| " + driver)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
 
     # end table
     print("|}")
@@ -391,32 +467,36 @@ def standings(year=None, race=None):
         z=cs.iloc[x,:]
         pos=z[1]
         pts=z[2]
+        constructor_id=z[4]  # constructorID column
         try:
             team=constructors[z[4]]
         except KeyError:
             team='{{' + y[5] + '-CON}}'
+        
+        # Calculate position change
+        pos_change = calculate_position_change(cs, previous_cs, constructor_id, is_driver=False)
         
         print("|-")
         if (pos == '1'):
             print("| {{1st}}")
             print("| '''" + team + "'''")
             print("| '''" + pts + "'''")
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '2'):
             print("| {{2nd}}")
             print("| " + team)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         elif (pos == '3'):
             print("| {{3rd}}")
             print("| " + team)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
         else:    
             print("| " + pos + "th")
             print("| " + team)
             print("| " + pts)
-            print("| {{X}}") # TODO: automate comparison to previous GP
+            print("| " + pos_change)
 
     # end table
     print("|}")
