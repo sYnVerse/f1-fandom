@@ -1,0 +1,15 @@
+{
+  "name": "f1-wiki-automator",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker application to automate F1 fandom wiki page management",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240320.0",
+    "typescript": "^5.4.3",
+    "wrangler": "^3.35.0"
+  }
+}
