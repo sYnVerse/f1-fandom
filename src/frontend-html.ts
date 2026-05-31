@@ -569,7 +569,7 @@ export const frontendHtml = `<!DOCTYPE html>
               <select id="season-year" class="form-control" onchange="loadSchedule()">
                 <option value="2026">2026 Season</option>
                 <option value="2025">2025 Season</option>
-                <option value="2024" selected>2024 Season</option>
+                <option value="2024">2024 Season</option>
                 <option value="2023">2023 Season</option>
                 <option value="2022">2022 Season</option>
                 <option value="2021">2021 Season</option>
@@ -804,6 +804,19 @@ export const frontendHtml = `<!DOCTYPE html>
     // Load saved settings
     window.addEventListener('DOMContentLoaded', () => {
       loadCredentials();
+      
+      // Default to current calendar year if it exists in the options dropdown
+      const currentYear = new Date().getFullYear().toString();
+      const seasonSelect = document.getElementById('season-year');
+      if (seasonSelect) {
+        const optionValues = Array.from(seasonSelect.options).map(opt => opt.value);
+        if (optionValues.includes(currentYear)) {
+          seasonSelect.value = currentYear;
+        } else {
+          seasonSelect.value = '2026'; // Fallback to 2026 if current year is not in options
+        }
+      }
+      
       loadSchedule();
     });
 
@@ -910,9 +923,31 @@ export const frontendHtml = `<!DOCTYPE html>
         f1Schedule.forEach(race => {
           const opt = document.createElement('option');
           opt.value = race.round;
-          opt.textContent = \`Round \${race.round}: \${race.raceName} (\${race.Circuit.Location.locality}, \${race.Circuit.Location.country})\`;
+          opt.textContent = \`Round \${race.round}: \${race.raceName} (\&nbsp;\${race.Circuit.Location.locality}, \${race.Circuit.Location.country})\`.replace('&nbsp;', '');
           dropdown.appendChild(opt);
         });
+
+        // Default to latest completed GP (completed or closest past race)
+        let defaultRound = '';
+        if (f1Schedule.length > 0) {
+          const now = new Date();
+          let latestCompleted = null;
+          for (const race of f1Schedule) {
+            const raceDateTime = new Date(\`\${race.date}T\${race.time || '23:59:59Z'}\`);
+            if (raceDateTime <= now) {
+              latestCompleted = race;
+            }
+          }
+          if (latestCompleted) {
+            defaultRound = latestCompleted.round;
+          } else {
+            defaultRound = f1Schedule[0].round;
+          }
+        }
+
+        if (defaultRound) {
+          dropdown.value = defaultRound;
+        }
 
         // Pre-fill practice URL suggestion
         updatePracticeURLSuggestion();
