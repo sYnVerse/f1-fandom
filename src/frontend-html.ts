@@ -116,6 +116,33 @@ export const frontendHtml = `<!DOCTYPE html>
       box-shadow: 0 0 8px var(--success);
     }
 
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .support-btn {
+      display: inline-flex;
+      align-items: center;
+      background-color: rgba(0, 240, 255, 0.08);
+      border: 1px solid var(--accent-secondary);
+      color: var(--accent-secondary);
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 6px 16px;
+      border-radius: 20px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+
+    .support-btn:hover {
+      background-color: var(--accent-secondary);
+      color: #000;
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+      transform: translateY(-1px);
+    }
+
     /* Grid Layout */
     .dashboard-grid {
       display: grid;
@@ -491,9 +518,14 @@ export const frontendHtml = `<!DOCTYPE html>
         <div class="f1-badge">F1 Wiki</div>
         <h1>Automator Dashboard</h1>
       </div>
-      <div class="connection-status">
-        <div class="status-dot" id="status-dot"></div>
-        <span id="status-text">Checking Wiki Connection...</span>
+      <div class="header-actions">
+        <a href="https://f1.fandom.com/wiki/Message_Wall:SYnVerse" target="_blank" class="support-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Support Wall
+        </a>
+        <div class="connection-status">
+          <div class="status-dot" id="status-dot"></div>
+          <span id="status-text">Checking Wiki Connection...</span>
+        </div>
       </div>
     </header>
 
