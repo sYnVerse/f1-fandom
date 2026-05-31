@@ -791,7 +791,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
     <!-- Footer -->
     <footer>
-      <p>F1 Wiki Automator App • Designed for admins of <a href="https://f1.fandom.com" target="_blank" class="badge-fandom">f1.fandom.com</a> • Powered by Cloudflare Workers</p>
+      <p>F1 Wiki Automator App • Designed for admins of <a href="https://f1.fandom.com" target="_blank" class="badge-fandom">f1.fandom.com</a> • Powered by Cloudflare Workers • <a href="https://christran.io/privacy" target="_blank" rel="noopener noreferrer" style="color: var(--accent-secondary); text-decoration: none;">Privacy Policy</a></p>
     </footer>
   </div>
 
