@@ -15,3 +15,18 @@ crons = ["*/30 * * * *"]
 [[kv_namespaces]]
 binding = "F1_WIKI_STATE"
 id = "65451fd50ac0476e85b50e3118b1e5ea"
+
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
