@@ -8,3 +8,10 @@ DEFAULT_WIKI_DOMAIN = "f1.fandom.com"
 
 # Bindings (e.g. Secrets, KV) would go here if needed.
 # WIKI_BOT_USERNAME and WIKI_BOT_PASSWORD can be added via Cloudflare dashboard or `wrangler secret put`
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+[[kv_namespaces]]
+binding = "F1_WIKI_STATE"
+id = "" # Replace with your KV namespace ID, or leave blank to use Wrangler's local dev KV

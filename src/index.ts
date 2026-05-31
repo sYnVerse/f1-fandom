@@ -187,7 +187,7 @@ export default {
         const { domain, title } = body;
         if (!domain || !title) return corsResponse({ error: 'Domain and title required' }, 400);
 
-        const pageInfo = await getPageContent(domain, title);
+        const pageInfo = await getPageContent(domain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
         return corsResponse({ exists: pageInfo.exists });
       }
 
@@ -197,7 +197,7 @@ export default {
         const { domain, title } = body;
         if (!domain || !title) return corsResponse({ error: 'Domain and title required' }, 400);
 
-        const pageInfo = await getPageContent(domain, title);
+        const pageInfo = await getPageContent(domain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
         return corsResponse({ exists: pageInfo.exists, content: pageInfo.content });
       }
 
@@ -210,7 +210,12 @@ export default {
         }
 
         try {
-          await loginToWiki({ domain, username, botPassword: password });
+          await loginToWiki({ 
+            domain, username, botPassword: password,
+            apiEndpoint: _env.WIKI_API_ENDPOINT,
+            proxySecret: _env.PROXY_SECRET,
+            kvState: _env.F1_WIKI_STATE
+          });
           return corsResponse({ success: true });
         } catch (e: any) {
           return corsResponse({ success: false, error: e.message }, 401);
@@ -231,7 +236,12 @@ export default {
         }
 
         try {
-          const session = await loginToWiki({ domain, username, botPassword: password });
+          const session = await loginToWiki({ 
+            domain, username, botPassword: password,
+            apiEndpoint: _env.WIKI_API_ENDPOINT,
+            proxySecret: _env.PROXY_SECRET,
+            kvState: _env.F1_WIKI_STATE
+          });
           
           let finalText = text;
           if (sectionHeader) {
@@ -240,7 +250,7 @@ export default {
             finalText = replaceSectionWikitext(baseText, sectionHeader, text);
           }
 
-          await editPage(domain, session, title, finalText, summary || 'Bot edit');
+          await editPage(domain, session, title, finalText, summary || 'Bot edit', _env.WIKI_API_ENDPOINT);
           return corsResponse({ success: true });
         } catch (e: any) {
           return corsResponse({ success: false, error: e.message }, 500);
@@ -253,5 +263,448 @@ export default {
     } catch (e: any) {
       return corsResponse({ error: e.message }, 500);
     }
+  },
+
+  async scheduled(_event: any, env: any, _ctx: any): Promise<void> {
+    console.log("Scheduled sync trigger fired!");
+
+    // Check and send the daily proxy call summary email at 6 AM Pacific Time
+    if (env.F1_WIKI_STATE && env.RESEND_API_KEY) {
+      try {
+        await checkAndSendDailySummary(env);
+      } catch (e: any) {
+        console.error("Daily summary email check failed:", e.message);
+      }
+    }
+
+    const username = env.WIKI_BOT_USERNAME;
+    const password = env.WIKI_BOT_PASSWORD;
+    const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+    const apiEndpoint = env.WIKI_API_ENDPOINT;
+    const proxySecret = env.PROXY_SECRET;
+
+    if (!username || !password) {
+      console.error("Sync cancelled: Bot credentials (WIKI_BOT_USERNAME or WIKI_BOT_PASSWORD) not found in secrets.");
+      return;
+    }
+
+    try {
+      console.log("Fetching 2026 schedule from Jolpi...");
+      const year = 2026;
+      const schedule = await getSchedule(year);
+      console.log(`Loaded schedule with ${schedule.length} rounds.`);
+
+      // Lazy Fandom login helper to save proxy hits/emails (only login if we actually perform edits)
+      let session: any = null;
+      const getSession = async () => {
+        if (!session) {
+          console.log("Logging into Fandom via proxy...");
+          session = await loginToWiki({
+            domain,
+            username,
+            botPassword: password,
+            apiEndpoint,
+            proxySecret,
+            kvState: env.F1_WIKI_STATE
+          });
+        }
+        return session;
+      };
+
+      const now = new Date();
+
+      for (const race of schedule) {
+        const round = parseInt(race.round, 10);
+        const raceName = race.raceName;
+
+        // --- 1. Smart Check for Grand Prix ---
+        const gpKey = `2026_round_${round}_gp_updated`;
+        const gpUpdatedInKV = env.F1_WIKI_STATE ? await env.F1_WIKI_STATE.get(gpKey) === 'true' : false;
+        const gpTime = new Date(`${race.date}T${race.time || "12:00:00Z"}`);
+        const gpSessionCompleted = now > gpTime;
+
+        if (gpUpdatedInKV) {
+          console.log(`Round ${round} GP (${raceName}) already updated (KV cache). Skipping.`);
+        } else if (!gpSessionCompleted) {
+          console.log(`Round ${round} GP (${raceName}) not completed yet (scheduled: ${gpTime.toISOString()}). Skipping.`);
+        } else {
+          console.log(`Round ${round} GP has completed. Polling results from Jolpi...`);
+          let gpResults: any[] = [];
+          try {
+            gpResults = await getRaceResult(year, round, false);
+          } catch (e: any) {
+            console.log(`  No GP results for round ${round} yet: ${e.message}`);
+          }
+
+          if (gpResults.length > 0) {
+            const gpTitle = `Template:Career Results/${year} ${raceName}`;
+            let gpWikitext = '';
+            try {
+              const pageInfo = await getPageContent(domain, gpTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+              if (pageInfo.exists) {
+                gpWikitext = pageInfo.content;
+              }
+            } catch (e: any) {
+              console.error(`  Error fetching GP template: ${e.message}`);
+            }
+
+            if (gpWikitext && isPlaceholder(gpWikitext)) {
+              console.log(`  GP template is a placeholder. Auto-updating results...`);
+              const currentSession = await getSession();
+              const wikitext = generateWikiResultsText(gpResults, false);
+              await editPage(domain, currentSession, gpTitle, wikitext, "Automated results update from Jolpi API", apiEndpoint);
+              
+              if (env.F1_WIKI_STATE) {
+                await env.F1_WIKI_STATE.put(gpKey, 'true');
+                console.log(`  Marked round ${round} GP as updated in KV.`);
+              }
+            } else if (gpWikitext) {
+              console.log(`  GP template already has results on Fandom.`);
+              if (env.F1_WIKI_STATE) {
+                await env.F1_WIKI_STATE.put(gpKey, 'true');
+                console.log(`  Marked round ${round} GP as updated in KV (found existing results on Fandom).`);
+              }
+            }
+          }
+        }
+
+        // --- 2. Smart Check for Sprint ---
+        if (race.Sprint) {
+          const sprintName = raceName.replace("Grand Prix", "Sprint");
+          const sprintKey = `2026_round_${round}_sprint_updated`;
+          const sprintUpdatedInKV = env.F1_WIKI_STATE ? await env.F1_WIKI_STATE.get(sprintKey) === 'true' : false;
+          const sprintTime = new Date(`${race.Sprint.date}T${race.Sprint.time || "12:00:00Z"}`);
+          const sprintSessionCompleted = now > sprintTime;
+
+          if (sprintUpdatedInKV) {
+            console.log(`Round ${round} Sprint (${sprintName}) already updated (KV cache). Skipping.`);
+          } else if (!sprintSessionCompleted) {
+            console.log(`Round ${round} Sprint (${sprintName}) not completed yet (scheduled: ${sprintTime.toISOString()}). Skipping.`);
+          } else {
+            console.log(`Round ${round} Sprint has completed. Polling results from Jolpi...`);
+            let sprintResults: any[] = [];
+            try {
+              sprintResults = await getRaceResult(year, round, true);
+            } catch (e: any) {
+              console.log(`  No Sprint results for round ${round} yet: ${e.message}`);
+            }
+
+            if (sprintResults.length > 0) {
+              const sprintTitle = `Template:Career Results/${year} ${sprintName}`;
+              let sprintWikitext = '';
+              try {
+                const pageInfo = await getPageContent(domain, sprintTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+                if (pageInfo.exists) {
+                  sprintWikitext = pageInfo.content;
+                }
+              } catch (e: any) {
+                console.error(`  Error fetching Sprint template: ${e.message}`);
+              }
+
+              if (sprintWikitext && isPlaceholder(sprintWikitext)) {
+                console.log(`  Sprint template is a placeholder. Auto-updating results...`);
+                const currentSession = await getSession();
+                const wikitext = generateWikiResultsText(sprintResults, true);
+                await editPage(domain, currentSession, sprintTitle, wikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
+                
+                if (env.F1_WIKI_STATE) {
+                  await env.F1_WIKI_STATE.put(sprintKey, 'true');
+                  console.log(`  Marked round ${round} Sprint as updated in KV.`);
+                }
+              } else if (sprintWikitext) {
+                console.log(`  Sprint template already has results on Fandom.`);
+                if (env.F1_WIKI_STATE) {
+                  await env.F1_WIKI_STATE.put(sprintKey, 'true');
+                  console.log(`  Marked round ${round} Sprint as updated in KV (found existing results on Fandom).`);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      console.log("Scheduled sync completed successfully!");
+    } catch (e: any) {
+      console.error("Scheduled sync failed:", e.message);
+    }
   }
 };
+
+// --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
+
+const driverIdToWikiName: Record<string, string> = {
+  'max_verstappen': 'Max Verstappen',
+  'hadjar': 'Isack Hadjar',
+  'leclerc': 'Charles Leclerc',
+  'hamilton': 'Lewis Hamilton',
+  'russell': 'George Russell',
+  'antonelli': 'Andrea Kimi Antonelli',
+  'gasly': 'Pierre Gasly',
+  'colapinto': 'Franco Colapinto',
+  'norris': 'Lando Norris',
+  'piastri': 'Oscar Piastri',
+  'sainz': 'Carlos Sainz, Jr.',
+  'albon': 'Alexander Albon',
+  'lawson': 'Liam Lawson',
+  'arvid_lindblad': 'Arvid Lindblad',
+  'stroll': 'Lance Stroll',
+  'alonso': 'Fernando Alonso',
+  'hulkenberg': 'Nico Hülkenberg',
+  'bortoleto': 'Gabriel Bortoleto',
+  'ocon': 'Esteban Ocon',
+  'bearman': 'Oliver Bearman',
+  'bottas': 'Valterri Bottas',
+  'perez': 'Sergio Pérez'
+};
+
+const wikiDriverList = [
+  "Max Verstappen",
+  "Isack Hadjar",
+  "Charles Leclerc",
+  "Lewis Hamilton",
+  "George Russell",
+  "Andrea Kimi Antonelli",
+  "Pierre Gasly",
+  "Franco Colapinto",
+  "Lando Norris",
+  "Oscar Piastri",
+  "Carlos Sainz, Jr.",
+  "Alexander Albon",
+  "Liam Lawson",
+  "Arvid Lindblad",
+  "Lance Stroll",
+  "Fernando Alonso",
+  "Nico Hülkenberg",
+  "Gabriel Bortoleto",
+  "Esteban Ocon",
+  "Oliver Bearman",
+  "Valterri Bottas",
+  "Sergio Pérez"
+];
+
+function getOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatResult(r: any): string {
+  const posText = r.positionText || r.position;
+  let formatted = '';
+
+  if (posText === 'R') {
+    formatted = '{{Ret}}';
+  } else if (posText === 'D') {
+    formatted = '{{DSQ}}';
+  } else if (posText === 'W') {
+    formatted = '{{DNS}}';
+  } else {
+    const posVal = parseInt(r.position, 10);
+    const ord = getOrdinal(posVal);
+    const isFL = r.FastestLap && r.FastestLap.rank === '1';
+
+    if (posVal <= 10) {
+      formatted = isFL ? `{{${ord}|fl}}` : `{{${ord}}}`;
+    } else {
+      formatted = isFL ? `${ord}|fl` : `${ord}`;
+    }
+  }
+
+  if (r.grid === '1') {
+    formatted += '{{Pole}}';
+  }
+
+  return formatted;
+}
+
+function isPlaceholder(wikitext: string): boolean {
+  const lines = wikitext.split('\n');
+  for (const line of lines) {
+    const match = line.match(/^\|([^=]+)=\s*(\S+)/);
+    if (match && match[1].trim() !== '#default' && match[2].trim() !== '') {
+      return false;
+    }
+  }
+  return true;
+}
+
+function generateWikiResultsText(results: any[], _isSprint: boolean): string {
+  const driverResultsMap: Record<string, string> = {};
+  for (const r of results) {
+    const wikiName = driverIdToWikiName[r.Driver.driverId];
+    if (wikiName) {
+      driverResultsMap[wikiName] = formatResult(r);
+    }
+  }
+
+  let wikitext = '{{#switch:{{{1}}}\n';
+  for (const wikiName of wikiDriverList) {
+    const resultVal = driverResultsMap[wikiName] || '';
+    const paddedName = wikiName.padEnd(22, ' ');
+    wikitext += `|${paddedName} = ${resultVal}\n`;
+  }
+  wikitext += '|#default = \n';
+  wikitext += '}}<noinclude>[[Category:2026 Results Templates]]</noinclude>';
+  return wikitext;
+}
+
+async function checkAndSendDailySummary(env: any): Promise<void> {
+  const kv = env.F1_WIKI_STATE;
+  const resendApiKey = env.RESEND_API_KEY;
+  if (!kv || !resendApiKey) return;
+
+  // Get current date/time in America/Los_Angeles timezone (Pacific Time)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false
+  });
+
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find(p => p.type === 'year')?.value;
+  const month = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+  const hourStr = parts.find(p => p.type === 'hour')?.value || '0';
+  
+  const pacificDateStr = `${year}-${month}-${day}`; // YYYY-MM-DD
+  const pacificHour = parseInt(hourStr, 10);
+
+  // We want to send the summary at 6 AM Pacific Time or later, if not sent today yet
+  if (pacificHour >= 6) {
+    const lastSentKey = 'last_summary_email_sent_date';
+    const lastSentDate = await kv.get(lastSentKey);
+
+    if (lastSentDate !== pacificDateStr) {
+      console.log(`Sending daily API call summary for ${pacificDateStr} Pacific Time...`);
+      
+      const logsKey = 'proxy_daily_logs';
+      const rawLogs = await kv.get(logsKey);
+      const logs = rawLogs ? JSON.parse(rawLogs) : [];
+
+      const totalCalls = logs.length;
+      const succeededCalls = logs.filter((l: any) => l.success).length;
+      const failedCalls = totalCalls - succeededCalls;
+      const failedLogs = logs.filter((l: any) => !l.success);
+
+      let failedSection = '';
+      if (failedLogs.length > 0) {
+        failedSection = `
+          <h3 style="margin: 24px 0 12px 0; color: #dc2626; font-size: 16px; font-weight: 600;">Failure Log & Reasons</h3>
+          <div style="border: 1px solid #fee2e2; border-radius: 8px; overflow: hidden; margin-bottom: 8px;">
+            <table border="0" cellpadding="12" cellspacing="0" width="100%" style="font-size: 13px; text-align: left; border-collapse: collapse; width: 100%;">
+              <thead>
+                <tr style="background-color: #fef2f2; border-bottom: 1px solid #fee2e2;">
+                  <th style="color: #991b1b; font-weight: 600; width: 25%; padding: 12px;">Action</th>
+                  <th style="color: #991b1b; font-weight: 600; width: 15%; padding: 12px;">Method</th>
+                  <th style="color: #991b1b; font-weight: 600; width: 60%; padding: 12px;">Reason for Failure</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${failedLogs.map((l: any, idx: number) => `
+                  <tr style="border-bottom: ${idx === failedLogs.length - 1 ? 'none' : '1px solid #fee2e2'};">
+                    <td style="color: #1f2937; font-weight: 500; padding: 12px;">${l.action}</td>
+                    <td style="color: #4b5563; padding: 12px;"><code style="font-family: monospace; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px;">${l.method}</code></td>
+                    <td style="color: #b91c1c; word-break: break-all; padding: 12px;">${l.errorReason || 'Unknown error'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } else {
+        failedSection = `
+          <div style="padding: 16px; background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 8px; text-align: center; color: #065f46; font-size: 14px; font-weight: 500; margin-top: 16px;">
+            ✓ All API calls completed successfully. No failures encountered.
+          </div>
+        `;
+      }
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>F1 Wiki Bot Daily Summary</title>
+        </head>
+        <body style="margin: 0; padding: 20px 0; background-color: #f6f8fa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e1e4e8;">
+            <!-- Header -->
+            <tr>
+              <td style="padding: 32px 24px; background: linear-gradient(135deg, #1f2937 0%, #111827 100%); text-align: center;">
+                <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">F1 Wiki Bot</h1>
+                <p style="margin: 4px 0 0 0; color: #9ca3af; font-size: 14px;">Daily API Call Summary</p>
+              </td>
+            </tr>
+            <!-- Content -->
+            <tr>
+              <td style="padding: 32px 24px;">
+                <p style="margin: 0 0 20px 0; color: #4b5563; font-size: 14px; text-align: right;"><strong>Date:</strong> ${pacificDateStr} (Pacific Time)</p>
+                
+                <h2 style="margin: 0 0 16px 0; color: #1f2937; font-size: 18px; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">Executive Summary</h2>
+                
+                <!-- Stats Grid -->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px; width: 100%;">
+                  <tr>
+                    <td width="30%" style="padding: 16px; background-color: #f3f4f6; border-radius: 8px; text-align: center; border: 1px solid #e5e7eb;">
+                      <div style="color: #4b5563; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Attempted</div>
+                      <div style="color: #1f2937; font-size: 28px; font-weight: 700; margin-top: 4px;">${totalCalls}</div>
+                    </td>
+                    <td width="5%"></td>
+                    <td width="30%" style="padding: 16px; background-color: #ecfdf5; border-radius: 8px; text-align: center; border: 1px solid #d1fae5;">
+                      <div style="color: #065f46; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Succeeded</div>
+                      <div style="color: #059669; font-size: 28px; font-weight: 700; margin-top: 4px;">${succeededCalls}</div>
+                    </td>
+                    <td width="5%"></td>
+                    <td width="30%" style="padding: 16px; background-color: ${failedCalls > 0 ? '#fef2f2' : '#f9fafb'}; border-radius: 8px; text-align: center; border: 1px solid ${failedCalls > 0 ? '#fee2e2' : '#f3f4f6'};">
+                      <div style="color: ${failedCalls > 0 ? '#991b1b' : '#9ca3af'}; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Failed</div>
+                      <div style="color: ${failedCalls > 0 ? '#dc2626' : '#9ca3af'}; font-size: 28px; font-weight: 700; margin-top: 4px;">${failedCalls}</div>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Details Section -->
+                ${failedSection}
+              </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 24px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+                <p style="margin: 0; color: #9ca3af; font-size: 11px;">This is an automated report generated by the F1 Fandom Cloudflare Worker.</p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      // Send the email via Resend API
+      const mailRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: "F1 Wiki Bot <onboarding@resend.dev>",
+          to: "f1@christran.io",
+          subject: `F1 Bot Daily API Summary - ${pacificDateStr}`,
+          html: emailHtml
+        })
+      });
+
+      if (mailRes.ok) {
+        console.log("Daily summary email sent successfully!");
+        // Update KV state to mark today as completed
+        await kv.put(lastSentKey, pacificDateStr);
+        // Clear logs for the next day
+        await kv.delete(logsKey);
+        console.log("Cleared API call logs in KV.");
+      } else {
+        console.error(`Failed to send daily summary email: ${mailRes.status} ${await mailRes.text()}`);
+      }
+    }
+  }
+}

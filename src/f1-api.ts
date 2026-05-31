@@ -87,6 +87,10 @@ export interface ScheduleRace {
   };
   date: string;
   time?: string;
+  Sprint?: {
+    date: string;
+    time?: string;
+  };
 }
 
 export interface PracticeSessionData {

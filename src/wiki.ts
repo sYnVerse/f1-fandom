@@ -2,23 +2,62 @@ export interface WikiConfig {
   domain: string; // e.g. f1.fandom.com
   username: string;
   botPassword?: string; // BotPassword generated on Special:BotPasswords
+  apiEndpoint?: string; // Optional proxy endpoint url
+  proxySecret?: string; // Optional secret token for proxy
+  kvState?: any; // Cloudflare KV state binding for logging
 }
 
 export interface WikiSession {
   cookies: string;
   csrfToken: string;
+  proxySecret?: string;
+  kvState?: any;
 }
 
 // Get the MediaWiki API URL
-function getApiUrl(domain: string): string {
+function getApiUrl(domain: string, apiEndpoint?: string): string {
+  if (apiEndpoint) {
+    return apiEndpoint;
+  }
   // Ensure protocol is present
   const cleanDomain = domain.replace(/^(https?:\/\/)?/, 'https://');
   return `${cleanDomain}/api.php`;
 }
 
+// Helper to log wiki API calls into Cloudflare KV
+async function logApiCall(
+  kv: any,
+  action: string,
+  method: string,
+  url: string,
+  success: boolean,
+  errorReason?: string
+): Promise<void> {
+  if (!kv) return;
+
+  try {
+    const logsKey = 'proxy_daily_logs';
+    const rawLogs = await kv.get(logsKey);
+    const logs = rawLogs ? JSON.parse(rawLogs) : [];
+
+    logs.push({
+      action,
+      method,
+      url,
+      success,
+      errorReason: errorReason || null,
+      timestamp: new Date().toISOString()
+    });
+
+    await kv.put(logsKey, JSON.stringify(logs));
+  } catch (e: any) {
+    console.error("Failed to log wiki API call in KV:", e.message);
+  }
+}
+
 // Log in and return session cookies and CSRF token
 export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
-  const apiUrl = getApiUrl(config.domain);
+  const apiUrl = getApiUrl(config.domain, config.apiEndpoint);
   const username = config.username;
   const password = config.botPassword || '';
 
@@ -28,10 +67,30 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
 
   // Step 1: Get Login Token
   const tokenUrl = `${apiUrl}?action=query&meta=tokens&type=login&format=json&origin=*`;
-  const tokenRes = await fetch(tokenUrl);
-  if (!tokenRes.ok) {
-    throw new Error(`Failed to get login token: HTTP ${tokenRes.status}`);
+  const tokenHeaders: Record<string, string> = {};
+  if (config.proxySecret) {
+    tokenHeaders['X-Proxy-Secret'] = config.proxySecret;
   }
+
+  let tokenSuccess = false;
+  let tokenErrorReason = '';
+  let tokenRes;
+
+  try {
+    tokenRes = await fetch(tokenUrl, { headers: tokenHeaders });
+    tokenSuccess = tokenRes.ok;
+    if (!tokenRes.ok) {
+      tokenErrorReason = `HTTP ${tokenRes.status}`;
+    }
+  } catch (e: any) {
+    tokenErrorReason = e.message;
+    throw e;
+  } finally {
+    if (config.kvState) {
+      await logApiCall(config.kvState, 'Get Login Token', 'GET', tokenUrl, tokenSuccess, tokenErrorReason);
+    }
+  }
+
   const tokenData = await tokenRes.json() as any;
   const loginToken = tokenData?.query?.tokens?.logintoken;
   if (!loginToken) {
@@ -57,17 +116,41 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
   loginParams.append('lgtoken', loginToken);
   loginParams.append('format', 'json');
 
-  const loginRes = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': cookies,
-    },
-    body: loginParams.toString(),
-  });
+  const loginHeaders: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Cookie': cookies,
+  };
+  if (config.proxySecret) {
+    loginHeaders['X-Proxy-Secret'] = config.proxySecret;
+  }
 
-  if (!loginRes.ok) {
-    throw new Error(`Failed login request: HTTP ${loginRes.status}`);
+  let loginSuccess = false;
+  let loginErrorReason = '';
+  let loginRes;
+
+  try {
+    loginRes = await fetch(apiUrl, {
+      method: 'POST',
+      headers: loginHeaders,
+      body: loginParams.toString(),
+    });
+    loginSuccess = loginRes.ok;
+    if (!loginRes.ok) {
+      loginErrorReason = `HTTP ${loginRes.status}`;
+    } else {
+      const data = await loginRes.clone().json() as any;
+      if (data?.login?.result !== 'Success') {
+        loginSuccess = false;
+        loginErrorReason = data?.login?.reason || data?.login?.result;
+      }
+    }
+  } catch (e: any) {
+    loginErrorReason = e.message;
+    throw e;
+  } finally {
+    if (config.kvState) {
+      await logApiCall(config.kvState, 'Submit Bot Credentials', 'POST', apiUrl, loginSuccess, loginErrorReason);
+    }
   }
 
   const loginData = await loginRes.json() as any;
@@ -89,14 +172,32 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
 
   // Step 3: Get CSRF Token
   const csrfUrl = `${apiUrl}?action=query&meta=tokens&type=csrf&format=json`;
-  const csrfRes = await fetch(csrfUrl, {
-    headers: {
-      'Cookie': cookies,
-    }
-  });
+  const csrfHeaders: Record<string, string> = {
+    'Cookie': cookies,
+  };
+  if (config.proxySecret) {
+    csrfHeaders['X-Proxy-Secret'] = config.proxySecret;
+  }
 
-  if (!csrfRes.ok) {
-    throw new Error(`Failed to fetch CSRF token: HTTP ${csrfRes.status}`);
+  let csrfSuccess = false;
+  let csrfErrorReason = '';
+  let csrfRes;
+
+  try {
+    csrfRes = await fetch(csrfUrl, {
+      headers: csrfHeaders
+    });
+    csrfSuccess = csrfRes.ok;
+    if (!csrfRes.ok) {
+      csrfErrorReason = `HTTP ${csrfRes.status}`;
+    }
+  } catch (e: any) {
+    csrfErrorReason = e.message;
+    throw e;
+  } finally {
+    if (config.kvState) {
+      await logApiCall(config.kvState, 'Get CSRF Token', 'GET', csrfUrl, csrfSuccess, csrfErrorReason);
+    }
   }
 
   const csrfData = await csrfRes.json() as any;
@@ -105,7 +206,12 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
     throw new Error('CSRF token not found in MediaWiki response.');
   }
 
-  return { cookies, csrfToken };
+  return { 
+    cookies, 
+    csrfToken, 
+    proxySecret: config.proxySecret, 
+    kvState: config.kvState 
+  };
 }
 
 export interface WikiPageContent {
@@ -115,8 +221,15 @@ export interface WikiPageContent {
 }
 
 // Fetch the page content
-export async function getPageContent(domain: string, title: string, cookies?: string): Promise<WikiPageContent> {
-  const apiUrl = getApiUrl(domain);
+export async function getPageContent(
+  domain: string,
+  title: string,
+  cookies?: string,
+  apiEndpoint?: string,
+  proxySecret?: string,
+  kvState?: any
+): Promise<WikiPageContent> {
+  const apiUrl = getApiUrl(domain, apiEndpoint);
   const params = new URLSearchParams({
     action: 'query',
     prop: 'revisions',
@@ -130,10 +243,27 @@ export async function getPageContent(domain: string, title: string, cookies?: st
   if (cookies) {
     headers['Cookie'] = cookies;
   }
+  if (proxySecret) {
+    headers['X-Proxy-Secret'] = proxySecret;
+  }
 
-  const res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch page content: HTTP ${res.status}`);
+  let success = false;
+  let errorReason = '';
+  let res;
+
+  try {
+    res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
+    success = res.ok;
+    if (!res.ok) {
+      errorReason = `HTTP ${res.status}`;
+    }
+  } catch (e: any) {
+    errorReason = e.message;
+    throw e;
+  } finally {
+    if (kvState) {
+      await logApiCall(kvState, `Fetch Page: ${title}`, 'GET', `${apiUrl}?${params.toString()}`, success, errorReason);
+    }
   }
 
   const data = await res.json() as any;
@@ -159,9 +289,10 @@ export async function editPage(
   session: WikiSession,
   title: string,
   text: string,
-  summary: string
+  summary: string,
+  apiEndpoint?: string
 ): Promise<void> {
-  const apiUrl = getApiUrl(domain);
+  const apiUrl = getApiUrl(domain, apiEndpoint);
   const editParams = new URLSearchParams();
   editParams.append('action', 'edit');
   editParams.append('title', title);
@@ -171,17 +302,41 @@ export async function editPage(
   editParams.append('format', 'json');
   editParams.append('bot', '1'); // mark as bot edit
 
-  const res = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Cookie': session.cookies,
-    },
-    body: editParams.toString(),
-  });
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Cookie': session.cookies,
+  };
+  if (session.proxySecret) {
+    headers['X-Proxy-Secret'] = session.proxySecret;
+  }
 
-  if (!res.ok) {
-    throw new Error(`Failed edit request: HTTP ${res.status}`);
+  let success = false;
+  let errorReason = '';
+  let res;
+
+  try {
+    res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: headers,
+      body: editParams.toString(),
+    });
+    success = res.ok;
+    if (!res.ok) {
+      errorReason = `HTTP ${res.status}`;
+    } else {
+      const editData = await res.clone().json() as any;
+      if (editData?.edit?.result !== 'Success') {
+        success = false;
+        errorReason = editData?.edit?.reason || JSON.stringify(editData?.error || editData?.edit);
+      }
+    }
+  } catch (e: any) {
+    errorReason = e.message;
+    throw e;
+  } finally {
+    if (session.kvState) {
+      await logApiCall(session.kvState, `Edit Page: ${title}`, 'POST', apiUrl, success, errorReason);
+    }
   }
 
   const editData = await res.json() as any;
