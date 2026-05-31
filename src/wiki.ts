@@ -227,7 +227,7 @@ export async function getPageContent(
   cookies?: string,
   apiEndpoint?: string,
   proxySecret?: string,
-  kvState?: any
+  _kvState?: any
 ): Promise<WikiPageContent> {
   const apiUrl = getApiUrl(domain, apiEndpoint);
   const params = new URLSearchParams({
@@ -247,24 +247,7 @@ export async function getPageContent(
     headers['X-Proxy-Secret'] = proxySecret;
   }
 
-  let success = false;
-  let errorReason = '';
-  let res;
-
-  try {
-    res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
-    success = res.ok;
-    if (!res.ok) {
-      errorReason = `HTTP ${res.status}`;
-    }
-  } catch (e: any) {
-    errorReason = e.message;
-    throw e;
-  } finally {
-    if (kvState) {
-      await logApiCall(kvState, `Fetch Page: ${title}`, 'GET', `${apiUrl}?${params.toString()}`, success, errorReason);
-    }
-  }
+  const res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
 
   const data = await res.json() as any;
   const pages = data?.query?.pages;
