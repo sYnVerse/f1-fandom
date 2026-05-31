@@ -41,6 +41,28 @@ function corsResponse(body: string | object, status = 200, headers: Record<strin
   });
 }
 
+async function verifyTurnstile(token: string, secretKey: string | undefined, request: Request): Promise<boolean> {
+  const secret = secretKey || "1x0000000000000000000000000000000AA";
+  if (!token) return false;
+
+  try {
+    const verifyBody = new FormData();
+    verifyBody.append("secret", secret);
+    verifyBody.append("response", token);
+    verifyBody.append("remoteip", request.headers.get("CF-Connecting-IP") || "");
+
+    const verifyResponse = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: verifyBody,
+    });
+    const verifyResult = await verifyResponse.json() as { success: boolean };
+    return verifyResult.success;
+  } catch (e) {
+    console.error("Turnstile verification error:", e);
+    return false;
+  }
+}
+
 // Router and Handler
 export default {
   async fetch(request: Request, _env: any, _ctx: any): Promise<Response> {
@@ -55,7 +77,9 @@ export default {
     try {
       // 1. Serve SPA Frontend
       if (url.pathname === '/' || url.pathname === '/index.html') {
-        return new Response(frontendHtml, {
+        const siteKey = _env.TURNSTILE_SITE_KEY || "0x4AAAAAABoDGtBnq2BXlSqW";
+        const injectedHtml = frontendHtml.replace('__TURNSTILE_SITE_KEY__', siteKey);
+        return new Response(injectedHtml, {
           headers: { 'Content-Type': 'text/html; charset=utf-8' }
         });
       }
@@ -136,7 +160,12 @@ export default {
       // 4. Scrape or Parse Practice HTML
       if (url.pathname === '/api/scrape-practice' && method === 'POST') {
         const body = await request.json() as any;
-        const { year, round, url: fp1Url, pastedHtml, fallbackOnly } = body;
+        const { year, round, url: fp1Url, pastedHtml, fallbackOnly, turnstileToken } = body;
+
+        const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
+        if (!isTokenValid) {
+          return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+        }
 
         if (!year || !round) {
           return corsResponse({ error: 'Year and round parameters required' }, 400);
@@ -204,7 +233,13 @@ export default {
       // 7. Test Login Connection
       if (url.pathname === '/api/wiki-login-test' && method === 'POST') {
         const body = await request.json() as any;
-        const { domain, username, password } = body;
+        const { domain, username, password, turnstileToken } = body;
+
+        const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
+        if (!isTokenValid) {
+          return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+        }
+
         if (!domain || !username || !password) {
           return corsResponse({ error: 'Domain, username, and password required' }, 400);
         }
@@ -228,8 +263,14 @@ export default {
         const { 
           domain, username, password, 
           title, text, summary, 
-          sectionHeader, currentFullText 
+          sectionHeader, currentFullText,
+          turnstileToken
         } = body;
+
+        const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
+        if (!isTokenValid) {
+          return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+        }
 
         if (!domain || !username || !password || !title || !text) {
           return corsResponse({ error: 'Missing required parameters' }, 400);

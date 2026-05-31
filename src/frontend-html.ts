@@ -508,6 +508,7 @@ export const frontendHtml = `<!DOCTYPE html>
       font-weight: bold;
     }
   </style>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
   <div class="container">
@@ -553,6 +554,9 @@ export const frontendHtml = `<!DOCTYPE html>
         <div class="form-group">
           <label for="sandbox-page">Draft/Sandbox Page</label>
           <input type="text" id="sandbox-page" class="form-control" placeholder="User:Username/Sandbox">
+        </div>
+        <div class="form-group" style="margin-bottom: 15px; display: flex; justify-content: center;">
+          <div class="cf-turnstile" id="turnstile-container" data-sitekey="__TURNSTILE_SITE_KEY__" data-theme="dark" data-expired-callback="onTurnstileExpired"></div>
         </div>
         <button class="btn btn-secondary" style="margin-bottom: 12px;" onclick="testWikiConnection()">Test Bot Connection</button>
         <button class="btn btn-accent" onclick="saveCredentials()">Save Credentials (Local)</button>
@@ -794,6 +798,24 @@ export const frontendHtml = `<!DOCTYPE html>
   <script>
     // Local storage key management
     const STORAGE_KEY = 'f1_wiki_credentials';
+
+    function getTurnstileToken() {
+      if (typeof turnstile !== "undefined") {
+        return turnstile.getResponse();
+      }
+      return "";
+    }
+
+    function resetTurnstile() {
+      if (typeof turnstile !== "undefined") {
+        turnstile.reset();
+      }
+    }
+
+    function onTurnstileExpired() {
+      resetTurnstile();
+    }
+
     let f1Schedule = [];
     let currentGPRace = null;
     let driversList = [];
@@ -1087,15 +1109,18 @@ export const frontendHtml = `<!DOCTYPE html>
       log('Scraping practice session 1, 2 and 3 from F1.com...', 'info');
 
       try {
+        const token = getTurnstileToken();
         const res = await fetch('/api/scrape-practice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             year,
             round,
-            url: fp1Url
+            url: fp1Url,
+            turnstileToken: token
           })
         });
+        resetTurnstile();
 
         if (!res.ok) throw new Error('Cloudflare block or bad F1.com practice URL.');
         
@@ -1124,13 +1149,16 @@ export const frontendHtml = `<!DOCTYPE html>
       
       log('Generating fallback DNP practice table. You can paste HTML below to replace it.', 'info');
       
-      // Fetch fallback wikitext from server
+      const token = getTurnstileToken();
       fetch('/api/scrape-practice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ year, round, url: '', fallbackOnly: true })
+        body: JSON.stringify({ year, round, url: '', fallbackOnly: true, turnstileToken: token })
       })
-      .then(res => res.json())
+      .then(res => {
+        resetTurnstile();
+        return res.json();
+      })
       .then(data => {
         document.getElementById('practice-wikitext').value = data.wikitext || '';
       })
@@ -1151,6 +1179,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
       log('Parsing pasted HTML structure for practice session times...', 'info');
 
+      const token = getTurnstileToken();
       fetch('/api/scrape-practice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1158,10 +1187,12 @@ export const frontendHtml = `<!DOCTYPE html>
           year,
           round,
           pastedHtml: htmlText,
-          fpSessionNumber: 1 // Default to FP1
+          fpSessionNumber: 1, // Default to FP1
+          turnstileToken: token
         })
       })
       .then(async res => {
+        resetTurnstile();
         if (!res.ok) throw new Error(await res.text());
         return res.json();
       })
@@ -1193,12 +1224,13 @@ export const frontendHtml = `<!DOCTYPE html>
       statusDot.className = 'status-dot';
       statusText.textContent = 'Authenticating...';
 
-      try {
+        const token = getTurnstileToken();
         const res = await fetch('/api/wiki-login-test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain, username, password })
+          body: JSON.stringify({ domain, username, password, turnstileToken: token })
         });
+        resetTurnstile();
         
         const data = await res.json();
         
@@ -1270,7 +1302,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
       log(\`Sending sandbox test edit request to "\${sandboxPage}"...\`, 'info');
 
-      try {
+        const token = getTurnstileToken();
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1279,9 +1311,11 @@ export const frontendHtml = `<!DOCTYPE html>
             title: sandboxPage,
             text: testContent,
             summary: 'Bot test edit from Cloudflare Automator Worker',
-            isTest: true
+            isTest: true,
+            turnstileToken: token
           })
         });
+        resetTurnstile();
 
         const data = await res.json();
         if (res.ok && data.success) {
@@ -1335,6 +1369,7 @@ export const frontendHtml = `<!DOCTYPE html>
         }
 
         // Step 2: Replace section
+        const token = getTurnstileToken();
         const publishRes = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1344,9 +1379,11 @@ export const frontendHtml = `<!DOCTYPE html>
             text: newSectionContent,
             sectionHeader,
             currentFullText: pageText,
-            summary: \`Automated update of \${sectionHeader} section\`
+            summary: \`Automated update of \${sectionHeader} section\`,
+            turnstileToken: token
           })
         });
+        resetTurnstile();
 
         const data = await publishRes.json();
         if (publishRes.ok && data.success) {
@@ -1383,7 +1420,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
       log(\`Deploying full page content to "\${pageName}"...\`, 'info');
 
-      try {
+        const token = getTurnstileToken();
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1391,9 +1428,11 @@ export const frontendHtml = `<!DOCTYPE html>
             domain, username, password,
             title: pageName,
             text: fullText,
-            summary: 'Automated deployment of complete Grand Prix results page'
+            summary: 'Automated deployment of complete Grand Prix results page',
+            turnstileToken: token
           })
         });
+        resetTurnstile();
 
         const data = await res.json();
         if (res.ok && data.success) {
