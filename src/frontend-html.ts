@@ -170,6 +170,12 @@ export const frontendHtml = `<!DOCTYPE html>
       transition: all 0.2s ease;
     }
 
+    /* Style option elements inside dropdown selects to prevent white box with white text issue */
+    select.form-control option {
+      background-color: var(--bg-card);
+      color: #fff;
+    }
+
     .form-control:focus {
       outline: none;
       border-color: var(--accent-f1);
