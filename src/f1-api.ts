@@ -130,7 +130,12 @@ export async function getRaceResult(year: number, round: number, isSprint = fals
   if (!races || races.length === 0) return [];
   
   const resultsKey = isSprint ? 'SprintResults' : 'Results';
-  return races[0][resultsKey] || [];
+  const rawResults = races[0][resultsKey] || [];
+  return rawResults.map((r: any) => ({
+    ...r,
+    driver: r.Driver,
+    constructor: r.Constructor
+  }));
 }
 
 // Fetch qualifying results
@@ -142,7 +147,12 @@ export async function getQualifyingResult(year: number, round: number): Promise<
   
   const races = data.MRData.RaceTable.Races;
   if (!races || races.length === 0) return [];
-  return races[0].QualifyingResults || [];
+  const rawResults = races[0].QualifyingResults || [];
+  return rawResults.map((q: any) => ({
+    ...q,
+    driver: q.Driver,
+    constructor: q.Constructor
+  }));
 }
 
 // Fetch driver standings
