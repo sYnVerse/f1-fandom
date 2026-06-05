@@ -995,5 +995,6 @@ Images and Videos:
 References:
 <references />
 
-[[Category:${year} Formula One races]]`;
+[[Category:${raceName}]]
+[[Category:${year} Grands Prix]]`;
 }
