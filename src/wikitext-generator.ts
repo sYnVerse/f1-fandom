@@ -1000,3 +1000,89 @@ References:
 [[Category:${raceName}]]
 [[Category:${year} Grands Prix]]`;
 }
+
+export interface EventInfo {
+  year: string;
+  name: string;
+  fullName: string;
+  dateRangeDesktop: string;
+  dateRangeMobile: string;
+  startTime: Date;
+  endTime: Date;
+}
+
+function parseDateString(dateStr: string): { year: number; month: number; day: number } {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return { year: y, month: m - 1, day: d };
+}
+
+const MONTHS_FULL = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+export function formatDesktopDate(startDateStr: string, endDateStr: string): string {
+  const start = parseDateString(startDateStr);
+  const end = parseDateString(endDateStr);
+  
+  if (startDateStr === endDateStr) {
+    return `${MONTHS_FULL[start.month]} ${start.day}`;
+  }
+  
+  return `${MONTHS_FULL[start.month]} ${start.day} - ${MONTHS_FULL[end.month]} ${end.day}`;
+}
+
+export function formatMobileDate(startDateStr: string, endDateStr: string): string {
+  const start = parseDateString(startDateStr);
+  const end = parseDateString(endDateStr);
+  
+  if (startDateStr === endDateStr) {
+    return `${MONTHS_SHORT[start.month]} ${start.day}`;
+  }
+  
+  return `${MONTHS_SHORT[start.month]} ${start.day} - ${MONTHS_SHORT[end.month]} ${end.day}`;
+}
+
+export function generateLatestEventsWikitext(
+  prev: EventInfo | null,
+  latest: EventInfo | null,
+  next: EventInfo | null
+): string {
+  let wikitext = '';
+  
+  // Desktop section
+  wikitext += `<!-- Desktop -->\n`;
+  wikitext += `<div class="news-events hidden">\n`;
+  if (prev) {
+    wikitext += `:'''Previous event:''' {{F1 GP|${prev.year}|${prev.name}}} (${prev.dateRangeDesktop})\n`;
+  }
+  if (latest) {
+    wikitext += `:'''Latest event: {{F1 GP|${latest.year}|${latest.name}}} (${latest.dateRangeDesktop})'''\n`;
+  }
+  if (next) {
+    wikitext += `:'''Next event: ''' {{F1 GP|${next.year}|${next.name}}} (${next.dateRangeDesktop})\n`;
+  }
+  wikitext += `</div>\n\n`;
+  
+  // Mobile section
+  wikitext += `<!-- Mobile -->\n`;
+  wikitext += `<div class="news-events" style="display: none;">\n`;
+  if (prev) {
+    wikitext += `:'''Previous event:''' [[${prev.year} ${prev.fullName}|${prev.name} GP]] <small>(${prev.dateRangeMobile})</small>\n`;
+  }
+  if (latest) {
+    wikitext += `:'''Latest event: [[${latest.year} ${latest.fullName}|${latest.name} GP]] <small>(${latest.dateRangeMobile})</small>'''\n`;
+  }
+  if (next) {
+    wikitext += `:'''Next event: ''' [[${next.year} ${next.fullName}|${next.name} GP]] <small>(${next.dateRangeMobile})</small>\n`;
+  }
+  wikitext += `</div>`;
+  
+  return wikitext;
+}
+

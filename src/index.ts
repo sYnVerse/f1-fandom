@@ -18,7 +18,11 @@ import {
   generateRaceWikitext, 
   generateStandingsWikitext,
   generatePracticeWikitext,
-  generateBlankGPWikitext
+  generateBlankGPWikitext,
+  generateLatestEventsWikitext,
+  EventInfo,
+  formatDesktopDate,
+  formatMobileDate
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -381,6 +385,13 @@ export default {
         }
         return session;
       };
+
+      // --- Sync Latest F1 News/Events ---
+      try {
+        await syncLatestNewsEvents(env, getSession);
+      } catch (e: any) {
+        console.error("Failed to sync latest news/events template:", e.message);
+      }
 
       const now = new Date();
 
@@ -779,3 +790,115 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
     }
   }
 }
+
+async function syncLatestNewsEvents(env: any, getSession: () => Promise<any>): Promise<void> {
+  const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+  const apiEndpoint = env.WIKI_API_ENDPOINT;
+  const proxySecret = env.PROXY_SECRET;
+
+  console.log("Starting latest news events sync...");
+
+  try {
+    const currentYear = new Date().getFullYear();
+    console.log(`Fetching schedules for ${currentYear - 1}, ${currentYear}, and ${currentYear + 1}...`);
+    
+    const [prevSchedule, currentSchedule, nextSchedule] = await Promise.all([
+      getSchedule(currentYear - 1).catch(() => []),
+      getSchedule(currentYear).catch(() => []),
+      getSchedule(currentYear + 1).catch(() => [])
+    ]);
+
+    const mergedSchedule = [...prevSchedule, ...currentSchedule, ...nextSchedule];
+    if (mergedSchedule.length === 0) {
+      console.error("No races found in schedules. Skipping latest news events sync.");
+      return;
+    }
+
+    const events: EventInfo[] = mergedSchedule.map(race => {
+      const { startTime, endTime } = getRaceTimes(race);
+      const year = race.season;
+      const fullName = race.raceName;
+      const name = race.raceName.replace(/\s+Grand\s+Prix/gi, "").trim();
+      const startDateStr = getRaceStartDate(race);
+      const endDateStr = race.date;
+
+      return {
+        year,
+        name,
+        fullName,
+        dateRangeDesktop: formatDesktopDate(startDateStr, endDateStr),
+        dateRangeMobile: formatMobileDate(startDateStr, endDateStr),
+        startTime,
+        endTime
+      };
+    });
+
+    events.sort((a, b) => a.endTime.getTime() - b.endTime.getTime());
+
+    const now = new Date();
+    const pastEvents = events.filter(e => e.endTime < now);
+    const ongoingEvents = events.filter(e => e.startTime <= now && now <= e.endTime);
+    const futureEvents = events.filter(e => now < e.startTime);
+
+    let previousEvent: EventInfo | null = null;
+    let latestEvent: EventInfo | null = null;
+    let nextEvent: EventInfo | null = null;
+
+    if (ongoingEvents.length > 0) {
+      latestEvent = ongoingEvents[0];
+      previousEvent = pastEvents[pastEvents.length - 1] || null;
+      nextEvent = futureEvents[0] || null;
+    } else {
+      latestEvent = pastEvents[pastEvents.length - 1] || null;
+      previousEvent = pastEvents[pastEvents.length - 2] || null;
+      nextEvent = futureEvents[0] || null;
+    }
+
+    console.log("Calculated events:", {
+      previous: previousEvent ? `${previousEvent.year} ${previousEvent.fullName}` : 'None',
+      latest: latestEvent ? `${latestEvent.year} ${latestEvent.fullName}` : 'None',
+      next: nextEvent ? `${nextEvent.year} ${nextEvent.fullName}` : 'None'
+    });
+
+    const wikitext = generateLatestEventsWikitext(previousEvent, latestEvent, nextEvent);
+    const pageTitle = "Template:Latest_F1_News/Events";
+
+    // Check if the current page content is identical
+    console.log(`Checking current content of ${pageTitle}...`);
+    const pageInfo = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+
+    if (pageInfo.exists && pageInfo.content.trim() === wikitext.trim()) {
+      console.log(`${pageTitle} is already up to date. Skipping edit.`);
+      return;
+    }
+
+    console.log(`Content differs or page does not exist. Updating ${pageTitle}...`);
+    const session = await getSession();
+    await editPage(domain, session, pageTitle, wikitext, "Automated update of previous, latest, and next events", apiEndpoint);
+    console.log(`Successfully updated ${pageTitle}!`);
+  } catch (e: any) {
+    console.error("Failed to sync latest news events:", e.message);
+  }
+}
+
+function getRaceStartDate(race: any): string {
+  if (race.FirstPractice && race.FirstPractice.date) {
+    return race.FirstPractice.date;
+  }
+  // Fallback: 2 days before the race day
+  const raceDate = new Date(race.date);
+  raceDate.setUTCDate(raceDate.getUTCDate() - 2);
+  const y = raceDate.getUTCFullYear();
+  const m = String(raceDate.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(raceDate.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getRaceTimes(race: any): { startTime: Date; endTime: Date } {
+  const startDateStr = getRaceStartDate(race);
+  const startTimeStr = race.FirstPractice?.time || "00:00:00Z";
+  const startTime = new Date(`${startDateStr}T${startTimeStr}`);
+  const endTime = new Date(`${race.date}T23:59:59Z`);
+  return { startTime, endTime };
+}
+
