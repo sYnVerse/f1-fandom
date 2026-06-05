@@ -1266,6 +1266,7 @@ export const frontendHtml = `<!DOCTYPE html>
       statusDot.className = 'status-dot';
       statusText.textContent = 'Authenticating...';
 
+      try {
         const token = getTurnstileToken();
         const res = await fetch('/api/wiki-login-test', {
           method: 'POST',
@@ -1344,6 +1345,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
       log(\`Sending sandbox test edit request to "\${sandboxPage}"...\`, 'info');
 
+      try {
         const token = getTurnstileToken();
         const res = await fetch('/api/publish', {
           method: 'POST',
@@ -1462,6 +1464,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
       log(\`Deploying full page content to "\${pageName}"...\`, 'info');
 
+      try {
         const token = getTurnstileToken();
         const res = await fetch('/api/publish', {
           method: 'POST',
