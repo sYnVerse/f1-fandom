@@ -995,6 +995,8 @@ Images and Videos:
 References:
 <references />
 
+{{${raceName}}}
+
 [[Category:${raceName}]]
 [[Category:${year} Grands Prix]]`;
 }
