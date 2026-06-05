@@ -913,7 +913,42 @@ export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[], o
     entryListRows += `\n|-\n!${num}\n|${flag} [[${name}]]\n|${entrant}\n|${constructor}\n|${chassis}\n|${engine}\n|${model}\n|${tyre}`;
   }
 
-  return `{{Infobox_Race
+  const isSprint = !!race.Sprint;
+
+  const infobox = isSprint ? `{{Infobox Sprint Race
+| flag = ${flagCode}
+| number = 
+| race = ${round}
+| season = ${year}
+| date = ${dateFormatted}
+| officialname = ${sponsorName}
+| circuit = ${circuitName}
+| circuittype = 
+| location = ${locality}, ${country}
+| lapdistance = 
+| laps = 
+| image = 
+| sprintpole = 
+| sprintpoleteam = 
+| sprintpoletime = 
+| sprintwinner = 
+| sprintsecond = 
+| sprintthird = 
+| pole = 
+| polenation = 
+| poleteam = 
+| fastestlap = 
+| fastestlapnumber = 
+| fastestlapdriver = 
+| fastestlapnation = 
+| fastestlapteam = 
+| winner = 
+| winnernation = 
+| second = 
+| secondnation = 
+| third = 
+| thirdnation = 
+}}` : `{{Infobox_Race
 | flag = ${flagCode}
 | number = 
 | race = ${round}
@@ -940,12 +975,44 @@ export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[], o
 | secondnation = 
 | third = 
 | thirdnation = 
-}}The '''${year} ${raceName}''', officially known as the '''${sponsorName}''', is scheduled to be the ${roundText} race of the [[${year} Formula One Season|${year} FIA Formula One World Championship]]. The event will take place from ${dateRange} at the [[${circuitName}]] in ${locality}, ${country}.
+}}`;
+
+  const weatherTemplate = isSprint ? `{{WeatherSprint/2023
+| fp1 = 
+| quali = 
+| Sprint_shootout = 
+| sprint = 
+| race = 
+}}` : `{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}`;
+
+  const practiceSection = isSprint ? `== Practice ==
+=== FP1 ===
+
+=== Practice Results ===
+
+== Sprint ==
+=== Sprint Qualifying ===
+==== Sprint Qualifying Results ====
+
+==== Sprint Grid ====
+
+=== Sprint Report ===
+
+=== Sprint Results ===` : `== Practice Overview ==
+=== FP1 ===
+
+=== FP2 ===
+
+=== FP3 ===
+
+=== Practice Results ===`;
+
+  return `${infobox}The '''${year} ${raceName}''', officially known as the '''${sponsorName}''', is scheduled to be the ${roundText} race of the [[${year} Formula One Season|${year} FIA Formula One World Championship]]. The event will take place from ${dateRange} at the [[${circuitName}]] in ${locality}, ${country}.
 __TOC__
 {{Clear}}
 
 ==Background==
-{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}{{AvailableTyres/2023|H=|M=|S=}}
+${weatherTemplate}{{AvailableTyres/2023|H=|M=|S=}}
 {{Clear}}
 ===Entry List===
 The full entry for the '''{{PAGENAME}}''' is outlined below:
@@ -962,14 +1029,7 @@ The full entry for the '''{{PAGENAME}}''' is outlined below:
 ! colspan="8" align="center" |'''Source''': <ref name="EL">[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_entry_list.pdf {{PAGENAME}} - Entry List] (PDF). Fédération Internationale de l'Automobile.</ref>
 |}
 
-== Practice Overview ==
-=== FP1 ===
-
-=== FP2 ===
-
-=== FP3 ===
-
-=== Practice Results ===
+${practiceSection}
 
 == Qualifying ==
 === Q1 ===
