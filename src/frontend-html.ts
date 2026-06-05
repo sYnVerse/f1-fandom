@@ -612,6 +612,7 @@ export const frontendHtml = `<!DOCTYPE html>
             <button class="tab-btn" onclick="switchTab(event, 'tab-sprint')">Sprint</button>
             <button class="tab-btn" onclick="switchTab(event, 'tab-race')">Race Results</button>
             <button class="tab-btn" onclick="switchTab(event, 'tab-standings')">World Standings</button>
+            <button class="tab-btn" onclick="switchTab(event, 'tab-stats')">Wiki Stats</button>
           </div>
 
           <!-- Practice Panel -->
@@ -757,6 +758,23 @@ export const frontendHtml = `<!DOCTYPE html>
                   <button class="btn btn-primary" onclick="publishSection('==Standings==', 'standings-wikitext')">Publish Standings Section</button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Stats Panel -->
+          <div class="tab-content" id="tab-stats">
+            <div class="fallback-box">
+              <h3>F1 Career Stats Subtemplates</h3>
+              <p>Preview and publish career stats subtemplates under <code>Category:Subtemplates of Template:Stats</code>. The calculations compile 2026 season stats up to the selected round and merge them with 2025 career base values.</p>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary" onclick="previewStatsUpdates()" style="width: auto;">Preview Stats Updates</button>
+                <button class="btn btn-primary" id="deploy-stats-btn" onclick="deployStatsUpdates()" style="width: auto;" disabled>Deploy Stats Templates</button>
+              </div>
+            </div>
+
+            <!-- Stats Preview Grid -->
+            <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 20px;" id="stats-preview-container">
+              <p style="font-size: 0.9rem; color: var(--text-muted); text-align: center;">Click 'Preview Stats Updates' to calculate and compare wiki template data.</p>
             </div>
           </div>
         </section>
@@ -1477,20 +1495,195 @@ export const frontendHtml = `<!DOCTYPE html>
             turnstileToken: token
           })
         });
-        resetTurnstile();
-
         const data = await res.json();
         if (res.ok && data.success) {
-          log(\`Successfully deployed complete page "\${pageName}"! Check it on the wiki.\`, 'success');
+          log('Successfully deployed complete page "' + pageName + '"! Check it on the wiki.', 'success');
           updatePageStatusBanner();
         } else {
           throw new Error(data.error || 'Deployment failed');
         }
       } catch (e) {
-        log(\`Error deploying page: \${e.message}\`, 'error');
+        log('Error deploying page: ' + e.message, 'error');
+      }
+    }
+
+    let statsPreviewData = [];
+
+    async function previewStatsUpdates() {
+      const year = document.getElementById('season-year').value;
+      const dropdown = document.getElementById('race-round');
+      const round = dropdown.value;
+      
+      if (year !== '2026') {
+        log('Stats sync is only supported for the 2026 season and onwards.', 'warning');
+        return;
+      }
+      
+      if (!round) {
+        log('Please select a Grand Prix round first.', 'warning');
+        return;
+      }
+
+      log('Fetching stats preview up to Round ' + round + '...', 'info');
+      const container = document.getElementById('stats-preview-container');
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Calculating and comparison-checking 21 templates...</div>';
+      
+      try {
+        const res = await fetch('/api/stats-preview?round=' + round);
+        if (!res.ok) throw new Error('API returned error: ' + res.statusText);
+        
+        const data = await res.json();
+        statsPreviewData = data.previewResults || [];
+        
+        container.innerHTML = '';
+        
+        let changedCount = 0;
+        
+        statsPreviewData.forEach(result => {
+          if (!result.exists) return;
+          
+          const card = document.createElement('div');
+          card.className = 'editor-box';
+          card.style.border = '1px solid var(--border-color)';
+          card.style.borderRadius = '8px';
+          card.style.padding = '15px';
+          card.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
+          card.style.marginBottom = '15px';
+          
+          const header = document.createElement('div');
+          header.className = 'editor-header';
+          header.style.marginBottom = '10px';
+          
+          const title = document.createElement('span');
+          title.className = 'editor-title';
+          title.style.color = '#fff';
+          title.style.fontWeight = 'bold';
+          title.innerHTML = '<input type="checkbox" id="check-' + result.template + '" class="stats-check" style="margin-right: 8px;" ' + (result.changed ? 'checked' : '') + '> Template:Stats/' + result.template;
+          
+          const badge = document.createElement('span');
+          badge.className = result.changed ? 'status-badge exists' : 'status-badge missing';
+          badge.style.backgroundColor = result.changed ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+          badge.style.color = result.changed ? 'var(--accent-secondary)' : 'var(--text-muted)';
+          badge.style.border = result.changed ? '1px solid rgba(0, 240, 255, 0.3)' : '1px solid var(--border-color)';
+          badge.textContent = result.changed ? 'Updates Pending' : 'Up to date';
+          
+          header.appendChild(title);
+          header.appendChild(badge);
+          card.appendChild(header);
+          
+          if (result.changed) {
+            changedCount++;
+            
+            // Build updates table
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            table.style.fontSize = '0.85rem';
+            table.style.marginTop = '10px';
+            
+            let tbodyHtml = '';
+            result.updates.forEach(u => {
+              tbodyHtml += '<tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">';
+              tbodyHtml += '<td style="padding: 6px; font-weight: 500;">' + u.driver + '</td>';
+              tbodyHtml += '<td style="padding: 6px; text-align: center; color: var(--error); font-family: var(--font-mono);">' + escapeHtml(u.oldValue) + '</td>';
+              tbodyHtml += '<td style="padding: 6px; text-align: center; color: var(--success); font-family: var(--font-mono); font-weight: bold;">' + escapeHtml(u.newValue) + '</td>';
+              tbodyHtml += '</tr>';
+            });
+
+            table.innerHTML = '<thead>' +
+              '<tr style="border-bottom: 1px solid var(--border-color); text-align: left;">' +
+                '<th style="padding: 6px; color: var(--text-muted);">Driver</th>' +
+                '<th style="padding: 6px; color: var(--text-muted); text-align: center;">Current Value (Wiki)</th>' +
+                '<th style="padding: 6px; color: var(--text-muted); text-align: center;">Proposed Value</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>' + tbodyHtml + '</tbody>';
+            
+            card.appendChild(table);
+          } else {
+            const noChange = document.createElement('p');
+            noChange.style.fontSize = '0.85rem';
+            noChange.style.color = 'var(--text-muted)';
+            noChange.style.fontStyle = 'italic';
+            noChange.textContent = 'All driver entries match the current wiki template.';
+            card.appendChild(noChange);
+          }
+          
+          container.appendChild(card);
+        });
+        
+        log('Stats calculation completed. Found ' + changedCount + ' templates with pending updates.', changedCount > 0 ? 'info' : 'success');
+        document.getElementById('deploy-stats-btn').disabled = false;
+      } catch (e) {
+        log('Error previewing stats: ' + e.message, 'error');
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--error);">Error: ' + e.message + '</div>';
+      }
+    }
+
+    function escapeHtml(string) {
+      return String(string).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function deployStatsUpdates() {
+      const domain = document.getElementById('wiki-domain').value;
+      const username = document.getElementById('bot-username').value;
+      const password = document.getElementById('bot-password').value;
+      const dropdown = document.getElementById('race-round');
+      const round = dropdown.value;
+
+      if (!username || !password) {
+        log('Bot credentials missing. Enter settings in the sidebar.', 'warning');
+        return;
+      }
+
+      const checks = document.querySelectorAll('.stats-check:checked');
+      const templatesToUpdate = Array.from(checks).map(cb => cb.id.replace('check-', ''));
+
+      if (templatesToUpdate.length === 0) {
+        log('No templates selected for deployment.', 'warning');
+        return;
+      }
+
+      log('Deploying ' + templatesToUpdate.length + ' stats templates for Round ' + round + ' to ' + domain + '...', 'info');
+      document.getElementById('deploy-stats-btn').disabled = true;
+
+      try {
+        const token = getTurnstileToken();
+        const res = await fetch('/api/publish-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: domain,
+            username: username,
+            password: password,
+            round: round,
+            templatesToUpdate: templatesToUpdate,
+            turnstileToken: token
+          })
+        });
+        resetTurnstile();
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          data.publishResults.forEach(r => {
+            if (r.status === 'Updated') {
+              log('✓ Template:Stats/' + r.template + ' successfully updated on wiki!', 'success');
+            } else if (r.status === 'No changes') {
+              log('• Template:Stats/' + r.template + ' already up to date.', 'info');
+            } else {
+              log('✗ Template:Stats/' + r.template + ' deployment status: ' + r.status, 'warning');
+            }
+          });
+          log('Stats templates deployment completed successfully!', 'success');
+          previewStatsUpdates();
+        } else {
+          throw new Error(data.error || 'Deployment failed');
+        }
+      } catch (e) {
+        log('Stats deployment failed: ' + e.message, 'error');
+        document.getElementById('deploy-stats-btn').disabled = false;
       }
     }
   </script>
 </body>
-</html>
-`;
+</html>`;

@@ -27,12 +27,13 @@ import {
   generateCareerPositionWikitext,
   generateCareerTeamPositionWikitext
 } from './wikitext-generator';
+import { loginToWiki, getPageContent, editPage, replaceSectionWikitext } from './wiki';
 import { 
-  loginToWiki, 
-  getPageContent, 
-  editPage, 
-  replaceSectionWikitext 
-} from './wiki';
+  get2026CumulativeStats, 
+  updateTemplateContent, 
+  updateCorrectionText, 
+  driverIdToWikiName 
+} from './stats';
 
 // CORS response helper
 function corsResponse(body: string | object, status = 200, headers: Record<string, string> = {}): Response {
@@ -347,6 +348,127 @@ export default {
         }
       }
 
+      // 8.5 Preview Stats Updates
+      if (url.pathname === '/api/stats-preview' && method === 'GET') {
+        const roundStr = url.searchParams.get('round');
+        if (!roundStr) return corsResponse({ error: 'Round parameter required' }, 400);
+        
+        const round = parseInt(roundStr, 10);
+        const domain = _env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+        
+        try {
+          console.log(`Calculating cumulative stats up to round ${round}...`);
+          const cumulativeStats = await get2026CumulativeStats(_env, round);
+          
+          const templates = [
+            "Championships", "Distance", "DistanceLed", "Doubles", "Entries",
+            "FastestLaps", "FrontRows", "Grand Chelems", "HatTricks", "Laps",
+            "LapsLed", "Podiums", "Points", "Poles", "RacesLed",
+            "SprintFastestLaps", "SprintPodiums", "SprintPoles", "SprintWins", "Starts", "Wins"
+          ];
+          
+          const previewResults = await Promise.all(templates.map(async (temp) => {
+            const pageTitle = `Template:Stats/${temp}`;
+            const pageInfo = await getPageContent(domain, pageTitle, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE).catch(() => ({ exists: false, content: '' }));
+            
+            if (!pageInfo.exists) {
+              return { template: temp, exists: false, changed: false, updates: [], wikitext: '' };
+            }
+            
+            const updated = updateTemplateContent(temp, pageInfo.content, cumulativeStats);
+            
+            return {
+              template: temp,
+              exists: true,
+              changed: updated.changed,
+              updates: updated.updates,
+              wikitext: updated.wikitext,
+              currentWikitext: pageInfo.content
+            };
+          }));
+          
+          return corsResponse({ round, previewResults });
+        } catch (e: any) {
+          return corsResponse({ error: e.message }, 500);
+        }
+      }
+
+      // 8.6 Deploy Stats Templates
+      if (url.pathname === '/api/publish-stats' && method === 'POST') {
+        const body = await request.json() as any;
+        const { 
+          domain, username, password, 
+          round, templatesToUpdate,
+          turnstileToken
+        } = body;
+
+        const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
+        if (!isTokenValid) {
+          return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+        }
+
+        if (!domain || !username || !password || !round || !templatesToUpdate) {
+          return corsResponse({ error: 'Missing required parameters' }, 400);
+        }
+
+        try {
+          const session = await loginToWiki({ 
+            domain, username, botPassword: password,
+            apiEndpoint: _env.WIKI_API_ENDPOINT,
+            proxySecret: _env.PROXY_SECRET,
+            kvState: _env.F1_WIKI_STATE
+          });
+
+          const rd = parseInt(round, 10);
+          console.log(`Calculating cumulative stats up to round ${rd} for publishing...`);
+          const cumulativeStats = await get2026CumulativeStats(_env, rd);
+
+          // Get latest race info for correction text update
+          const schedule = await getSchedule(2026);
+          const race = schedule.find(r => parseInt(r.round, 10) === rd);
+          const raceName = race ? race.raceName : '';
+          
+          let winnerCode = 'VER';
+          try {
+            const results = await getRaceResult(2026, rd, false);
+            if (results.length > 0 && results[0].driver?.code) {
+              winnerCode = results[0].driver.code;
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          const publishResults: any[] = [];
+
+          for (const temp of templatesToUpdate) {
+            const pageTitle = `Template:Stats/${temp}`;
+            const pageInfo = await getPageContent(domain, pageTitle, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
+            
+            if (!pageInfo.exists) {
+              publishResults.push({ template: temp, status: 'Not found' });
+              continue;
+            }
+
+            const updated = updateTemplateContent(temp, pageInfo.content, cumulativeStats);
+            if (updated.changed) {
+              let finalText = updated.wikitext;
+              if (raceName) {
+                finalText = updateCorrectionText(finalText, 2026, raceName, winnerCode);
+              }
+              
+              await editPage(domain, session, pageTitle, finalText, `Automated stats update up to 2026 Round ${rd} (${raceName || `Round ${rd}`})`, _env.WIKI_API_ENDPOINT);
+              publishResults.push({ template: temp, status: 'Updated' });
+            } else {
+              publishResults.push({ template: temp, status: 'No changes' });
+            }
+          }
+
+          return corsResponse({ success: true, publishResults });
+        } catch (e: any) {
+          return corsResponse({ success: false, error: e.message }, 500);
+        }
+      }
+
       // 404 handler
       return corsResponse({ error: 'Not found' }, 404);
 
@@ -525,6 +647,32 @@ export default {
             }
           }
         }
+
+        // --- 3. Smart Check for Stats Templates ---
+        const statsKey = `2026_round_${round}_stats_synced`;
+        const statsUpdatedInKV = env.F1_WIKI_STATE ? await env.F1_WIKI_STATE.get(statsKey) === 'true' : false;
+
+        if (statsUpdatedInKV) {
+          console.log(`Round ${round} Stats Templates already synced (KV cache). Skipping.`);
+        } else if (!gpSessionCompleted) {
+          console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
+        } else {
+          let hasGPResults = false;
+          try {
+            const gpResults = await getRaceResult(year, round, false);
+            hasGPResults = gpResults.length > 0;
+          } catch (e) {}
+
+          if (hasGPResults) {
+            console.log(`GP results available. Running stats sync for round ${round}...`);
+            await syncStatsTemplates(env, getSession, round);
+            
+            if (env.F1_WIKI_STATE) {
+              await env.F1_WIKI_STATE.put(statsKey, 'true');
+              console.log(`Marked round ${round} Stats Templates as synced in KV.`);
+            }
+          }
+        }
       }
 
       console.log("Scheduled sync completed successfully!");
@@ -536,30 +684,7 @@ export default {
 
 // --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
 
-const driverIdToWikiName: Record<string, string> = {
-  'max_verstappen': 'Max Verstappen',
-  'hadjar': 'Isack Hadjar',
-  'leclerc': 'Charles Leclerc',
-  'hamilton': 'Lewis Hamilton',
-  'russell': 'George Russell',
-  'antonelli': 'Andrea Kimi Antonelli',
-  'gasly': 'Pierre Gasly',
-  'colapinto': 'Franco Colapinto',
-  'norris': 'Lando Norris',
-  'piastri': 'Oscar Piastri',
-  'sainz': 'Carlos Sainz, Jr.',
-  'albon': 'Alexander Albon',
-  'lawson': 'Liam Lawson',
-  'arvid_lindblad': 'Arvid Lindblad',
-  'stroll': 'Lance Stroll',
-  'alonso': 'Fernando Alonso',
-  'hulkenberg': 'Nico Hülkenberg',
-  'bortoleto': 'Gabriel Bortoleto',
-  'ocon': 'Esteban Ocon',
-  'bearman': 'Oliver Bearman',
-  'bottas': 'Valterri Bottas',
-  'perez': 'Sergio Pérez'
-};
+
 
 const wikiDriverList = [
   "Max Verstappen",
@@ -995,6 +1120,76 @@ async function syncCareerStandingsTemplates(env: any, getSession: () => Promise<
 
   } catch (e: any) {
     console.error("Failed to sync Career Results standings templates:", e.message);
+  }
+}
+
+async function syncStatsTemplates(env: any, getSession: () => Promise<any>, round: number): Promise<void> {
+  const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+  const apiEndpoint = env.WIKI_API_ENDPOINT;
+  const proxySecret = env.PROXY_SECRET;
+
+  console.log(`Starting scheduled Stats Templates sync for round ${round}...`);
+
+  try {
+    const cumulativeStats = await get2026CumulativeStats(env, round);
+    
+    // Get latest race info for correction text update
+    const schedule = await getSchedule(2026);
+    const race = schedule.find(r => parseInt(r.round, 10) === round);
+    const raceName = race ? race.raceName : '';
+    
+    // Try to get winner of the race for the correction code
+    let winnerCode = 'VER'; // default fallback
+    try {
+      const results = await getRaceResult(2026, round, false);
+      if (results.length > 0 && results[0].driver?.code) {
+        winnerCode = results[0].driver.code;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const templates = [
+      "Championships", "Distance", "DistanceLed", "Doubles", "Entries",
+      "FastestLaps", "FrontRows", "Grand Chelems", "HatTricks", "Laps",
+      "LapsLed", "Podiums", "Points", "Poles", "RacesLed",
+      "SprintFastestLaps", "SprintPodiums", "SprintPoles", "SprintWins", "Starts", "Wins"
+    ];
+
+    let session: any = null;
+    const getSessionLocal = async () => {
+      if (!session) {
+        session = await getSession();
+      }
+      return session;
+    };
+
+    for (const temp of templates) {
+      const pageTitle = `Template:Stats/${temp}`;
+      const pageInfo = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE).catch(() => ({ exists: false, content: '' }));
+      
+      if (!pageInfo.exists) {
+        console.warn(`Template ${pageTitle} does not exist. Skipping.`);
+        continue;
+      }
+
+      const updated = updateTemplateContent(temp, pageInfo.content, cumulativeStats);
+      if (updated.changed) {
+        let finalText = updated.wikitext;
+        if (raceName) {
+          finalText = updateCorrectionText(finalText, 2026, raceName, winnerCode);
+        }
+        
+        console.log(`Updating ${pageTitle} on Fandom...`);
+        const currentSession = await getSessionLocal();
+        await editPage(domain, currentSession, pageTitle, finalText, `Automated stats update up to 2026 Round ${round} (${raceName || `Round ${round}`})`, apiEndpoint);
+        console.log(`Successfully updated ${pageTitle}!`);
+      } else {
+        console.log(`${pageTitle} is already up to date.`);
+      }
+    }
+  } catch (e: any) {
+    console.error(`Scheduled stats templates sync failed: ${e.message}`);
   }
 }
 
