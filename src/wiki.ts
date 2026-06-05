@@ -91,10 +91,15 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
     }
   }
 
+  if (!tokenRes.ok) {
+    const errorText = await tokenRes.text().catch(() => '');
+    throw new Error(`Get login token request failed (HTTP ${tokenRes.status}): ${errorText}`);
+  }
+
   const tokenData = await tokenRes.json() as any;
   const loginToken = tokenData?.query?.tokens?.logintoken;
   if (!loginToken) {
-    throw new Error('Login token not found in MediaWiki response.');
+    throw new Error(`Login token not found in MediaWiki response. Response: ${JSON.stringify(tokenData)}`);
   }
 
   // Get cookies from token response if any (some wikis set cookies on token request)
@@ -153,9 +158,14 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
     }
   }
 
+  if (!loginRes.ok) {
+    const errorText = await loginRes.text().catch(() => '');
+    throw new Error(`Bot credentials submission failed (HTTP ${loginRes.status}): ${errorText}`);
+  }
+
   const loginData = await loginRes.json() as any;
   if (loginData?.login?.result !== 'Success') {
-    throw new Error(`Wiki login failed: ${loginData?.login?.reason || loginData?.login?.result}`);
+    throw new Error(`Wiki login failed: ${loginData?.login?.reason || loginData?.login?.result || JSON.stringify(loginData)}`);
   }
 
   // Append new cookies from login response
@@ -200,10 +210,15 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
     }
   }
 
+  if (!csrfRes.ok) {
+    const errorText = await csrfRes.text().catch(() => '');
+    throw new Error(`Get CSRF token request failed (HTTP ${csrfRes.status}): ${errorText}`);
+  }
+
   const csrfData = await csrfRes.json() as any;
   const csrfToken = csrfData?.query?.tokens?.csrftoken;
   if (!csrfToken) {
-    throw new Error('CSRF token not found in MediaWiki response.');
+    throw new Error(`CSRF token not found in MediaWiki response. Response: ${JSON.stringify(csrfData)}`);
   }
 
   return { 
@@ -248,6 +263,11 @@ export async function getPageContent(
   }
 
   const res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Get page content request failed (HTTP ${res.status}): ${errorText}`);
+  }
 
   const data = await res.json() as any;
   const pages = data?.query?.pages;
@@ -320,6 +340,11 @@ export async function editPage(
     if (session.kvState) {
       await logApiCall(session.kvState, `Edit Page: ${title}`, 'POST', apiUrl, success, errorReason);
     }
+  }
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Edit page request failed (HTTP ${res.status}): ${errorText}`);
   }
 
   const editData = await res.json() as any;
