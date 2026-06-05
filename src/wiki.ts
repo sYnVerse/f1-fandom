@@ -66,7 +66,7 @@ export async function loginToWiki(config: WikiConfig): Promise<WikiSession> {
   }
 
   // Step 1: Get Login Token
-  const tokenUrl = `${apiUrl}?action=query&meta=tokens&type=login&format=json&origin=*`;
+  const tokenUrl = `${apiUrl}?action=query&meta=tokens&type=login&format=json`;
   const tokenHeaders: Record<string, string> = {};
   if (config.proxySecret) {
     tokenHeaders['X-Proxy-Secret'] = config.proxySecret;
@@ -251,7 +251,6 @@ export async function getPageContent(
     titles: title,
     rvprop: 'content',
     format: 'json',
-    origin: '*',
   });
 
   const headers: Record<string, string> = {};
