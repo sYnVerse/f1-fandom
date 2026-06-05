@@ -34,6 +34,7 @@ import {
   updateCorrectionText, 
   driverIdToWikiName 
 } from './stats';
+import { getStatsF1Results, verifyResults } from './statsf1';
 
 // CORS response helper
 function corsResponse(body: string | object, status = 200, headers: Record<string, string> = {}): Response {
@@ -358,7 +359,41 @@ export default {
         
         try {
           console.log(`Calculating cumulative stats up to round ${round}...`);
-          const cumulativeStats = await get2026CumulativeStats(_env, round);
+          
+          // Run Jolpi API fetch, StatsF1 classification fetch, and cumulative stats calculation concurrently
+          const [cumulativeStats, jolpiResults, statsF1Results] = await Promise.all([
+            get2026CumulativeStats(_env, round),
+            getRaceResult(2026, round, false).catch(() => []),
+            getStatsF1Results(round).catch(() => null)
+          ]);
+          
+          let verificationReport = null;
+          if (statsF1Results) {
+            const report = verifyResults(jolpiResults, statsF1Results);
+            verificationReport = {
+              success: report.success,
+              mismatches: report.mismatches,
+              statsF1Results,
+              jolpiResults: jolpiResults.map((j: any) => ({
+                position: j.positionText || j.position,
+                driverId: j.driver.driverId,
+                driverName: j.driver.givenName + " " + j.driver.familyName.toUpperCase(),
+                points: parseFloat(j.points) || 0
+              }))
+            };
+          } else {
+            verificationReport = {
+              success: false,
+              mismatches: ["Could not fetch or parse classification data from StatsF1 (round might not have concluded yet)."],
+              statsF1Results: [],
+              jolpiResults: jolpiResults.map((j: any) => ({
+                position: j.positionText || j.position,
+                driverId: j.driver.driverId,
+                driverName: j.driver.givenName + " " + j.driver.familyName.toUpperCase(),
+                points: parseFloat(j.points) || 0
+              }))
+            };
+          }
           
           const templates = [
             "Championships", "Distance", "DistanceLed", "Doubles", "Entries",
@@ -387,7 +422,7 @@ export default {
             };
           }));
           
-          return corsResponse({ round, previewResults });
+          return corsResponse({ round, previewResults, verification: verificationReport });
         } catch (e: any) {
           return corsResponse({ error: e.message }, 500);
         }

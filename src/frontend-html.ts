@@ -1536,7 +1536,104 @@ export const frontendHtml = `<!DOCTYPE html>
         statsPreviewData = data.previewResults || [];
         
         container.innerHTML = '';
-        
+
+        // 1. Render Verification Banner
+        if (data.verification) {
+          const v = data.verification;
+          const banner = document.createElement('div');
+          banner.className = 'editor-box';
+          banner.style.borderRadius = '8px';
+          banner.style.padding = '15px';
+          banner.style.marginBottom = '20px';
+          
+          if (v.success) {
+            banner.style.backgroundColor = 'rgba(46, 204, 113, 0.1)';
+            banner.style.border = '1px solid rgba(46, 204, 113, 0.3)';
+            banner.innerHTML = '<h3 style="color: #2ecc71; margin-top: 0; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">' +
+              '<svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>' +
+              '[Verified] Classification Matches StatsF1.com</h3>' +
+              '<p style="margin: 0; font-size: 0.9rem; color: #a2f2bd;">Jolpi F1 API race classifications match StatsF1.com results perfectly for this round.</p>';
+          } else {
+            banner.style.backgroundColor = 'rgba(231, 76, 60, 0.1)';
+            banner.style.border = '1px solid rgba(231, 76, 60, 0.3)';
+            
+            let mismatchesHtml = '';
+            v.mismatches.forEach(m => {
+              mismatchesHtml += '<li style="margin-bottom: 4px;">' + escapeHtml(m) + '</li>';
+            });
+            
+            banner.innerHTML = '<h3 style="color: #e74c3c; margin-top: 0; margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">' +
+              '<svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>' +
+              '[Mismatch Detected] Classification Discrepancies</h3>' +
+              '<p style="margin: 0 0 10px 0; font-size: 0.9rem; color: #f2a2a2;">Discrepancies found when cross-referencing Jolpi F1 API against StatsF1.com:</p>' +
+              '<ul style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: #f2a2a2;">' + mismatchesHtml + '</ul>';
+          }
+          container.appendChild(banner);
+
+          // 2. Render Side-by-Side Classification Table
+          const comparisonBox = document.createElement('div');
+          comparisonBox.className = 'editor-box';
+          comparisonBox.style.borderRadius = '8px';
+          comparisonBox.style.padding = '15px';
+          comparisonBox.style.marginBottom = '20px';
+          comparisonBox.style.border = '1px solid var(--border-color)';
+          comparisonBox.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
+          
+          const compHeader = document.createElement('div');
+          compHeader.className = 'editor-header';
+          compHeader.style.marginBottom = '12px';
+          compHeader.innerHTML = '<span class="editor-title" style="color: #fff; font-weight: bold;">Jolpi API vs StatsF1.com Classification</span>';
+          comparisonBox.appendChild(compHeader);
+
+          // Build a map of driverId -> statsf1 results
+          const sMap = {};
+          v.statsF1Results.forEach(r => {
+            if (r.driverId) sMap[r.driverId] = r;
+          });
+
+          // Build comparison rows
+          let compRows = '';
+          v.jolpiResults.forEach(j => {
+            const s = sMap[j.driverId];
+            const hasMismatch = !s || j.position !== s.position || j.points !== s.points;
+            const rowBg = hasMismatch ? 'rgba(231, 76, 60, 0.08)' : 'transparent';
+            const rowBorder = hasMismatch ? '1px solid rgba(231, 76, 60, 0.2)' : '1px solid rgba(255,255,255,0.02)';
+            
+            compRows += '<tr style="border-bottom: ' + rowBorder + '; background-color: ' + rowBg + ';">';
+            compRows += '<td style="padding: 8px; font-weight: bold;">' + escapeHtml(j.driverName) + '</td>';
+            compRows += '<td style="padding: 8px; text-align: center; color: ' + (hasMismatch ? '#e74c3c' : 'var(--text-muted)') + ';">' + escapeHtml(j.position) + '</td>';
+            compRows += '<td style="padding: 8px; text-align: center; color: ' + (hasMismatch ? '#e74c3c' : 'var(--text-muted)') + ';">' + j.points + '</td>';
+            
+            if (s) {
+              compRows += '<td style="padding: 8px; text-align: center; font-weight: 500;">' + escapeHtml(s.position) + '</td>';
+              compRows += '<td style="padding: 8px; text-align: center; font-weight: 500;">' + s.points + '</td>';
+              compRows += '<td style="padding: 8px; font-size: 0.8rem; color: var(--text-muted);">' + escapeHtml(s.status) + '</td>';
+            } else {
+              compRows += '<td colspan="3" style="padding: 8px; text-align: center; color: var(--error); font-style: italic;">Missing on StatsF1</td>';
+            }
+            compRows += '</tr>';
+          });
+
+          const compTable = document.createElement('table');
+          compTable.style.width = '100%';
+          compTable.style.borderCollapse = 'collapse';
+          compTable.style.fontSize = '0.85rem';
+          compTable.innerHTML = '<thead>' +
+            '<tr style="border-bottom: 1px solid var(--border-color); text-align: left;">' +
+              '<th style="padding: 8px; color: var(--text-muted);">Driver</th>' +
+              '<th style="padding: 8px; color: var(--text-muted); text-align: center;">Jolpi Pos</th>' +
+              '<th style="padding: 8px; color: var(--text-muted); text-align: center;">Jolpi Pts</th>' +
+              '<th style="padding: 8px; color: var(--text-muted); text-align: center;">StatsF1 Pos</th>' +
+              '<th style="padding: 8px; color: var(--text-muted); text-align: center;">StatsF1 Pts</th>' +
+              '<th style="padding: 8px; color: var(--text-muted);">StatsF1 Status</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody>' + compRows + '</tbody>';
+
+          comparisonBox.appendChild(compTable);
+          container.appendChild(comparisonBox);
+        }
+
         let changedCount = 0;
         
         statsPreviewData.forEach(result => {
