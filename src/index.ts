@@ -22,7 +22,10 @@ import {
   generateLatestEventsWikitext,
   EventInfo,
   formatDesktopDate,
-  formatMobileDate
+  formatMobileDate,
+  generateCareerPointsWikitext,
+  generateCareerPositionWikitext,
+  generateCareerTeamPositionWikitext
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -403,6 +406,13 @@ export default {
         await syncLatestNewsEvents(env, getSession);
       } catch (e: any) {
         console.error("Failed to sync latest news/events template:", e.message);
+      }
+
+      // --- Sync Career Results Standings Templates ---
+      try {
+        await syncCareerStandingsTemplates(env, getSession);
+      } catch (e: any) {
+        console.error("Failed to sync Career Results standings templates:", e.message);
       }
 
       const now = new Date();
@@ -912,5 +922,79 @@ function getRaceTimes(race: any): { startTime: Date; endTime: Date } {
   const startTime = new Date(`${startDateStr}T${startTimeStr}`);
   const endTime = new Date(`${race.date}T23:59:59Z`);
   return { startTime, endTime };
+}
+
+async function syncCareerStandingsTemplates(env: any, getSession: () => Promise<any>): Promise<void> {
+  const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+  const apiEndpoint = env.WIKI_API_ENDPOINT;
+  const proxySecret = env.PROXY_SECRET;
+
+  console.log("Starting Career Results standings templates sync...");
+
+  try {
+    const year = 2026;
+    console.log("Fetching latest standings from Jolpi API...");
+    
+    const [driverStandings, constructorStandings] = await Promise.all([
+      getDriverStandings(year).catch(() => []),
+      getConstructorStandings(year).catch(() => [])
+    ]);
+
+    if (driverStandings.length === 0 && constructorStandings.length === 0) {
+      console.warn("Standings are empty. Skipping Career Results templates sync.");
+      return;
+    }
+
+    // 1. Points template
+    if (driverStandings.length > 0) {
+      const pointsTitle = "Template:Career_Results/Points/2026";
+      const pointsWikitext = generateCareerPointsWikitext(driverStandings);
+      console.log(`Checking current content of ${pointsTitle}...`);
+      const pointsPage = await getPageContent(domain, pointsTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+      if (!pointsPage.exists || pointsPage.content.trim() !== pointsWikitext.trim()) {
+        console.log(`Content differs or page does not exist. Updating ${pointsTitle}...`);
+        const session = await getSession();
+        await editPage(domain, session, pointsTitle, pointsWikitext, "Automated update of driver career points template", apiEndpoint);
+        console.log(`Successfully updated ${pointsTitle}!`);
+      } else {
+        console.log(`${pointsTitle} is already up to date.`);
+      }
+    }
+
+    // 2. Position template
+    if (driverStandings.length > 0) {
+      const posTitle = "Template:Career_Results/Position/2026";
+      const posWikitext = generateCareerPositionWikitext(driverStandings);
+      console.log(`Checking current content of ${posTitle}...`);
+      const posPage = await getPageContent(domain, posTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+      if (!posPage.exists || posPage.content.trim() !== posWikitext.trim()) {
+        console.log(`Content differs or page does not exist. Updating ${posTitle}...`);
+        const session = await getSession();
+        await editPage(domain, session, posTitle, posWikitext, "Automated update of driver career positions template", apiEndpoint);
+        console.log(`Successfully updated ${posTitle}!`);
+      } else {
+        console.log(`${posTitle} is already up to date.`);
+      }
+    }
+
+    // 3. Team Position template
+    if (constructorStandings.length > 0) {
+      const teamTitle = "Template:Career_Results/Team_Position/2026";
+      const teamWikitext = generateCareerTeamPositionWikitext(constructorStandings);
+      console.log(`Checking current content of ${teamTitle}...`);
+      const teamPage = await getPageContent(domain, teamTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+      if (!teamPage.exists || teamPage.content.trim() !== teamWikitext.trim()) {
+        console.log(`Content differs or page does not exist. Updating ${teamTitle}...`);
+        const session = await getSession();
+        await editPage(domain, session, teamTitle, teamWikitext, "Automated update of constructor career positions template", apiEndpoint);
+        console.log(`Successfully updated ${teamTitle}!`);
+      } else {
+        console.log(`${teamTitle} is already up to date.`);
+      }
+    }
+
+  } catch (e: any) {
+    console.error("Failed to sync Career Results standings templates:", e.message);
+  }
 }
 

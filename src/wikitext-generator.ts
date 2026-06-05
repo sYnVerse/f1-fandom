@@ -1146,3 +1146,77 @@ export function generateLatestEventsWikitext(
   return wikitext;
 }
 
+function getDriverWikiName(driver: any): string {
+  const customMap: Record<string, string> = {
+    'sainz': 'Carlos Sainz, Jr.',
+    'bottas': 'Valterri Bottas'
+  };
+  if (customMap[driver.driverId]) {
+    return customMap[driver.driverId];
+  }
+  return `${driver.givenName} ${driver.familyName}`;
+}
+
+function getTeamWikiName(constructor: any): string {
+  const customMap: Record<string, string> = {
+    'alpine': 'Alpine',
+    'rb': 'Racing Bulls',
+    'haas': 'Haas',
+    'cadillac': 'Cadillac'
+  };
+  if (customMap[constructor.constructorId]) {
+    return customMap[constructor.constructorId];
+  }
+  return constructor.name;
+}
+
+function getOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+export function generateCareerPointsWikitext(standings: DriverStanding[]): string {
+  let wikitext = "{{#switch:{{{1}}}\n";
+  const maxLen = Math.max(...standings.map(s => getDriverWikiName(s.Driver).length));
+  
+  standings.forEach(s => {
+    const wikiName = getDriverWikiName(s.Driver);
+    const paddedName = wikiName.padEnd(maxLen, ' ');
+    wikitext += `|${paddedName} = ${s.points}\n`;
+  });
+  
+  wikitext += "|#default = 0\n";
+  wikitext += "}}<noinclude>[[Category:Career Results Templates]][[Category:2026 Results Templates]]</noinclude>";
+  return wikitext;
+}
+
+export function generateCareerPositionWikitext(standings: DriverStanding[]): string {
+  let wikitext = "{{#switch:{{{1}}}\n";
+  
+  standings.forEach((s, idx) => {
+    const pos = idx + 1;
+    const key = getOrdinal(pos).padEnd(6, ' ');
+    const wikiName = getDriverWikiName(s.Driver);
+    wikitext += `|${key} = ${wikiName}\n`;
+  });
+  
+  wikitext += "|#default = \n";
+  wikitext += "}}<noinclude>[[Category:Career Results Templates]][[Category:2026 Results Templates]]</noinclude>";
+  return wikitext;
+}
+
+export function generateCareerTeamPositionWikitext(standings: ConstructorStanding[]): string {
+  let wikitext = "{{#switch:{{{1}}}\n";
+  
+  standings.forEach((s, idx) => {
+    const pos = idx + 1;
+    const key = getOrdinal(pos).padEnd(6, ' ');
+    const wikiName = getTeamWikiName(s.Constructor);
+    wikitext += `|${key} = ${wikiName}\n`;
+  });
+  
+  wikitext += "}}<noinclude>[[Category:2026 Results Templates]]</noinclude>";
+  return wikitext;
+}
+
