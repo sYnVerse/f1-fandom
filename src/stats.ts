@@ -425,18 +425,33 @@ export function normalizeName(name: string): string {
 }
 
 // Fetch and calculate stats for a single round of 2026
-export async function calculateRoundStats(year: number, round: number): Promise<Record<string, Partial<DriverStats>>> {
+export async function calculateRoundStats(
+  year: number,
+  round: number,
+  trackLengthParam?: number
+): Promise<Record<string, Partial<DriverStats>>> {
   console.log(`Calculating stats for ${year} Round ${round}...`);
-  
+
+  let trackLength = trackLengthParam;
+  const raceResultsPromise = getRaceResult(year, round, false).catch(() => []);
+  const qualiResultsPromise = getQualifyingResult(year, round).catch(() => []);
+
+  let schedulePromise: Promise<any[]> = Promise.resolve([]);
+  if (trackLength === undefined) {
+    schedulePromise = getSchedule(year).catch(() => []);
+  }
+
   const [raceResults, qualiResults, schedule] = await Promise.all([
-    getRaceResult(year, round, false).catch(() => []),
-    getQualifyingResult(year, round).catch(() => []),
-    getSchedule(year).catch(() => [])
+    raceResultsPromise,
+    qualiResultsPromise,
+    schedulePromise
   ]);
 
-  const raceInfo = schedule.find(r => parseInt(r.round, 10) === round);
-  const circuitId = raceInfo?.Circuit?.circuitId;
-  const trackLength = circuitId ? (CIRCUIT_LENGTHS[circuitId] || 0) : 0;
+  if (trackLength === undefined) {
+    const raceInfo = schedule.find(r => parseInt(r.round, 10) === round);
+    const circuitId = raceInfo?.Circuit?.circuitId;
+    trackLength = circuitId ? (CIRCUIT_LENGTHS[circuitId] || 0) : 0;
+  }
 
   let sprintResults: RaceResult[] = [];
   try {
@@ -447,13 +462,14 @@ export async function calculateRoundStats(year: number, round: number): Promise<
 
   // Fetch lap charts for laps led / races led / distance led
   let lapsLedMap: Record<string, number> = {};
-  if (raceResults.length > 0 && raceInfo) {
+  if (raceResults.length > 0) {
     try {
       const lapsUrl = `https://api.jolpi.ca/ergast/f1/${year}/${round}/laps.json?limit=2000`;
       const lapsRes = await fetch(lapsUrl);
       if (lapsRes.ok) {
         const lapsData = await lapsRes.json() as any;
-        const laps = lapsData.MRData.LapsTable.Races[0]?.Laps || [];
+        const races = lapsData?.MRData?.RaceTable?.Races || lapsData?.MRData?.LapsTable?.Races || [];
+        const laps = races[0]?.Laps || [];
         for (const lap of laps) {
           const leader = lap.Timings[0]?.driverId;
           if (leader) {
@@ -587,7 +603,12 @@ export async function calculateRoundStats(year: number, round: number): Promise<
 }
 
 // Get or calculate round stats with Cloudflare KV caching
-export async function getRoundStatsCached(env: any, year: number, round: number): Promise<Record<string, Partial<DriverStats>>> {
+export async function getRoundStatsCached(
+  env: any,
+  year: number,
+  round: number,
+  trackLength?: number
+): Promise<Record<string, Partial<DriverStats>>> {
   const kvKey = `2026_stats_round_${round}`;
   if (env && env.F1_WIKI_STATE) {
     const cached = await env.F1_WIKI_STATE.get(kvKey);
@@ -600,7 +621,7 @@ export async function getRoundStatsCached(env: any, year: number, round: number)
     }
   }
 
-  const computed = await calculateRoundStats(year, round);
+  const computed = await calculateRoundStats(year, round, trackLength);
   if (env && env.F1_WIKI_STATE && Object.keys(computed).length > 0) {
     await env.F1_WIKI_STATE.put(kvKey, JSON.stringify(computed));
     console.log(`Cached stats for Round ${round} in KV.`);
@@ -610,7 +631,41 @@ export async function getRoundStatsCached(env: any, year: number, round: number)
 
 // Get cumulative 2026 stats up to a specific round
 export async function get2026CumulativeStats(env: any, upToRound: number): Promise<Record<string, DriverStats>> {
-  const cumulative: Record<string, DriverStats> = {};
+  if (upToRound <= 0) return {};
+
+  const targetKey = `2026_cumulative_stats_up_to_${upToRound}`;
+
+  // 1. Try to get cumulative stats for target round directly
+  if (env && env.F1_WIKI_STATE) {
+    const cached = await env.F1_WIKI_STATE.get(targetKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        console.error(`Failed to parse cached cumulative stats: ${e}`);
+      }
+    }
+  }
+
+  // 2. Try to get cumulative stats for upToRound - 1
+  let cumulative: Record<string, DriverStats> = {};
+  let startRound = 1;
+
+  if (upToRound > 1) {
+    const prevKey = `2026_cumulative_stats_up_to_${upToRound - 1}`;
+    if (env && env.F1_WIKI_STATE) {
+      const cachedPrev = await env.F1_WIKI_STATE.get(prevKey);
+      if (cachedPrev) {
+        try {
+          cumulative = JSON.parse(cachedPrev);
+          startRound = upToRound; // We only need to calculate the target round!
+          console.log(`Found cumulative stats up to Round ${upToRound - 1} in KV. Incremental build starting from Round ${startRound}.`);
+        } catch (e) {
+          console.error(`Failed to parse prev cumulative stats: ${e}`);
+        }
+      }
+    }
+  }
 
   const initDriver = (id: string) => {
     if (!cumulative[id]) {
@@ -623,8 +678,19 @@ export async function get2026CumulativeStats(env: any, upToRound: number): Promi
     }
   };
 
-  for (let r = 1; r <= upToRound; r++) {
-    const roundData = await getRoundStatsCached(env, 2026, r).catch(() => ({}));
+  // Fetch schedule once if we have rounds to calculate
+  let schedule: any[] = [];
+  if (startRound <= upToRound) {
+    schedule = await getSchedule(2026).catch(() => []);
+  }
+
+  // Calculate remaining rounds
+  for (let r = startRound; r <= upToRound; r++) {
+    const raceInfo = schedule.find(x => parseInt(x.round, 10) === r);
+    const circuitId = raceInfo?.Circuit?.circuitId;
+    const trackLength = circuitId ? (CIRCUIT_LENGTHS[circuitId] || 0) : 0;
+
+    const roundData = await getRoundStatsCached(env, 2026, r, trackLength).catch(() => ({}));
     Object.entries(roundData).forEach(([driverId, stats]) => {
       initDriver(driverId);
       Object.entries(stats).forEach(([statKey, value]) => {
@@ -632,6 +698,18 @@ export async function get2026CumulativeStats(env: any, upToRound: number): Promi
         cumulative[driverId][k] += (value as number);
       });
     });
+
+    // Save intermediate cumulative stats to avoid doing it again
+    if (env && env.F1_WIKI_STATE && r < upToRound) {
+      const intermediateKey = `2026_cumulative_stats_up_to_${r}`;
+      await env.F1_WIKI_STATE.put(intermediateKey, JSON.stringify(cumulative));
+    }
+  }
+
+  // Save final cumulative stats to KV
+  if (env && env.F1_WIKI_STATE && Object.keys(cumulative).length > 0) {
+    await env.F1_WIKI_STATE.put(targetKey, JSON.stringify(cumulative));
+    console.log(`Saved cumulative stats up to Round ${upToRound} in KV.`);
   }
 
   return cumulative;

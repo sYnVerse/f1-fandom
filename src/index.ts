@@ -539,7 +539,19 @@ export default {
 
       const now = new Date();
 
-      for (const race of schedule) {
+      // Filter to races that have concluded
+      const concludedRaces = schedule.filter(race => {
+        const gpTime = new Date(`${race.date}T${race.time || "12:00:00Z"}`);
+        return now > gpTime;
+      });
+
+      // Sort concluded races by round descending (latest first)
+      concludedRaces.sort((a, b) => parseInt(b.round, 10) - parseInt(a.round, 10));
+
+      // Limit checking to only the last 2 completed rounds to conserve subrequests
+      const racesToProcess = concludedRaces.slice(0, 2);
+
+      for (const race of racesToProcess) {
         const round = parseInt(race.round, 10);
         const raceName = race.raceName;
 
