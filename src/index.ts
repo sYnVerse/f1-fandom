@@ -49,12 +49,24 @@ function corsResponse(body: string | object, status = 200, headers: Record<strin
 }
 
 async function verifyTurnstile(token: string, secretKey: string | undefined, request: Request): Promise<boolean> {
-  const secret = secretKey || "1x0000000000000000000000000000000AA";
+  const url = new URL(request.url);
+  // Bypass Turnstile on localhost or 127.0.0.1
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]') {
+    console.log("Bypassing Turnstile verification on localhost.");
+    return true;
+  }
+
+  // Bypass Turnstile if secretKey is not configured (since they use real sitekey in wrangler.toml, test secretkey will always fail)
+  if (!secretKey) {
+    console.warn("TURNSTILE_SECRET_KEY is not set. Bypassing Turnstile verification.");
+    return true;
+  }
+
   if (!token) return false;
 
   try {
     const verifyBody = new FormData();
-    verifyBody.append("secret", secret);
+    verifyBody.append("secret", secretKey);
     verifyBody.append("response", token);
     verifyBody.append("remoteip", request.headers.get("CF-Connecting-IP") || "");
 
