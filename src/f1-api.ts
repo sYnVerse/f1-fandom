@@ -313,3 +313,78 @@ export async function scrapePracticeSession(url: string, drivers: Driver[]): Pro
   const parsed = parsePracticeHTML(html);
   return mapDriverNames(parsed, drivers);
 }
+
+const RACING_KEY_MAPPING: Record<string, string> = {
+  "australian": "australia",
+  "bahrain": "bahrain",
+  "saudi arabian": "saudi-arabia",
+  "chinese": "china",
+  "miami": "miami",
+  "emilia romagna": "emilia-romagna",
+  "monaco": "monaco",
+  "canadian": "canada",
+  "spanish": "spain",
+  "austrian": "austria",
+  "british": "great-britain",
+  "hungarian": "hungary",
+  "belgian": "belgium",
+  "dutch": "netherlands",
+  "italian": "italy",
+  "azerbaijan": "azerbaijan",
+  "singapore": "singapore",
+  "united states": "united-states",
+  "mexican": "mexico",
+  "mexico city": "mexico",
+  "brazilian": "brazil",
+  "são paulo": "brazil",
+  "las vegas": "las-vegas",
+  "qatar": "qatar",
+  "abu dhabi": "abu-dhabi"
+};
+
+export function getF1RacingKey(raceName: string): string {
+  const nameLower = raceName.toLowerCase();
+  for (const [key, val] of Object.entries(RACING_KEY_MAPPING)) {
+    if (nameLower.includes(key)) {
+      return val;
+    }
+  }
+  return nameLower.replace(" grand prix", "").trim().replace(/\s+/g, "-");
+}
+
+function cleanOfficialName(name: string): string {
+  let titleCase = name.toLowerCase().replace(/(^|\s)\S/g, l => l.toUpperCase());
+  titleCase = titleCase.replace(/\bDe\b/g, "de");
+  titleCase = titleCase.replace(/\bF1\b/gi, "Formula 1");
+  return titleCase;
+}
+
+export async function fetchOfficialRaceName(year: number, racingKey: string): Promise<string | null> {
+  const url = `https://www.formula1.com/en/racing/${year}/${racingKey}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    
+    // Extract schema SportsEvent name, e.g., "name":"FORMULA 1 LOUIS VUITTON GRAND PRIX DE MONACO 2026"
+    const nameMatch = html.match(/"@type"\s*:\s*"SportsEvent"[^}]+?"name"\s*:\s*"([^"]+)"/);
+    if (nameMatch && nameMatch[1]) {
+      return cleanOfficialName(nameMatch[1]);
+    }
+    
+    // Fallback: title tag
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      return cleanOfficialName(titleMatch[1].replace(" - F1 Race", "").trim());
+    }
+    
+    return null;
+  } catch (e) {
+    console.error("Error fetching official race name:", e);
+    return null;
+  }
+}

@@ -8,7 +8,9 @@ import {
   getDriversForRace,
   scrapePracticeSession,
   parsePracticeHTML,
-  mapDriverNames
+  mapDriverNames,
+  fetchOfficialRaceName,
+  getF1RacingKey
 } from './f1-api';
 import { 
   generateGridWikitext, 
@@ -114,7 +116,9 @@ export default {
         }
         
         const drivers = await getDriversForRace(year, round).catch(() => []);
-        const wikitext = generateBlankGPWikitext(race, drivers);
+        const racingKey = getF1RacingKey(race.raceName);
+        const officialName = await fetchOfficialRaceName(year, racingKey).catch(() => null);
+        const wikitext = generateBlankGPWikitext(race, drivers, officialName);
         
         return corsResponse({ wikitext });
       }

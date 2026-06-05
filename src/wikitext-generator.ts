@@ -871,7 +871,7 @@ function getOrdinalSuffix(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[]): string {
+export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[], officialName?: string | null): string {
   const year = race.season;
   const round = parseInt(race.round, 10);
   const raceName = race.raceName;
@@ -886,6 +886,8 @@ export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[]): 
   const ordinal = getOrdinalSuffix(round);
   const roundText = round === 1 ? "opening" : `${ordinal}`;
   
+  const sponsorName = officialName || `Formula 1 [Sponsor] ${raceName} ${year}`;
+
   let entryListRows = "";
   const sortedDrivers = [...drivers].sort((a, b) => {
     const numA = parseInt(a.permanentNumber || '0', 10);
@@ -917,7 +919,7 @@ export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[]): 
 | race = ${round}
 | season = ${year}
 | date = ${dateFormatted}
-| officialname = Formula 1 [Sponsor] ${raceName} ${year}
+| officialname = ${sponsorName}
 | circuit = ${circuitName}
 | circuittype = 
 | location = ${locality}, ${country}
@@ -938,7 +940,7 @@ export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[]): 
 | secondnation = 
 | third = 
 | thirdnation = 
-}}The '''${year} ${raceName}''', officially known as the '''Formula 1 [Sponsor] ${raceName} ${year}''', is scheduled to be the ${roundText} race of the [[${year} Formula One Season|${year} FIA Formula One World Championship]]. The event will take place from ${dateRange} at the [[${circuitName}]] in ${locality}, ${country}.
+}}The '''${year} ${raceName}''', officially known as the '''${sponsorName}''', is scheduled to be the ${roundText} race of the [[${year} Formula One Season|${year} FIA Formula One World Championship]]. The event will take place from ${dateRange} at the [[${circuitName}]] in ${locality}, ${country}.
 __TOC__
 {{Clear}}
 
