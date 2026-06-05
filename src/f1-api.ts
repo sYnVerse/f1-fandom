@@ -180,6 +180,33 @@ export async function getDriversForRace(year: number, round: number): Promise<Dr
   return data.MRData.DriverTable.Drivers || [];
 }
 
+// Fetch list of drivers for a race, with recursive fallback to preceding races/seasons if empty
+export async function getDriversForRaceWithFallback(year: number, round: number): Promise<Driver[]> {
+  let drivers = await getDriversForRace(year, round).catch(() => []);
+  let currentYear = year;
+  let prevRound = round - 1;
+  
+  while (drivers.length === 0) {
+    if (prevRound >= 1) {
+      drivers = await getDriversForRace(currentYear, prevRound).catch(() => []);
+      prevRound--;
+    } else {
+      currentYear--;
+      try {
+        const prevSchedule = await getSchedule(currentYear);
+        if (prevSchedule && prevSchedule.length > 0) {
+          prevRound = prevSchedule.length;
+        } else {
+          break; // Avoid infinite loop if no more schedules
+        }
+      } catch (e) {
+        break;
+      }
+    }
+  }
+  return drivers;
+}
+
 // Parse HTML string from F1.com practice session results
 export function parsePracticeHTML(html: string): Record<string, PracticeSessionData> {
   const results: Record<string, PracticeSessionData> = {};

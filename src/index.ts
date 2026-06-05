@@ -5,7 +5,7 @@ import {
   getQualifyingResult, 
   getDriverStandings, 
   getConstructorStandings,
-  getDriversForRace,
+  getDriversForRaceWithFallback,
   scrapePracticeSession,
   parsePracticeHTML,
   mapDriverNames,
@@ -115,7 +115,8 @@ export default {
           return corsResponse({ error: `Round ${round} not found in schedule` }, 404);
         }
         
-        const drivers = await getDriversForRace(year, round).catch(() => []);
+        const drivers = await getDriversForRaceWithFallback(year, round);
+        
         const racingKey = getF1RacingKey(race.raceName);
         const officialName = await fetchOfficialRaceName(year, racingKey).catch(() => null);
         const wikitext = generateBlankGPWikitext(race, drivers, officialName);
@@ -145,7 +146,7 @@ export default {
           currentConstructors,
           prevConstructors,
         ] = await Promise.all([
-          getDriversForRace(year, round),
+          getDriversForRaceWithFallback(year, round),
           getRaceResult(year, round, false).catch(() => []),
           getQualifyingResult(year, round).catch(() => []),
           getDriverStandings(year, round).catch(() => []),
@@ -203,7 +204,7 @@ export default {
         const yr = parseInt(year, 10);
         const rd = parseInt(round, 10);
 
-        const drivers = await getDriversForRace(yr, rd);
+        const drivers = await getDriversForRaceWithFallback(yr, rd);
         const qualiResults = await getQualifyingResult(yr, rd).catch(() => null);
 
         // Fallback Only: empty table
