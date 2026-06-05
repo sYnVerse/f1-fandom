@@ -4,7 +4,8 @@ import {
   QualifyingResult, 
   DriverStanding, 
   ConstructorStanding, 
-  PracticeSessionData
+  PracticeSessionData,
+  ScheduleRace
 } from './f1-api';
 
 const FLAGS: Record<string, string> = {
@@ -664,4 +665,333 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
 |}`;
 
   return output;
+}
+
+const COUNTRY_FLAGS: Record<string, string> = {
+  "Australia": "AUS",
+  "Bahrain": "BHR",
+  "Saudi Arabia": "SAU",
+  "Japan": "JPN",
+  "China": "CHN",
+  "United States": "USA",
+  "USA": "USA",
+  "Miami": "USA",
+  "Italy": "ITA",
+  "Monaco": "MCO",
+  "Canada": "CAN",
+  "Spain": "ESP",
+  "Austria": "AUT",
+  "United Kingdom": "GBR",
+  "UK": "GBR",
+  "Great Britain": "GBR",
+  "Hungary": "HUN",
+  "Belgium": "BEL",
+  "Netherlands": "NED",
+  "Azerbaijan": "AZE",
+  "Singapore": "SGP",
+  "Mexico": "MEX",
+  "Brazil": "BRA",
+  "Las Vegas": "USA",
+  "Qatar": "QAT",
+  "Abu Dhabi": "ARE",
+  "UAE": "ARE"
+};
+
+const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
+  "max_verstappen": "red_bull",
+  "hadjar": "red_bull",
+  "leclerc": "ferrari",
+  "hamilton": "ferrari",
+  "russell": "mercedes",
+  "antonelli": "mercedes",
+  "gasly": "alpine",
+  "colapinto": "alpine",
+  "norris": "mclaren",
+  "piastri": "mclaren",
+  "sainz": "williams",
+  "albon": "williams",
+  "lawson": "rb",
+  "arvid_lindblad": "rb",
+  "stroll": "aston_martin",
+  "alonso": "aston_martin",
+  "hulkenberg": "sauber",
+  "bortoleto": "sauber",
+  "ocon": "haas",
+  "bearman": "haas",
+  "bottas": "cadillac",
+  "perez": "cadillac"
+};
+
+interface TeamEntryDetails {
+  entrant: string;
+  constructor: string;
+  chassis: string;
+  engine: string;
+  model: string;
+  tyre: string;
+}
+
+const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
+  "mclaren": {
+    entrant: "{{GBR}} [[McLaren|McLaren Mastercard F1 Team]]",
+    constructor: "{{McLaren-CON}}",
+    chassis: "[[McLaren MCL40|MCL40]]",
+    engine: "{{Mercedes-ENG}}",
+    model: "[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "sauber": {
+    entrant: "{{SUI}} [[Sauber|Revolut Audi F1 Team]]",
+    constructor: "[[Audi]]",
+    chassis: "[[Sauber R26|R26]]",
+    engine: "{{Audi-ENG}}",
+    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "audi": {
+    entrant: "{{SUI}} [[Audi|Revolut Audi F1 Team]]",
+    constructor: "[[Audi]]",
+    chassis: "[[Audi R26|R26]]",
+    engine: "{{Audi-ENG}}",
+    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "red_bull": {
+    entrant: "{{AUT}} [[Red Bull Racing|Oracle Red Bull Racing]]",
+    constructor: "{{Red Bull-CON}}",
+    chassis: "[[Red Bull RB22|RB22]]",
+    engine: "{{RBPT-ENG}}",
+    model: "[[Red Bull Powertrains]]-[[Ford]] TBA 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "alpine": {
+    entrant: "{{FRA}} [[Alpine|BWT Alpine F1 Team]]",
+    constructor: "{{Alpine-CON}}",
+    chassis: "[[Alpine A526|A526]]",
+    engine: "{{Mercedes-ENG}}",
+    model: "[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "cadillac": {
+    entrant: "{{USA}} [[Cadillac|Cadillac Formula 1 Team]]",
+    constructor: "{{Cadillac-CON}}",
+    chassis: "TBA",
+    engine: "{{Ferrari-ENG}}",
+    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "mercedes": {
+    entrant: "{{GER}} [[Mercedes Grand Prix|Mercedes-AMG Petronas F1 Team]]",
+    constructor: "{{Mercedes-CON}}",
+    chassis: "[[Mercedes W17|F1 W17]]",
+    engine: "{{Mercedes-ENG}}",
+    model: "[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "aston_martin": {
+    entrant: "{{GBR}} [[Aston Martin|Aston Martin Aramco F1 Team]]",
+    constructor: "{{Aston Martin-CON}}",
+    chassis: "[[Aston Martin AMR26|AMR26]]",
+    engine: "{{Honda-ENG}}",
+    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "ferrari": {
+    entrant: "{{ITA}} [[Scuderia Ferrari|Scuderia Ferrari HP]]",
+    constructor: "{{Ferrari-CON}}",
+    chassis: "[[Ferrari SF-26|SF-26]]",
+    engine: "{{Ferrari-ENG}}",
+    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "williams": {
+    entrant: "{{GBR}} [[Williams|Atlassian Williams Racing]]",
+    constructor: "{{Williams-CON}}",
+    chassis: "[[Williams FW48|FW48]]",
+    engine: "{{Mercedes-ENG}}",
+    model: "[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "rb": {
+    entrant: "{{ITA}} [[Racing Bulls|Visa Cash App Racing Bulls F1 Team]]",
+    constructor: "{{Racing Bulls-CON}}",
+    chassis: "[[Racing Bulls VCARB 03|VCARB 03]]",
+    engine: "{{RBPT-ENG}}",
+    model: "[[Red Bull Powertrains]]-[[Ford]] TBA 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  },
+  "haas": {
+    entrant: "{{USA}} [[Haas|Toyota Gazoo Racing Haas F1 Team]]",
+    constructor: "{{Haas-CON}}",
+    chassis: "[[Haas VF-26|VF-26]]",
+    engine: "{{Ferrari-ENG}}",
+    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    tyre: "{{Pirelli}}"
+  }
+};
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function formatDateRange(sundayDateStr: string): string {
+  const sunday = new Date(sundayDateStr);
+  if (isNaN(sunday.getTime())) {
+    return sundayDateStr;
+  }
+  const friday = new Date(sunday);
+  friday.setUTCDate(friday.getUTCDate() - 2);
+  
+  const fDay = friday.getUTCDate();
+  const fMonthStr = MONTH_NAMES[friday.getUTCMonth()];
+  
+  const sDay = sunday.getUTCDate();
+  const sMonthStr = MONTH_NAMES[sunday.getUTCMonth()];
+  const sYear = sunday.getUTCFullYear();
+  
+  if (fMonthStr === sMonthStr) {
+    return `[[${fMonthStr} ${fDay}|${fDay}]] to [[${fMonthStr} ${sDay}|${sDay} ${sMonthStr}]] ${sYear}`;
+  } else {
+    return `[[${fMonthStr} ${fDay}|${fDay} ${fMonthStr}]] to [[${sMonthStr} ${sDay}|${sDay} ${sMonthStr}]] ${sYear}`;
+  }
+}
+
+function formatDateString(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const month = MONTH_NAMES[d.getUTCMonth()];
+  const day = d.getUTCDate();
+  return `${month} ${day}`;
+}
+
+function getOrdinalSuffix(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+export function generateBlankGPWikitext(race: ScheduleRace, drivers: Driver[]): string {
+  const year = race.season;
+  const round = parseInt(race.round, 10);
+  const raceName = race.raceName;
+  const circuitName = race.Circuit.circuitName;
+  const locality = race.Circuit.Location.locality;
+  const country = race.Circuit.Location.country;
+  
+  const flagCode = COUNTRY_FLAGS[country] || "";
+  const dateFormatted = formatDateString(race.date);
+  const dateRange = formatDateRange(race.date);
+  
+  const ordinal = getOrdinalSuffix(round);
+  const roundText = round === 1 ? "opening" : `${ordinal}`;
+  
+  let entryListRows = "";
+  const sortedDrivers = [...drivers].sort((a, b) => {
+    const numA = parseInt(a.permanentNumber || '0', 10);
+    const numB = parseInt(b.permanentNumber || '0', 10);
+    return numA - numB;
+  });
+
+  for (const driver of sortedDrivers) {
+    const num = driver.permanentNumber || '';
+    const flag = getFlag(driver.nationality);
+    const name = `${driver.givenName} ${driver.familyName}`;
+    
+    const constId = DRIVER_TO_CONSTRUCTOR_2026[driver.driverId] || '';
+    const team = TEAM_DETAILS_2026[constId];
+    
+    const entrant = team ? team.entrant : '';
+    const constructor = team ? team.constructor : '';
+    const chassis = team ? team.chassis : '';
+    const engine = team ? team.engine : '';
+    const model = team ? team.model : '';
+    const tyre = team ? team.tyre : '{{Pirelli}}';
+
+    entryListRows += `\n|-\n!${num}\n|${flag} [[${name}]]\n|${entrant}\n|${constructor}\n|${chassis}\n|${engine}\n|${model}\n|${tyre}`;
+  }
+
+  return `{{Infobox_Race
+| flag = ${flagCode}
+| number = 
+| race = ${round}
+| season = ${year}
+| date = ${dateFormatted}
+| officialname = Formula 1 [Sponsor] ${raceName} ${year}
+| circuit = ${circuitName}
+| circuittype = 
+| location = ${locality}, ${country}
+| lapdistance = 
+| laps = 
+| image = 
+| pole = 
+| polenation = 
+| poleteam = 
+| fastestlap = 
+| fastestlapnumber = 
+| fastestlapdriver = 
+| fastestlapnation = 
+| fastestlapteam = 
+| winner = 
+| winnernation = 
+| second = 
+| secondnation = 
+| third = 
+| thirdnation = 
+}}The '''${year} ${raceName}''', officially known as the '''Formula 1 [Sponsor] ${raceName} ${year}''', is scheduled to be the ${roundText} race of the [[${year} Formula One Season|${year} FIA Formula One World Championship]]. The event will take place from ${dateRange} at the [[${circuitName}]] in ${locality}, ${country}.
+__TOC__
+{{Clear}}
+
+==Background==
+{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}{{AvailableTyres/2023|H=|M=|S=}}
+{{Clear}}
+===Entry List===
+The full entry for the '''{{PAGENAME}}''' is outlined below:
+{| class="wikitable"
+!<span title="Car number">No.</span>
+!Driver
+!Entrant
+!Constructor
+!Chassis
+!Engine
+!Model
+!Tyre${entryListRows}
+|-
+! colspan="8" align="center" |'''Source''': <ref name="EL">[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_entry_list.pdf {{PAGENAME}} - Entry List] (PDF). Fédération Internationale de l'Automobile.</ref>
+|}
+
+== Practice Overview ==
+=== FP1 ===
+
+=== FP2 ===
+
+=== FP3 ===
+
+=== Practice Results ===
+
+== Qualifying ==
+=== Q1 ===
+
+=== Q2 ===
+
+=== Q3 ===
+
+=== Qualifying Results ===
+
+==== Starting Grid ====
+
+== Race ==
+
+=== Race Results ===
+
+== Standings ==
+
+== Milestones ==
+
+== References ==
+Images and Videos:
+References:
+<references />
+
+[[Category:${year} Formula One races]]`;
 }

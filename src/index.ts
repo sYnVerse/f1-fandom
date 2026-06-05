@@ -15,7 +15,8 @@ import {
   generateQualifyingWikitext, 
   generateRaceWikitext, 
   generateStandingsWikitext,
-  generatePracticeWikitext 
+  generatePracticeWikitext,
+  generateBlankGPWikitext
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -92,6 +93,30 @@ export default {
         const year = parseInt(yearStr, 10);
         const schedule = await getSchedule(year);
         return corsResponse({ schedule });
+      }
+
+      // 2.5 Generate Blank GP Page Wikitext
+      if (url.pathname === '/api/generate-blank-gp' && method === 'GET') {
+        const yearStr = url.searchParams.get('year');
+        const roundStr = url.searchParams.get('round');
+        
+        if (!yearStr || !roundStr) {
+          return corsResponse({ error: 'Year and round parameters required' }, 400);
+        }
+        
+        const year = parseInt(yearStr, 10);
+        const round = parseInt(roundStr, 10);
+        
+        const schedule = await getSchedule(year);
+        const race = schedule.find(r => parseInt(r.round, 10) === round);
+        if (!race) {
+          return corsResponse({ error: `Round ${round} not found in schedule` }, 404);
+        }
+        
+        const drivers = await getDriversForRace(year, round).catch(() => []);
+        const wikitext = generateBlankGPWikitext(race, drivers);
+        
+        return corsResponse({ wikitext });
       }
 
       // 3. Fetch Race Data and Generate Wikitexts

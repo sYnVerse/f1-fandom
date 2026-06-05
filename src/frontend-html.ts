@@ -597,7 +597,10 @@ export const frontendHtml = `<!DOCTYPE html>
             <h4 id="wiki-page-title">Page: --</h4>
             <p id="wiki-page-url">Url: --</p>
           </div>
-          <div class="status-badge missing" id="wiki-status-badge">Missing</div>
+          <div style="display: flex; align-items: center; gap: 15px;">
+            <button id="create-page-btn" class="btn btn-accent" style="display: none; width: auto; font-size: 0.85rem; padding: 6px 15px;" onclick="loadBlankGPPageTemplate()">Initialize Page Template</button>
+            <div class="status-badge missing" id="wiki-status-badge">Missing</div>
+          </div>
         </section>
 
         <!-- Main Workspace Panels -->
@@ -1032,6 +1035,9 @@ export const frontendHtml = `<!DOCTYPE html>
       badge.className = 'status-badge';
       badge.textContent = 'Checking...';
 
+      const createBtn = document.getElementById('create-page-btn');
+      if (createBtn) createBtn.style.display = 'none';
+
       try {
         const res = await fetch('/api/wiki-status', {
           method: 'POST',
@@ -1045,13 +1051,49 @@ export const frontendHtml = `<!DOCTYPE html>
         if (data.exists) {
           badge.className = 'status-badge exists';
           badge.textContent = 'Exists';
+          if (createBtn) createBtn.style.display = 'none';
         } else {
           badge.className = 'status-badge missing';
           badge.textContent = 'Missing';
+          if (createBtn) createBtn.style.display = 'inline-flex';
         }
       } catch (e) {
         badge.className = 'status-badge missing';
         badge.textContent = 'Unknown';
+        if (createBtn) createBtn.style.display = 'none';
+      }
+    }
+
+    async function loadBlankGPPageTemplate() {
+      const year = document.getElementById('season-year').value;
+      const dropdown = document.getElementById('race-round');
+      const round = dropdown.value;
+      if (!round) {
+        log('Please select a Grand Prix round.', 'warning');
+        return;
+      }
+      const pageName = getTargetWikiPageName();
+      log(\`Generating blank Grand Prix template for "\${pageName}"...\`, 'info');
+      try {
+        const res = await fetch(\`/api/generate-blank-gp?year=\${year}&round=\${round}\`);
+        if (!res.ok) throw new Error(\`API returned error: \${res.statusText}\`);
+        const data = await res.json();
+        
+        const editor = document.getElementById('wiki-full-page-editor');
+        editor.value = data.wikitext || '';
+        
+        log(\`Blank template generated for "\${pageName}". Review it in the 'Full Page Editor & Deployment' section below, and click 'Deploy Full Page Content' to create the page.\`, 'success');
+        
+        // Scroll to the editor
+        const panel = editor.closest('.panel');
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          editor.scrollIntoView({ behavior: 'smooth' });
+        }
+        editor.focus();
+      } catch (e) {
+        log(\`Failed to generate blank template: \${e.message}\`, 'error');
       }
     }
 
