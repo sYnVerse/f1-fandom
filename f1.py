@@ -39,19 +39,21 @@ flags = {
 
 constructors = {
         "mercedes": "{{GER}} {{Mercedes-CON}}",
-        "red_bull": "{{AUT}} {{Red Bull-Honda RBPT}}",
-        "aston_martin": "{{GBR}} {{Aston Martin-Mercedes}}",
+        "red_bull": "{{AUT}} {{Red Bull-CON}}",
+        "aston_martin": "{{GBR}} {{Aston Martin-Honda}}",
         "ferrari": "{{ITA}} {{Ferrari-CON}}",
         "haas": "{{USA}} {{Haas-Ferrari}}",
         "williams": "{{GBR}} {{Williams-Mercedes}}",
         "alphatauri": "{{ITA}} {{AlphaTauri-Red Bull}}",
-        "alpine": "{{FRA}} {{Alpine-Renault}}",
+        "alpine": "{{FRA}} {{Alpine-Mercedes}}",
         "mclaren": "{{GBR}} {{McLaren-Mercedes}}",
         "alfa": "{{SUI}} {{Alfa Romeo-Ferrari}}",
         "racing_point": "{{GBR}} {{Racing Point-BWT Mercedes}}",
         "renault": "{{FRA}} {{Renault-CON}}",
         "sauber": "{{SUI}} {{Sauber-Ferrari}}",
-        "rb": "{{ITA}} {{RB-Honda RBPT}}"
+        "rb": "{{ITA}} {{Racing Bulls-CON}}",
+        "cadillac": "{{USA}} {{Cadillac-CON}}",
+        "audi": "{{SUI}} {{Audi-CON}}"
 }
 
 statuses = {
