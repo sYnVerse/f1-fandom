@@ -375,6 +375,9 @@ export function replaceSectionWikitext(fullText: string, header: string, newCont
     regex = new RegExp(`(^|\\r?\\n)(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'gi');
   }
 
+  // Strip any leading heading from newContent to avoid duplicate headings
+  const strippedContent = newContent.replace(/^\s*={1,6}\s*.*?\s*={1,6}\s*(?:\r?\n|$)/, '').trim();
+
   // Find all matches for the section
   const matches: RegExpExecArray[] = [];
   let m: RegExpExecArray | null;
@@ -403,7 +406,7 @@ export function replaceSectionWikitext(fullText: string, header: string, newCont
         // First match: replace its content with the new content
         const prefix = matchObj[1];
         const headingLine = matchObj[2];
-        result += `${prefix}${headingLine}${newContent.trim()}\n\n`;
+        result += `${prefix}${headingLine}${strippedContent}\n\n`;
       } else {
         // Subsequent matches: duplicate sections, remove them completely
         console.log(`Removing duplicate section heading: "${matchObj[2].trim()}"`);
@@ -417,6 +420,7 @@ export function replaceSectionWikitext(fullText: string, header: string, newCont
     return result;
   } else {
     // Section not found, append to the end of the page
-    return `${fullText.trim()}\n\n${cleanHeader}\n${newContent.trim()}\n`;
+    return `${fullText.trim()}\n\n${cleanHeader}\n${strippedContent}\n`;
   }
 }
+

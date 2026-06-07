@@ -846,7 +846,7 @@ export default {
               // Update Qualifying Results and Starting Grid
               if (qualiResults && qualiResults.length > 0) {
                 const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
-                const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
+                const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ===", "==== Qualifying Results ====", "=== Qualifying ===", "==== Qualifying ===", "===Qualifying Results===", "===Qualifying==="], "=== Qualifying Results ===");
                 const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
@@ -854,7 +854,7 @@ export default {
                 }
 
                 const gridWikitext = generateGridWikitext(qualiResults);
-                const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
+                const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "=== Starting Grid ===", "==== Race Grid ====", "=== Race Grid ===", "===Grid===", "==== Grid ====", "=== Grid ==="], "==== Starting Grid ====");
                 const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
                 if (newGridContent !== updatedContent) {
                   updatedContent = newGridContent;
@@ -865,7 +865,7 @@ export default {
               // Update Sprint Results
               if (race.Sprint && sprintResults && sprintResults.length > 0) {
                 const sprintWikitext = generateRaceWikitext(sprintResults, true);
-                const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
+                const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ===", "==== Sprint Results ====", "=== Sprint ==="], "=== Sprint Results ===");
                 const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
@@ -876,7 +876,7 @@ export default {
               // Update Race Results
               if (raceResults && raceResults.length > 0) {
                 const raceWikitext = generateRaceWikitext(raceResults, false);
-                const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
+                const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "==== Race Results ====", "=== Results ===", "===Results===", "=== Race ==="], "=== Race Results ===");
                 const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
@@ -892,7 +892,7 @@ export default {
                   currentConstructors,
                   prevConstructors
                 );
-                const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
+                const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings==", "=== Standings ===", "===Standings==="], "== Standings ==");
                 const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
@@ -942,16 +942,32 @@ export default {
 
 // --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
 
-function findBestHeader(fullText: string, options: string[], defaultHeader: string): string {
+export function findBestHeader(fullText: string, options: string[], defaultHeader: string): string {
   for (const opt of options) {
-    const escaped = opt.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const regex = new RegExp(escaped, 'i');
-    if (regex.test(fullText)) {
-      return opt;
+    const cleanOpt = opt.trim();
+    const match = cleanOpt.match(/^(=+)\s*(.*?)\s*(=+)$/);
+    if (match) {
+      const level = match[1].length;
+      const name = match[2].trim();
+      const escapedName = name
+        .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+        .replace(/\s+/g, '\\s+');
+      // Construct regex that matches the exact level of heading on its own line
+      const regex = new RegExp(`(^|\\r?\\n)[ \\t]*={${level}}\\s*${escapedName}\\s*={${level}}[ \\t]*(?:\\r?\\n|$)`, 'i');
+      if (regex.test(fullText)) {
+        return opt;
+      }
+    } else {
+      const escaped = cleanOpt.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`(^|\\r?\\n)[ \\t]*${escaped}[ \\t]*(?:\\r?\\n|$)`, 'i');
+      if (regex.test(fullText)) {
+        return opt;
+      }
     }
   }
   return defaultHeader;
 }
+
 
 
 
