@@ -1048,13 +1048,16 @@ async function syncLatestNewsEvents(env: any, getSession: () => Promise<any>): P
       nextEvent = futureEvents[0] || null;
     }
 
+    const isLatestOngoing = ongoingEvents.length > 0;
+
     console.log("Calculated events:", {
       previous: previousEvent ? `${previousEvent.year} ${previousEvent.fullName}` : 'None',
       latest: latestEvent ? `${latestEvent.year} ${latestEvent.fullName}` : 'None',
-      next: nextEvent ? `${nextEvent.year} ${nextEvent.fullName}` : 'None'
+      next: nextEvent ? `${nextEvent.year} ${nextEvent.fullName}` : 'None',
+      isLatestOngoing
     });
 
-    const wikitext = generateLatestEventsWikitext(previousEvent, latestEvent, nextEvent);
+    const wikitext = generateLatestEventsWikitext(previousEvent, latestEvent, nextEvent, isLatestOngoing);
     const pageTitle = "Template:Latest_F1_News/Events";
 
     // Check if the current page content is identical

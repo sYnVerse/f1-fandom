@@ -1111,9 +1111,11 @@ export function formatMobileDate(startDateStr: string, endDateStr: string): stri
 export function generateLatestEventsWikitext(
   prev: EventInfo | null,
   latest: EventInfo | null,
-  next: EventInfo | null
+  next: EventInfo | null,
+  isOngoing?: boolean
 ): string {
   let wikitext = '';
+  const latestLabel = isOngoing ? 'Current event' : 'Latest event';
   
   // Desktop section
   wikitext += `<!-- Desktop -->\n`;
@@ -1122,7 +1124,7 @@ export function generateLatestEventsWikitext(
     wikitext += `:'''Previous event:''' {{F1 GP|${prev.year}|${prev.name}}} (${prev.dateRangeDesktop})\n`;
   }
   if (latest) {
-    wikitext += `:'''Latest event: {{F1 GP|${latest.year}|${latest.name}}} (${latest.dateRangeDesktop})'''\n`;
+    wikitext += `:'''${latestLabel}: {{F1 GP|${latest.year}|${latest.name}}} (${latest.dateRangeDesktop})'''\n`;
   }
   if (next) {
     wikitext += `:'''Next event: ''' {{F1 GP|${next.year}|${next.name}}} (${next.dateRangeDesktop})\n`;
@@ -1136,7 +1138,7 @@ export function generateLatestEventsWikitext(
     wikitext += `:'''Previous event:''' [[${prev.year} ${prev.fullName}|${prev.name} GP]] <small>(${prev.dateRangeMobile})</small>\n`;
   }
   if (latest) {
-    wikitext += `:'''Latest event: [[${latest.year} ${latest.fullName}|${latest.name} GP]] <small>(${latest.dateRangeMobile})</small>'''\n`;
+    wikitext += `:'''${latestLabel}: [[${latest.year} ${latest.fullName}|${latest.name} GP]] <small>(${latest.dateRangeMobile})</small>'''\n`;
   }
   if (next) {
     wikitext += `:'''Next event: ''' [[${next.year} ${next.fullName}|${next.name} GP]] <small>(${next.dateRangeMobile})</small>\n`;
