@@ -745,10 +745,10 @@ def race(year = None, race = None, sprint = None):
         # add blanks in points column: positions below top-10 (top-8 for Sprint) don't score points
         if (sprint):
             if (x == 8):
-                print("! rowspan=12 |")
+                print(f"! rowspan={len(data) - 8} |")
         else:
             if (x == 10):
-                print("! rowspan=10 |")
+                print(f"! rowspan={len(data) - 10} |")
 
     print('|-')
     if (sprint):

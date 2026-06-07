@@ -368,8 +368,8 @@ The full race results for the '''{{PAGENAME}}''' are outlined below:
     output += `\n| ${gridVal}`;
 
     // points column with FL indicator
-    if (!isSprint) {
-      if (points !== '0') {
+    if (points !== '0') {
+      if (!isSprint) {
         const standardPts = ['26', '19', '16', '13', '11', '9', '7', '5', '3'];
         const isFL = standardPts.includes(points) || (points === '2' && pos === '10');
         if (isFL) {
@@ -381,21 +381,15 @@ The full race results for the '''{{PAGENAME}}''' are outlined below:
         output += `\n! ${points}`;
       }
     } else {
-      if (points !== '0') {
-        output += `\n! ${points}`;
+      // add blanks in points column
+      if (isSprint) {
+        if (x === 8) {
+          output += `\n! rowspan=${results.length - 8} |`;
+        }
       } else {
-        output += `\n! ${points}`;
-      }
-    }
-
-    // add blanks in points column
-    if (isSprint) {
-      if (x === 8) {
-        output += `\n! rowspan=${results.length - 8} |`;
-      }
-    } else {
-      if (x === 10) {
-        output += `\n! rowspan=${results.length - 10} |`;
+        if (x === 10) {
+          output += `\n! rowspan=${results.length - 10} |`;
+        }
       }
     }
   }
