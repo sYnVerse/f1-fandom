@@ -360,12 +360,21 @@ export default {
         try {
           console.log(`Calculating cumulative stats up to round ${round}...`);
           
-          // Run Jolpi API fetch, StatsF1 classification fetch, and cumulative stats calculation concurrently
-          const [cumulativeStats, jolpiResults, statsF1Results] = await Promise.all([
+          // Run Jolpi API fetch, StatsF1 classification fetch, schedule fetch, and cumulative stats calculation concurrently
+          const [cumulativeStats, jolpiResults, statsF1Results, schedule] = await Promise.all([
             get2026CumulativeStats(_env, round),
             getRaceResult(2026, round, false).catch(() => []),
-            getStatsF1Results(round).catch(() => null)
+            getStatsF1Results(round).catch(() => null),
+            getSchedule(2026).catch(() => [])
           ]);
+          
+          const race = schedule.find((r: any) => parseInt(r.round, 10) === round);
+          const raceName = race ? race.raceName : '';
+          
+          let winnerCode = 'VER';
+          if (jolpiResults.length > 0 && jolpiResults[0].driver?.code) {
+            winnerCode = jolpiResults[0].driver.code;
+          }
           
           let verificationReport = null;
           if (statsF1Results) {
@@ -411,13 +420,17 @@ export default {
             }
             
             const updated = updateTemplateContent(temp, pageInfo.content, cumulativeStats);
+            let wikitext = updated.wikitext;
+            if (raceName) {
+              wikitext = updateCorrectionText(wikitext, 2026, raceName, winnerCode);
+            }
             
             return {
               template: temp,
               exists: true,
               changed: updated.changed,
               updates: updated.updates,
-              wikitext: updated.wikitext,
+              wikitext: wikitext,
               currentWikitext: pageInfo.content
             };
           }));
@@ -583,8 +596,24 @@ export default {
       // Sort concluded races by round descending (latest first)
       concludedRaces.sort((a, b) => parseInt(b.round, 10) - parseInt(a.round, 10));
 
-      // Limit checking to only the last 2 completed rounds to conserve subrequests
-      const racesToProcess = concludedRaces.slice(0, 2);
+      // Limit completed checking to only the last 2 completed rounds
+      const completedRacesToProcess = concludedRaces.slice(0, 2);
+
+      // Find the next upcoming/current race (ongoing race weekend)
+      const nextRace = schedule.find(race => {
+        const gpTime = new Date(`${race.date}T${race.time || "12:00:00Z"}`);
+        return now <= gpTime;
+      });
+
+      // Combine completed and upcoming/ongoing race for processing, avoiding duplicates
+      const racesToProcessMap = new Map<number, any>();
+      completedRacesToProcess.forEach(r => racesToProcessMap.set(parseInt(r.round, 10), r));
+      if (nextRace) {
+        racesToProcessMap.set(parseInt(nextRace.round, 10), nextRace);
+      }
+      const racesToProcess = Array.from(racesToProcessMap.values());
+      // Sort them by round so they are processed in order
+      racesToProcess.sort((a, b) => parseInt(a.round, 10) - parseInt(b.round, 10));
 
       for (const race of racesToProcess) {
         const round = parseInt(race.round, 10);
@@ -720,6 +749,123 @@ export default {
             }
           }
         }
+
+        // --- 4. Smart Check for GP Page Sections (Starting Grid, Qualifying, Sprint, Race Results, Standings) ---
+        try {
+          const gpPageTitle = `${year} ${raceName}`;
+          console.log(`Checking GP page sections for: ${gpPageTitle}...`);
+          
+          const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+          if (pageInfo.exists) {
+            let currentContent = pageInfo.content;
+            let updatedContent = currentContent;
+            let changes: string[] = [];
+
+            // 4a. Fetch necessary data from Jolpi/Ergast concurrently
+            const [
+              qualiResults,
+              raceResults,
+              currentDrivers,
+              prevDrivers,
+              currentConstructors,
+              prevConstructors
+            ] = await Promise.all([
+              getQualifyingResult(year, round).catch(() => []),
+              getRaceResult(year, round, false).catch(() => []),
+              getDriverStandings(year, round).catch(() => []),
+              round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+              getConstructorStandings(year, round).catch(() => []),
+              round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+            ]);
+
+            let sprintResults: any[] = [];
+            if (race.Sprint) {
+              try {
+                sprintResults = await getRaceResult(year, round, true);
+              } catch (e) {
+                // No sprint results yet
+              }
+            }
+
+            // 4b. Update Qualifying Results and Starting Grid
+            if (qualiResults && qualiResults.length > 0) {
+              const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
+              const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
+              const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
+              if (newContent !== updatedContent) {
+                updatedContent = newContent;
+                changes.push("Qualifying Results");
+              }
+
+              const gridWikitext = generateGridWikitext(qualiResults);
+              const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
+              const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
+              if (newGridContent !== updatedContent) {
+                updatedContent = newGridContent;
+                changes.push("Starting Grid");
+              }
+            }
+
+            // 4c. Update Sprint Results
+            if (race.Sprint && sprintResults && sprintResults.length > 0) {
+              const sprintWikitext = generateRaceWikitext(sprintResults, true);
+              const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
+              const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
+              if (newContent !== updatedContent) {
+                updatedContent = newContent;
+                changes.push("Sprint Results");
+              }
+            }
+
+            // 4d. Update Race Results
+            if (raceResults && raceResults.length > 0) {
+              const raceWikitext = generateRaceWikitext(raceResults, false);
+              const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
+              const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
+              if (newContent !== updatedContent) {
+                updatedContent = newContent;
+                changes.push("Race Results");
+              }
+            }
+
+            // 4e. Update Championship Standings
+            if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+              const standingsWikitext = generateStandingsWikitext(
+                currentDrivers,
+                prevDrivers,
+                currentConstructors,
+                prevConstructors
+              );
+              const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
+              const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
+              if (newContent !== updatedContent) {
+                updatedContent = newContent;
+                changes.push("Championship Standings");
+              }
+            }
+
+            // If there are changes, save the page
+            if (changes.length > 0) {
+              console.log(`  Updating GP page sections for ${gpPageTitle}: ${changes.join(', ')}`);
+              const currentSession = await getSession();
+              await editPage(
+                domain,
+                currentSession,
+                gpPageTitle,
+                updatedContent,
+                `Automated update of GP page sections: ${changes.join(', ')}`,
+                apiEndpoint
+              );
+              console.log(`  Successfully updated ${gpPageTitle} sections!`);
+            } else {
+              console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
+            }
+          } else {
+            console.log(`GP page ${gpPageTitle} does not exist on the wiki. Skipping section updates.`);
+          }
+        } catch (e: any) {
+          console.error(`Error updating GP page sections for round ${round}:`, e.message);
+        }
       }
 
       console.log("Scheduled sync completed successfully!");
@@ -730,6 +876,17 @@ export default {
 };
 
 // --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
+
+function findBestHeader(fullText: string, options: string[], defaultHeader: string): string {
+  for (const opt of options) {
+    const escaped = opt.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    if (regex.test(fullText)) {
+      return opt;
+    }
+  }
+  return defaultHeader;
+}
 
 
 
