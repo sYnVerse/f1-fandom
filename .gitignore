@@ -4,3 +4,4 @@ dist/
 *.log
 scratch/
 .env
+__pycache__/
