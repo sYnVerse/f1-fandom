@@ -976,7 +976,7 @@ const wikiDriverList = [
   "Gabriel Bortoleto",
   "Esteban Ocon",
   "Oliver Bearman",
-  "Valterri Bottas",
+  "Valtteri Bottas",
   "Sergio Pérez"
 ];
 

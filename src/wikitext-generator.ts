@@ -213,7 +213,12 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
 ! width=4% | <span style="cursor:help" title="Position">Pos.</span>
 ! width=9% | Time`;
 
-  for (let row = 0; row < qualifyingResults.length; row++) {
+  const totalDrivers = qualifyingResults.length;
+  const q3Count = Math.min(10, totalDrivers);
+  const q2ElimCount = Math.max(0, Math.floor((totalDrivers - q3Count) / 2));
+  const q1ElimCount = Math.max(0, totalDrivers - q3Count - q2ElimCount);
+
+  for (let row = 0; row < totalDrivers; row++) {
     const q = qualifyingResults[row];
     const team = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
     const driver = `${getFlag(q.driver.nationality)} [[${q.driver.givenName} ${q.driver.familyName}]]`;
@@ -221,7 +226,7 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     const pos = q.position;
 
     // Print drop indicators
-    if (row === 10 || row === 15) {
+    if (row === q3Count || row === q3Count + q2ElimCount) {
       output += '\n|-\n|colspan=14 style="border-bottom:hidden"|\n|-\n|colspan=14|\n|-';
     } else {
       output += '\n|-';
@@ -233,7 +238,7 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     output += `\n| ${team}`;
 
     // Q1
-    if (row >= 15) {
+    if (row >= q3Count + q2ElimCount) {
       output += `\n! ${pos}`;
     } else {
       const q1Pos = sortQ1.findIndex(x => x.number === number) + 1;
@@ -248,7 +253,7 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
 
     // Q2
     if (q.Q2 && q.Q2 !== 'nan') {
-      if (row >= 10 && row <= 14) {
+      if (row >= q3Count && row < q3Count + q2ElimCount) {
         output += `\n! ${pos}`;
       } else {
         const q2Pos = sortQ2.findIndex(x => x.number === number) + 1;
@@ -260,11 +265,11 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
       } else {
         output += `\n| ${q.Q2}`;
       }
-    } else if (row === 15) {
-      output += `\n! rowspan="5" |`;
-      output += `\n| rowspan="5" |`;
-      output += `\n| rowspan="5" |`;
-      output += `\n| rowspan="5" |`;
+    } else if (row === q3Count + q2ElimCount) {
+      output += `\n! rowspan="${q1ElimCount}" |`;
+      output += `\n| rowspan="${q1ElimCount}" |`;
+      output += `\n| rowspan="${q1ElimCount}" |`;
+      output += `\n| rowspan="${q1ElimCount}" |`;
     }
 
     // Q3
@@ -275,9 +280,9 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
       } else {
         output += `\n| ${q.Q3}`;
       }
-    } else if (row === 10) {
-      output += `\n! rowspan="5" |`;
-      output += `\n| rowspan="5" |`;
+    } else if (row === q3Count) {
+      output += `\n! rowspan="${q2ElimCount}" |`;
+      output += `\n| rowspan="${q2ElimCount}" |`;
     }
 
     // Grid
@@ -1153,7 +1158,7 @@ export function generateLatestEventsWikitext(
 function getDriverWikiName(driver: any): string {
   const customMap: Record<string, string> = {
     'sainz': 'Carlos Sainz, Jr.',
-    'bottas': 'Valterri Bottas'
+    'bottas': 'Valtteri Bottas'
   };
   if (customMap[driver.driverId]) {
     return customMap[driver.driverId];
