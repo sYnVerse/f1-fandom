@@ -428,6 +428,20 @@ def get_race_result(year=None, race=None):
         driver['constructor'] = constructor_info['name']
         driver['constructorID'] = constructor_info['constructorId']
 
+    # Fallback to qualifying results if grid values are null/None
+    if any(driver.get('grid') is None or driver.get('grid') == 'null' for driver in result_dict):
+        try:
+            quali_df = get_qualifying_result(year, race)
+            if not quali_df.empty:
+                quali_map = dict(zip(quali_df['driverID'], quali_df['position']))
+                for driver in result_dict:
+                    if driver.get('grid') is None or driver.get('grid') == 'null':
+                        driver_id = driver.get('driverID')
+                        if driver_id in quali_map:
+                            driver['grid'] = str(quali_map[driver_id])
+        except Exception as e:
+            pass
+
     # Select the columns that are relevant to the race result
     cols = ['number', 'position', 'positionText', 'grid', 'points', 'driverID', 'driver',
             'nationality', 'constructorID', 'constructor', 'laps', 'status', 'Time']
@@ -964,6 +978,20 @@ def get_sprint_result(year=None, race=None):
         driver['nationality'] = driver_info['nationality']
         driver['constructor'] = constructor_info['name']
         driver['constructorID'] = constructor_info['constructorId']
+
+    # Fallback to qualifying results if grid values are null/None
+    if any(driver.get('grid') is None or driver.get('grid') == 'null' for driver in result_dict):
+        try:
+            quali_df = get_qualifying_result(year, race)
+            if not quali_df.empty:
+                quali_map = dict(zip(quali_df['driverID'], quali_df['position']))
+                for driver in result_dict:
+                    if driver.get('grid') is None or driver.get('grid') == 'null':
+                        driver_id = driver.get('driverID')
+                        if driver_id in quali_map:
+                            driver['grid'] = str(quali_map[driver_id])
+        except Exception as e:
+            pass
 
     # Select the columns that are relevant to the race result
     cols = ['number', 'position', 'positionText', 'grid', 'points', 'driverID', 'driver',

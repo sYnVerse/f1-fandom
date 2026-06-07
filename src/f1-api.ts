@@ -131,11 +131,39 @@ export async function getRaceResult(year: number, round: number, isSprint = fals
   
   const resultsKey = isSprint ? 'SprintResults' : 'Results';
   const rawResults = races[0][resultsKey] || [];
-  return rawResults.map((r: any) => ({
+  const results = rawResults.map((r: any) => ({
     ...r,
     driver: r.Driver,
     constructor: r.Constructor
   }));
+
+  // Fallback to qualifying results if grid values are null/undefined
+  const hasNullGrid = results.some((r: any) => r.grid === null || r.grid === undefined);
+  if (hasNullGrid) {
+    try {
+      const qualiResults = await getQualifyingResult(year, round);
+      if (qualiResults && qualiResults.length > 0) {
+        const qualiMap = new Map<string, string>();
+        qualiResults.forEach((q: any) => {
+          if (q.driver && q.driver.driverId) {
+            qualiMap.set(q.driver.driverId, q.position);
+          }
+        });
+        for (const r of results) {
+          if ((r.grid === null || r.grid === undefined) && r.driver && r.driver.driverId) {
+            const qualiPos = qualiMap.get(r.driver.driverId);
+            if (qualiPos) {
+              r.grid = qualiPos;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch qualifying fallback for grid:", e);
+    }
+  }
+
+  return results;
 }
 
 // Fetch qualifying results
