@@ -272,7 +272,7 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     } else if (row === q3Count + q2ElimCount) {
       output += `\n! rowspan="${q1ElimCount}" |`;
       output += `\n| rowspan="${q1ElimCount}" |`;
-      output += `\n| rowspan="${q1ElimCount}" |`;
+      output += `\n! rowspan="${q1ElimCount}" |`;
       output += `\n| rowspan="${q1ElimCount}" |`;
     }
 
