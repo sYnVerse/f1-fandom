@@ -161,6 +161,11 @@ export function generateGridWikitext(qualifyingResults: QualifyingResult[]): str
 export function generateQualifyingWikitext(qualifyingResults: QualifyingResult[]): string {
   if (qualifyingResults.length === 0) return 'No qualifying data available.';
 
+  const totalDrivers = qualifyingResults.length;
+  const q3Count = Math.min(10, totalDrivers);
+  const q2ElimCount = Math.max(0, Math.floor((totalDrivers - q3Count) / 2));
+  const q1ElimCount = Math.max(0, totalDrivers - q3Count - q2ElimCount);
+
   // Sort lists for position calculation
   const sortQ1 = [...qualifyingResults].sort((a, b) => timeToSeconds(a.Q1) - timeToSeconds(b.Q1));
   const sortQ2 = [...qualifyingResults].sort((a, b) => timeToSeconds(a.Q2 || '') - timeToSeconds(b.Q2 || ''));
@@ -198,11 +203,11 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
 ! rowspan=2 width=5% | <span style="cursor:help" title="Car Number">No.</span>
 ! rowspan=2 width=23% | Driver
 ! rowspan=2 width=23% | Team
-| rowspan=26 width=1px |
+| rowspan=${totalDrivers + 6} width=1px |
 ! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 1">Q1</span>
-| rowspan=26 width=1px |
+| rowspan=${totalDrivers + 6} width=1px |
 ! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 2">Q2</span>
-| rowspan=26 width=1px |
+| rowspan=${totalDrivers + 6} width=1px |
 ! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 3">Q3</span>
 ! rowspan=2 width=5% | Grid
 |-
@@ -212,11 +217,6 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
 ! width=9% | Time
 ! width=4% | <span style="cursor:help" title="Position">Pos.</span>
 ! width=9% | Time`;
-
-  const totalDrivers = qualifyingResults.length;
-  const q3Count = Math.min(10, totalDrivers);
-  const q2ElimCount = Math.max(0, Math.floor((totalDrivers - q3Count) / 2));
-  const q1ElimCount = Math.max(0, totalDrivers - q3Count - q2ElimCount);
 
   for (let row = 0; row < totalDrivers; row++) {
     const q = qualifyingResults[row];
@@ -252,18 +252,22 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     }
 
     // Q2
-    if (q.Q2 && q.Q2 !== 'nan') {
-      if (row >= q3Count && row < q3Count + q2ElimCount) {
+    if (row < q3Count + q2ElimCount) {
+      if (row >= q3Count) {
         output += `\n! ${pos}`;
       } else {
         const q2Pos = sortQ2.findIndex(x => x.number === number) + 1;
         output += `\n! ${q2Pos}`;
       }
 
-      if (fastestQ2Number === number) {
-        output += `\n| '''${q.Q2}'''`;
+      if (q.Q2 && q.Q2 !== 'nan') {
+        if (fastestQ2Number === number) {
+          output += `\n| '''${q.Q2}'''`;
+        } else {
+          output += `\n| ${q.Q2}`;
+        }
       } else {
-        output += `\n| ${q.Q2}`;
+        output += `\n| `;
       }
     } else if (row === q3Count + q2ElimCount) {
       output += `\n! rowspan="${q1ElimCount}" |`;
@@ -273,12 +277,16 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     }
 
     // Q3
-    if (q.Q3 && q.Q3 !== 'nan') {
+    if (row < q3Count) {
       output += `\n! ${pos}`;
-      if (row === 0) {
-        output += `\n| '''${q.Q3}'''`;
+      if (q.Q3 && q.Q3 !== 'nan') {
+        if (row === 0) {
+          output += `\n| '''${q.Q3}'''`;
+        } else {
+          output += `\n| ${q.Q3}`;
+        }
       } else {
-        output += `\n| ${q.Q3}`;
+        output += `\n| `;
       }
     } else if (row === q3Count) {
       output += `\n! rowspan="${q2ElimCount}" |`;

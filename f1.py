@@ -523,7 +523,9 @@ def qualifying(year=None, race=None):
         return False
 
     sort_Q1=q.sort_values(by=['Q1'])
-    sort_Q2=q.sort_values(by=['Q2'])
+    # Filter out empty/NaN Q2 times before sorting for Q2 ranking
+    q_with_q2 = q[q['Q2'].notna() & (q['Q2'] != '') & (q['Q2'] != 'nan')]
+    sort_Q2=q_with_q2.sort_values(by=['Q2'])
     fastestQ1 = None
     
     total_drivers = len(q)
@@ -531,8 +533,53 @@ def qualifying(year=None, race=None):
     q2_elim_count = max(0, (total_drivers - q3_count) // 2)
     q1_elim_count = max(0, total_drivers - q3_count - q2_elim_count)
 
+    # Find driver number with fastest time in Q1 & Q2
+    fastestQ1 = None
+    for y in range(len(sort_Q1)):
+        q1 = sort_Q1.iloc[y,:]
+        if pd.notna(q1.iloc[7]) and str(q1.iloc[7]) != "nan" and str(q1.iloc[7]) != "":
+            fastestQ1 = q1.iloc[0]
+            break
+
+    fastestQ2 = None
+    for x in range(len(sort_Q2)):
+        q2 = sort_Q2.iloc[x,:]
+        if pd.notna(q2.iloc[8]) and str(q2.iloc[8]) != "nan" and str(q2.iloc[8]) != "":
+            fastestQ2 = q2.iloc[0]
+            break
+
+    OneZeroSeven = None
+    for row in range(total_drivers):
+        col = q.iloc[row,:]
+        if col.iloc[0] == fastestQ1:
+            OneZeroSeven = str(col.iloc[7])
+            break
+
     # Print table header
-    print("""===Qualifying Results===\nThe full qualifying results for the '''{{PAGENAME}}''' are outlined below:\n\n{|class="wikitable" width=100% style="font-size:77%"\n! rowspan=2 width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! rowspan=2 width=5% | <span style="cursor:help" title="Car Number">No.</span>\n! rowspan=2 width=23% | Driver\n! rowspan=2 width=23% | Team\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 1">Q1</span>\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 2">Q2</span>\n| rowspan=26 width=1px |\n! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 3">Q3</span>\n! rowspan=2 width=5% | Grid\n|-\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time\n! width=4% | <span style="cursor:help" title="Position">Pos.</span>\n! width=9% | Time""")
+    header_str = """===Qualifying Results===
+The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
+
+{|class="wikitable" width=100% style="font-size:77%"
+! rowspan=2 width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! rowspan=2 width=5% | <span style="cursor:help" title="Car Number">No.</span>
+! rowspan=2 width=23% | Driver
+! rowspan=2 width=23% | Team
+| rowspan=26 width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 1">Q1</span>
+| rowspan=26 width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 2">Q2</span>
+| rowspan=26 width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Qualifying 3">Q3</span>
+! rowspan=2 width=5% | Grid
+|-
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time""".replace("rowspan=26", f"rowspan={total_drivers + 6}")
+    print(header_str)
+
     for row in range(total_drivers):
         # Get and assign data
         col=q.iloc[row,:]
@@ -542,7 +589,7 @@ def qualifying(year=None, race=None):
         except KeyError:
             team='{{' + col.iloc[5] + '-CON}}'
 
-        driver=getFlag(col.iloc[4]) + ' [[' + col.iloc[3] + ']'
+        driver=getFlag(col.iloc[4]) + ' [[' + col.iloc[3] + ']]'
 
         number=col.iloc[0]
         pos=col.iloc[1]
@@ -566,32 +613,31 @@ def qualifying(year=None, race=None):
                 q1=sort_Q1.iloc[y,:]
                 if (q1.iloc[0] == number):
                     print("! " + str(1+y))
-                if (fastestQ1 is None and q1.iloc[7] != ""):
-                    fastestQ1 = q1.iloc[0]
 
         # 107% time
         if (fastestQ1 == number):
             print("| '''" + str(col.iloc[7]) + "'''")
-            OneZeroSeven = str(col.iloc[7])
         else:
             print("| " + str(col.iloc[7]))
         
         # Q2
-        if (str(col.iloc[8]) != "nan"):
-            if (row >= q3_count and row < q3_count + q2_elim_count): # Q2 position locked
+        if (row < q3_count + q2_elim_count):
+            if (row >= q3_count): # Q2 position locked
                 print("! " + pos)
             else: # Calculate position for P10+
                 for x in range(0,len(sort_Q2)):
                     q2=sort_Q2.iloc[x,:]
                     if (q2.iloc[0] == number):
                         print("! " + str(1+x))
-                    if (x == 0):
-                        fastestQ2 = q2.iloc[0]
 
-            if (fastestQ2 == number):
-                print("| '''" + str(col.iloc[8]) + "'''")
+            q2_time = col.iloc[8]
+            if (pd.notna(q2_time) and str(q2_time) != "nan" and str(q2_time) != ""):
+                if (fastestQ2 == number):
+                    print("| '''" + str(q2_time) + "'''")
+                else:
+                    print("| " + str(q2_time))
             else:
-                print("| " + str(col.iloc[8]))
+                print("| ")
         elif (row == q3_count + q2_elim_count):
             print(f'! rowspan="{q1_elim_count}" |')
             print(f'| rowspan="{q1_elim_count}" |')
@@ -599,12 +645,16 @@ def qualifying(year=None, race=None):
             print(f'| rowspan="{q1_elim_count}" |')
 
         # Q3
-        if (str(col.iloc[9]) != "nan"):
+        if (row < q3_count):
             print("! " + pos)
-            if (row == 0):
-                print("| '''" + str(col.iloc[9]) + "'''")
+            q3_time = col.iloc[9]
+            if (pd.notna(q3_time) and str(q3_time) != "nan" and str(q3_time) != ""):
+                if (row == 0):
+                    print("| '''" + str(q3_time) + "'''")
+                else:
+                    print("| " + str(q3_time))
             else:
-                print("| " + str(col.iloc[9]))
+                print("| ")
         elif (row == q3_count):
             print(f'! rowspan="{q2_elim_count}" |')
             print(f'| rowspan="{q2_elim_count}" |')
