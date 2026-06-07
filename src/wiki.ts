@@ -352,18 +352,69 @@ export async function editPage(
   }
 }
 
-// Safe section replacement helper
 export function replaceSectionWikitext(fullText: string, header: string, newContent: string): string {
   // Clean up whitespace
   const cleanHeader = header.trim();
-  // Escape header for regex
-  const escapedHeader = cleanHeader.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const match = cleanHeader.match(/^(=+)\s*(.*?)\s*(=+)$/);
   
-  // Regex: matches the header, then matching everything up until next header starting with "\n==" or end of file
-  const regex = new RegExp(`(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==|$)`, 'i');
+  let regex: RegExp;
+  let levelNum = 2;
+  let name = cleanHeader;
   
-  if (regex.test(fullText)) {
-    return fullText.replace(regex, `$1${newContent.trim()}\n\n`);
+  if (match) {
+    levelNum = match[1].length;
+    name = match[2].trim();
+    const escapedName = name
+      .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    
+    // Matches the heading on its own line: preceding boundary/newline ($1), heading line ($2), and section content ($3)
+    regex = new RegExp(`(^|\\r?\\n)([ \\t]*={${levelNum}}\\s*${escapedName}\\s*={${levelNum}}[ \\t]*(?:\\r?\\n|$))([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'gi');
+  } else {
+    const escapedHeader = cleanHeader.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    regex = new RegExp(`(^|\\r?\\n)(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'gi');
+  }
+
+  // Find all matches for the section
+  const matches: RegExpExecArray[] = [];
+  let m: RegExpExecArray | null;
+  regex.lastIndex = 0;
+  while ((m = regex.exec(fullText)) !== null) {
+    matches.push(m);
+    if (m.index === regex.lastIndex) {
+      regex.lastIndex++;
+    }
+  }
+
+  if (matches.length > 0) {
+    // Reconstruct the text: replace the first occurrence, delete any duplicate occurrences
+    let result = '';
+    let lastIndex = 0;
+    
+    for (let i = 0; i < matches.length; i++) {
+      const matchObj = matches[i];
+      const matchIndex = matchObj.index;
+      const matchLength = matchObj[0].length;
+      
+      // Append text before this match
+      result += fullText.slice(lastIndex, matchIndex);
+      
+      if (i === 0) {
+        // First match: replace its content with the new content
+        const prefix = matchObj[1];
+        const headingLine = matchObj[2];
+        result += `${prefix}${headingLine}${newContent.trim()}\n\n`;
+      } else {
+        // Subsequent matches: duplicate sections, remove them completely
+        console.log(`Removing duplicate section heading: "${matchObj[2].trim()}"`);
+      }
+      
+      lastIndex = matchIndex + matchLength;
+    }
+    
+    // Append remaining text
+    result += fullText.slice(lastIndex);
+    return result;
   } else {
     // Section not found, append to the end of the page
     return `${fullText.trim()}\n\n${cleanHeader}\n${newContent.trim()}\n`;
