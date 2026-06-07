@@ -507,6 +507,25 @@ export const frontendHtml = `<!DOCTYPE html>
       color: #00f0ff;
       font-weight: bold;
     }
+
+    .wikitext-preview-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 15px;
+      animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
   </style>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
@@ -1657,15 +1676,43 @@ export const frontendHtml = `<!DOCTYPE html>
           title.style.fontWeight = 'bold';
           title.innerHTML = '<input type="checkbox" id="check-' + result.template + '" class="stats-check" style="margin-right: 8px;" ' + (result.changed ? 'checked' : '') + '> Template:Stats/' + result.template;
           
+          const actions = document.createElement('div');
+          actions.style.display = 'flex';
+          actions.style.alignItems = 'center';
+          actions.style.gap = '10px';
+
           const badge = document.createElement('span');
           badge.className = result.changed ? 'status-badge exists' : 'status-badge missing';
           badge.style.backgroundColor = result.changed ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)';
           badge.style.color = result.changed ? 'var(--accent-secondary)' : 'var(--text-muted)';
           badge.style.border = result.changed ? '1px solid rgba(0, 240, 255, 0.3)' : '1px solid var(--border-color)';
           badge.textContent = result.changed ? 'Updates Pending' : 'Up to date';
+          actions.appendChild(badge);
+
+          const viewBtn = document.createElement('button');
+          viewBtn.className = 'btn btn-secondary';
+          viewBtn.style.width = 'auto';
+          viewBtn.style.padding = '4px 10px';
+          viewBtn.style.fontSize = '0.8rem';
+          viewBtn.textContent = 'View Wikitext';
+          viewBtn.onclick = () => {
+            const wikitextDiv = document.getElementById('wikitext-container-' + result.template);
+            if (wikitextDiv.style.display === 'none') {
+              wikitextDiv.style.display = 'flex';
+              viewBtn.textContent = 'Hide Wikitext';
+              viewBtn.classList.remove('btn-secondary');
+              viewBtn.classList.add('btn-accent');
+            } else {
+              wikitextDiv.style.display = 'none';
+              viewBtn.textContent = 'View Wikitext';
+              viewBtn.classList.remove('btn-accent');
+              viewBtn.classList.add('btn-secondary');
+            }
+          };
+          actions.appendChild(viewBtn);
           
           header.appendChild(title);
-          header.appendChild(badge);
+          header.appendChild(actions);
           card.appendChild(header);
           
           if (result.changed) {
@@ -1705,6 +1752,53 @@ export const frontendHtml = `<!DOCTYPE html>
             noChange.textContent = 'All driver entries match the current wiki template.';
             card.appendChild(noChange);
           }
+
+          // Create wikitext preview container (hidden by default)
+          const wikitextDiv = document.createElement('div');
+          wikitextDiv.id = 'wikitext-container-' + result.template;
+          wikitextDiv.className = 'wikitext-preview-container';
+          wikitextDiv.style.display = 'none';
+          
+          const wikitextHeader = document.createElement('div');
+          wikitextHeader.style.display = 'flex';
+          wikitextHeader.style.justifyContent = 'space-between';
+          wikitextHeader.style.alignItems = 'center';
+          
+          const wikitextTitle = document.createElement('span');
+          wikitextTitle.style.fontSize = '0.8rem';
+          wikitextTitle.style.color = 'var(--text-muted)';
+          wikitextTitle.style.textTransform = 'uppercase';
+          wikitextTitle.textContent = 'Updated Template Wikitext';
+          
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'btn btn-secondary';
+          copyBtn.style.width = 'auto';
+          copyBtn.style.padding = '2px 8px';
+          copyBtn.style.fontSize = '0.75rem';
+          copyBtn.textContent = 'Copy Code';
+          copyBtn.onclick = () => {
+            const ta = document.getElementById('textarea-' + result.template);
+            ta.select();
+            ta.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(ta.value)
+              .then(() => log('Copied Template:Stats/' + result.template + ' wikitext!', 'success'))
+              .catch(() => log('Failed to copy to clipboard.', 'error'));
+          };
+          
+          wikitextHeader.appendChild(wikitextTitle);
+          wikitextHeader.appendChild(copyBtn);
+          wikitextDiv.appendChild(wikitextHeader);
+          
+          const textarea = document.createElement('textarea');
+          textarea.id = 'textarea-' + result.template;
+          textarea.className = 'wikitext-textarea';
+          textarea.style.height = '180px';
+          textarea.style.color = '#00f0ff';
+          textarea.readOnly = true;
+          textarea.value = result.wikitext || '';
+          
+          wikitextDiv.appendChild(textarea);
+          card.appendChild(wikitextDiv);
           
           container.appendChild(card);
         });
