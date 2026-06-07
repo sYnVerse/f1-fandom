@@ -796,132 +796,136 @@ export default {
             const gpPageTitle = `${year} ${raceName}`;
             console.log(`Checking GP page sections for: ${gpPageTitle}...`);
             
-            // Only retrieve page content if at least one session has concluded
-            if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
-              const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
-              if (pageInfo.exists) {
-                let currentContent = pageInfo.content;
-                let updatedContent = currentContent;
-                let changes: string[] = [];
+            const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+            let currentContent = '';
+            let isNewPage = false;
 
-                // Fetch data concurrently only for completed sessions
-                const [
-                  qualiResults,
-                  raceResults,
+            if (pageInfo.exists) {
+              currentContent = pageInfo.content;
+            } else {
+              console.log(`GP page ${gpPageTitle} does not exist on the wiki. Generating a blank GP page...`);
+              const drivers = await getDriversForRaceWithFallback(year, round);
+              const racingKey = getF1RacingKey(race.raceName);
+              const officialName = await fetchOfficialRaceName(year, racingKey).catch(() => null);
+              currentContent = generateBlankGPWikitext(race, drivers, officialName);
+              isNewPage = true;
+            }
+
+            let updatedContent = currentContent;
+            let changes: string[] = [];
+
+            let qualiResults: any[] = [];
+            let raceResults: any[] = [];
+            let currentDrivers: any[] = [];
+            let prevDrivers: any = null;
+            let currentConstructors: any[] = [];
+            let prevConstructors: any = null;
+            let sprintResults: any[] = [];
+
+            // Only retrieve page content / fetch data and update sections if at least one session has concluded
+            if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
+              // Fetch data concurrently only for completed sessions
+              const fetched = await Promise.all([
+                isQualiConcluded ? getQualifyingResult(year, round).catch(() => []) : Promise.resolve([]),
+                isRaceConcluded ? getRaceResult(year, round, false).catch(() => []) : Promise.resolve([]),
+                isRaceConcluded ? getDriverStandings(year, round).catch(() => []) : Promise.resolve([]),
+                isRaceConcluded && round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+                isRaceConcluded ? getConstructorStandings(year, round).catch(() => []) : Promise.resolve([]),
+                isRaceConcluded && round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+                isSprintConcluded ? getRaceResult(year, round, true).catch(() => []) : Promise.resolve([])
+              ]);
+
+              qualiResults = fetched[0];
+              raceResults = fetched[1];
+              currentDrivers = fetched[2];
+              prevDrivers = fetched[3];
+              currentConstructors = fetched[4];
+              prevConstructors = fetched[5];
+              sprintResults = fetched[6];
+
+              // Update Qualifying Results and Starting Grid
+              if (qualiResults && qualiResults.length > 0) {
+                const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
+                const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
+                const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
+                if (newContent !== updatedContent) {
+                  updatedContent = newContent;
+                  changes.push("Qualifying Results");
+                }
+
+                const gridWikitext = generateGridWikitext(qualiResults);
+                const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
+                const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
+                if (newGridContent !== updatedContent) {
+                  updatedContent = newGridContent;
+                  changes.push("Starting Grid");
+                }
+              }
+
+              // Update Sprint Results
+              if (race.Sprint && sprintResults && sprintResults.length > 0) {
+                const sprintWikitext = generateRaceWikitext(sprintResults, true);
+                const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
+                const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
+                if (newContent !== updatedContent) {
+                  updatedContent = newContent;
+                  changes.push("Sprint Results");
+                }
+              }
+
+              // Update Race Results
+              if (raceResults && raceResults.length > 0) {
+                const raceWikitext = generateRaceWikitext(raceResults, false);
+                const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
+                const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
+                if (newContent !== updatedContent) {
+                  updatedContent = newContent;
+                  changes.push("Race Results");
+                }
+              }
+
+              // Update Championship Standings
+              if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+                const standingsWikitext = generateStandingsWikitext(
                   currentDrivers,
                   prevDrivers,
                   currentConstructors,
-                  prevConstructors,
-                  sprintResults
-                ] = await Promise.all([
-                  isQualiConcluded ? getQualifyingResult(year, round).catch(() => []) : Promise.resolve([]),
-                  isRaceConcluded ? getRaceResult(year, round, false).catch(() => []) : Promise.resolve([]),
-                  isRaceConcluded ? getDriverStandings(year, round).catch(() => []) : Promise.resolve([]),
-                  isRaceConcluded && round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
-                  isRaceConcluded ? getConstructorStandings(year, round).catch(() => []) : Promise.resolve([]),
-                  isRaceConcluded && round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
-                  isSprintConcluded ? getRaceResult(year, round, true).catch(() => []) : Promise.resolve([])
-                ]);
-
-                // Update Qualifying Results and Starting Grid
-                if (qualiResults && qualiResults.length > 0) {
-                  const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
-                  const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
-                  const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
-                  if (newContent !== updatedContent) {
-                    updatedContent = newContent;
-                    changes.push("Qualifying Results");
-                  }
-
-                  const gridWikitext = generateGridWikitext(qualiResults);
-                  const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
-                  const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
-                  if (newGridContent !== updatedContent) {
-                    updatedContent = newGridContent;
-                    changes.push("Starting Grid");
-                  }
-                }
-
-                // Update Sprint Results
-                if (race.Sprint && sprintResults && sprintResults.length > 0) {
-                  const sprintWikitext = generateRaceWikitext(sprintResults, true);
-                  const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
-                  const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
-                  if (newContent !== updatedContent) {
-                    updatedContent = newContent;
-                    changes.push("Sprint Results");
-                  }
-                }
-
-                // Update Race Results
-                if (raceResults && raceResults.length > 0) {
-                  const raceWikitext = generateRaceWikitext(raceResults, false);
-                  const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
-                  const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
-                  if (newContent !== updatedContent) {
-                    updatedContent = newContent;
-                    changes.push("Race Results");
-                  }
-                }
-
-                // Update Championship Standings
-                if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
-                  const standingsWikitext = generateStandingsWikitext(
-                    currentDrivers,
-                    prevDrivers,
-                    currentConstructors,
-                    prevConstructors
-                  );
-                  const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
-                  const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
-                  if (newContent !== updatedContent) {
-                    updatedContent = newContent;
-                    changes.push("Championship Standings");
-                  }
-                }
-
-                // If there are changes, save the page
-                if (changes.length > 0) {
-                  console.log(`  Updating GP page sections for ${gpPageTitle}: ${changes.join(', ')}`);
-                  const currentSession = await getSession();
-                  await editPage(
-                    domain,
-                    currentSession,
-                    gpPageTitle,
-                    updatedContent,
-                    `Automated update of GP page sections: ${changes.join(', ')}`,
-                    apiEndpoint
-                  );
-                  console.log(`  Successfully updated ${gpPageTitle} sections!`);
-                } else {
-                  console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
-                }
-
-                // --- SET GP KEY TO TRUE ONLY AFTER GP CONCLUDED AND STANDINGS & RACE RESULTS ARE LOADED SUCCESSFULLY ---
-                if (isRaceConcluded && raceResults && raceResults.length > 0 && currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
-                  if (env.F1_WIKI_STATE) {
-                    await env.F1_WIKI_STATE.put(gpKey, 'true');
-                    console.log(`  Round ${round} GP page sections and results finalized. Marked as updated in KV.`);
-                  }
-                }
-              } else {
-                console.log(`GP page ${gpPageTitle} does not exist on the wiki. Skipping section updates.`);
-                // If GP page does not exist but the race is concluded and results are available, mark as updated anyway
-                // so we don't keep polling forever.
-                let gpResults: any[] = [];
-                try {
-                  gpResults = await getRaceResult(year, round, false);
-                } catch (e) {}
-                
-                if (isRaceConcluded && gpResults.length > 0) {
-                  if (env.F1_WIKI_STATE) {
-                    await env.F1_WIKI_STATE.put(gpKey, 'true');
-                    console.log(`  GP page ${gpPageTitle} does not exist, but race is concluded and results are available. Marked as updated in KV.`);
-                  }
+                  prevConstructors
+                );
+                const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
+                const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
+                if (newContent !== updatedContent) {
+                  updatedContent = newContent;
+                  changes.push("Championship Standings");
                 }
               }
+            }
+
+            // If there are changes, or if it is a new page, save/create the GP page
+            if (changes.length > 0 || isNewPage) {
+              console.log(`  Publishing GP page for ${gpPageTitle}: ${isNewPage ? 'Creating new page' : `Updating sections: ${changes.join(', ')}`}`);
+              const currentSession = await getSession();
+              await editPage(
+                domain,
+                currentSession,
+                gpPageTitle,
+                updatedContent,
+                isNewPage 
+                  ? `Automated creation of GP page${changes.length > 0 ? ` with updates: ${changes.join(', ')}` : ''}`
+                  : `Automated update of GP page sections: ${changes.join(', ')}`,
+                apiEndpoint
+              );
+              console.log(`  Successfully published ${gpPageTitle}!`);
             } else {
-              console.log(`GP page ${gpPageTitle} skipped: No weekend sessions (Quali/Sprint/Race) have concluded yet.`);
+              console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
+            }
+
+            // --- SET GP KEY TO TRUE ONLY AFTER GP CONCLUDED AND STANDINGS & RACE RESULTS ARE LOADED SUCCESSFULLY ---
+            if (isRaceConcluded && raceResults && raceResults.length > 0 && currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+              if (env.F1_WIKI_STATE) {
+                await env.F1_WIKI_STATE.put(gpKey, 'true');
+                console.log(`  Round ${round} GP page sections and results finalized. Marked as updated in KV.`);
+              }
             }
           } catch (e: any) {
             console.error(`Error updating GP page sections for round ${round}:`, e.message);
