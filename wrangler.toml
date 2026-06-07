@@ -13,7 +13,7 @@ TURNSTILE_SITE_KEY = "0x4AAAAAABoDGtBnq2BXlSqW"
 # WIKI_BOT_USERNAME and WIKI_BOT_PASSWORD can be added via Cloudflare dashboard or `wrangler secret put`
 
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["*/10 * * * *", "0 * * * *"]
 
 [[kv_namespaces]]
 binding = "F1_WIKI_STATE"

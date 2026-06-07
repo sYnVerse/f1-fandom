@@ -525,17 +525,9 @@ export default {
     }
   },
 
-  async scheduled(_event: any, env: any, _ctx: any): Promise<void> {
-    console.log("Scheduled sync trigger fired!");
-
-    // Check and send the daily proxy call summary email at 6 AM Pacific Time
-    if (env.F1_WIKI_STATE && env.RESEND_API_KEY) {
-      try {
-        await checkAndSendDailySummary(env);
-      } catch (e: any) {
-        console.error("Daily summary email check failed:", e.message);
-      }
-    }
+  async scheduled(event: any, env: any, _ctx: any): Promise<void> {
+    const cronTrigger = event?.cron || "";
+    console.log(`Scheduled sync trigger fired! Trigger: ${cronTrigger || "manual/unknown"}`);
 
     const username = env.WIKI_BOT_USERNAME;
     const password = env.WIKI_BOT_PASSWORD;
@@ -554,6 +546,34 @@ export default {
       const schedule = await getSchedule(year);
       console.log(`Loaded schedule with ${schedule.length} rounds.`);
 
+      const now = new Date();
+      
+      // Determine if a race weekend is currently active
+      let activeWeekendRace: any = null;
+      for (const race of schedule) {
+        const { startTime, endTime } = getRaceTimes(race);
+        if (now >= startTime && now <= endTime) {
+          activeWeekendRace = race;
+          break;
+        }
+      }
+
+      const isHighFrequency = cronTrigger === "*/10 * * * *";
+      
+      if (isHighFrequency && !activeWeekendRace) {
+        console.log("High-frequency sync skipped: No F1 race weekend is currently active.");
+        return;
+      }
+
+      // Check and send the daily proxy call summary email at 6 AM Pacific Time (only on hourly/low-frequency/manual sync)
+      if (!isHighFrequency && env.F1_WIKI_STATE && env.RESEND_API_KEY) {
+        try {
+          await checkAndSendDailySummary(env);
+        } catch (e: any) {
+          console.error("Daily summary email check failed:", e.message);
+        }
+      }
+
       // Lazy Fandom login helper to save proxy hits/emails (only login if we actually perform edits)
       let session: any = null;
       const getSession = async () => {
@@ -571,21 +591,23 @@ export default {
         return session;
       };
 
-      // --- Sync Latest F1 News/Events ---
-      try {
-        await syncLatestNewsEvents(env, getSession);
-      } catch (e: any) {
-        console.error("Failed to sync latest news/events template:", e.message);
+      // --- Sync Latest F1 News/Events (only on hourly/low-frequency/manual sync) ---
+      if (!isHighFrequency) {
+        try {
+          await syncLatestNewsEvents(env, getSession);
+        } catch (e: any) {
+          console.error("Failed to sync latest news/events template:", e.message);
+        }
       }
 
-      // --- Sync Career Results Standings Templates ---
-      try {
-        await syncCareerStandingsTemplates(env, getSession);
-      } catch (e: any) {
-        console.error("Failed to sync Career Results standings templates:", e.message);
+      // --- Sync Career Results Standings Templates (only on hourly/low-frequency/manual sync) ---
+      if (!isHighFrequency) {
+        try {
+          await syncCareerStandingsTemplates(env, getSession);
+        } catch (e: any) {
+          console.error("Failed to sync Career Results standings templates:", e.message);
+        }
       }
-
-      const now = new Date();
 
       // Filter to races that have concluded
       const concludedRaces = schedule.filter(race => {
@@ -619,16 +641,40 @@ export default {
         const round = parseInt(race.round, 10);
         const raceName = race.raceName;
 
+        // Calculate session end times
+        const qualiStartTime = race.Qualifying ? new Date(`${race.Qualifying.date}T${race.Qualifying.time || "00:00:00Z"}`) : null;
+        let qualiEndTime: Date | null = null;
+        if (qualiStartTime) {
+          qualiEndTime = new Date(qualiStartTime.getTime() + 60 * 60 * 1000); // 1 hour duration
+        } else {
+          // Fallback: Day 2 (Saturday) of the weekend. Day 2 is 1 day before the race day.
+          qualiEndTime = new Date(`${race.date}T00:00:00Z`);
+          qualiEndTime.setUTCDate(qualiEndTime.getUTCDate() - 1);
+          qualiEndTime = new Date(qualiEndTime.getTime() + 18 * 60 * 60 * 1000); // Saturday 18:00 UTC
+        }
+        const isQualiConcluded = now >= qualiEndTime;
+
+        let sprintEndTime: Date | null = null;
+        let isSprintConcluded = false;
+        if (race.Sprint) {
+          const sprintStartTime = new Date(`${race.Sprint.date}T${race.Sprint.time || "00:00:00Z"}`);
+          sprintEndTime = new Date(sprintStartTime.getTime() + 45 * 60 * 1000); // 45 minutes duration
+          isSprintConcluded = now >= sprintEndTime;
+        }
+
+        const raceStartTime = new Date(`${race.date}T${race.time || "12:00:00Z"}`);
+        const raceEndTime = new Date(raceStartTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours duration
+        const isRaceConcluded = now >= raceEndTime;
+
         // --- 1. Smart Check for Grand Prix ---
         const gpKey = `2026_round_${round}_gp_updated`;
         const gpUpdatedInKV = env.F1_WIKI_STATE ? await env.F1_WIKI_STATE.get(gpKey) === 'true' : false;
-        const gpTime = new Date(`${race.date}T${race.time || "12:00:00Z"}`);
-        const gpSessionCompleted = now > gpTime;
+        const gpSessionCompleted = now >= raceEndTime; // GP is completed only after GP race ends
 
         if (gpUpdatedInKV) {
           console.log(`Round ${round} GP (${raceName}) already updated (KV cache). Skipping.`);
         } else if (!gpSessionCompleted) {
-          console.log(`Round ${round} GP (${raceName}) not completed yet (scheduled: ${gpTime.toISOString()}). Skipping.`);
+          console.log(`Round ${round} GP (${raceName}) not completed yet (ends: ${raceEndTime.toISOString()}). Skipping.`);
         } else {
           console.log(`Round ${round} GP has completed. Polling results from Jolpi...`);
           let gpResults: any[] = [];
@@ -675,13 +721,12 @@ export default {
           const sprintName = raceName.replace("Grand Prix", "Sprint");
           const sprintKey = `2026_round_${round}_sprint_updated`;
           const sprintUpdatedInKV = env.F1_WIKI_STATE ? await env.F1_WIKI_STATE.get(sprintKey) === 'true' : false;
-          const sprintTime = new Date(`${race.Sprint.date}T${race.Sprint.time || "12:00:00Z"}`);
-          const sprintSessionCompleted = now > sprintTime;
+          const sprintSessionCompleted = sprintEndTime ? now >= sprintEndTime : false;
 
           if (sprintUpdatedInKV) {
             console.log(`Round ${round} Sprint (${sprintName}) already updated (KV cache). Skipping.`);
           } else if (!sprintSessionCompleted) {
-            console.log(`Round ${round} Sprint (${sprintName}) not completed yet (scheduled: ${sprintTime.toISOString()}). Skipping.`);
+            console.log(`Round ${round} Sprint (${sprintName}) not completed yet (ends: ${sprintEndTime?.toISOString()}). Skipping.`);
           } else {
             console.log(`Round ${round} Sprint has completed. Polling results from Jolpi...`);
             let sprintResults: any[] = [];
@@ -730,7 +775,7 @@ export default {
 
         if (statsUpdatedInKV) {
           console.log(`Round ${round} Stats Templates already synced (KV cache). Skipping.`);
-        } else if (!gpSessionCompleted) {
+        } else if (!isRaceConcluded) {
           console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
         } else {
           let hasGPResults = false;
@@ -741,7 +786,8 @@ export default {
 
           if (hasGPResults) {
             console.log(`GP results available. Running stats sync for round ${round}...`);
-            await syncStatsTemplates(env, getSession, round);
+            const isFinalRound = round === schedule.length;
+            await syncStatsTemplates(env, getSession, round, !!race.Sprint, isFinalRound);
             
             if (env.F1_WIKI_STATE) {
               await env.F1_WIKI_STATE.put(statsKey, 'true');
@@ -751,120 +797,122 @@ export default {
         }
 
         // --- 4. Smart Check for GP Page Sections (Starting Grid, Qualifying, Sprint, Race Results, Standings) ---
-        try {
-          const gpPageTitle = `${year} ${raceName}`;
-          console.log(`Checking GP page sections for: ${gpPageTitle}...`);
-          
-          const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
-          if (pageInfo.exists) {
-            let currentContent = pageInfo.content;
-            let updatedContent = currentContent;
-            let changes: string[] = [];
+        if (gpUpdatedInKV) {
+          console.log(`Round ${round} GP Page Sections already finalized (GP results updated in KV). Skipping.`);
+        } else {
+          try {
+            const gpPageTitle = `${year} ${raceName}`;
+            console.log(`Checking GP page sections for: ${gpPageTitle}...`);
+            
+            // Only retrieve page content if at least one session has concluded
+            if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
+              const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+              if (pageInfo.exists) {
+                let currentContent = pageInfo.content;
+                let updatedContent = currentContent;
+                let changes: string[] = [];
 
-            // 4a. Fetch necessary data from Jolpi/Ergast concurrently
-            const [
-              qualiResults,
-              raceResults,
-              currentDrivers,
-              prevDrivers,
-              currentConstructors,
-              prevConstructors
-            ] = await Promise.all([
-              getQualifyingResult(year, round).catch(() => []),
-              getRaceResult(year, round, false).catch(() => []),
-              getDriverStandings(year, round).catch(() => []),
-              round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
-              getConstructorStandings(year, round).catch(() => []),
-              round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
-            ]);
+                // Fetch data concurrently only for completed sessions
+                const [
+                  qualiResults,
+                  raceResults,
+                  currentDrivers,
+                  prevDrivers,
+                  currentConstructors,
+                  prevConstructors,
+                  sprintResults
+                ] = await Promise.all([
+                  isQualiConcluded ? getQualifyingResult(year, round).catch(() => []) : Promise.resolve([]),
+                  isRaceConcluded ? getRaceResult(year, round, false).catch(() => []) : Promise.resolve([]),
+                  isRaceConcluded ? getDriverStandings(year, round).catch(() => []) : Promise.resolve([]),
+                  isRaceConcluded && round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+                  isRaceConcluded ? getConstructorStandings(year, round).catch(() => []) : Promise.resolve([]),
+                  isRaceConcluded && round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
+                  isSprintConcluded ? getRaceResult(year, round, true).catch(() => []) : Promise.resolve([])
+                ]);
 
-            let sprintResults: any[] = [];
-            if (race.Sprint) {
-              try {
-                sprintResults = await getRaceResult(year, round, true);
-              } catch (e) {
-                // No sprint results yet
+                // Update Qualifying Results and Starting Grid
+                if (qualiResults && qualiResults.length > 0) {
+                  const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
+                  const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
+                  const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
+                  if (newContent !== updatedContent) {
+                    updatedContent = newContent;
+                    changes.push("Qualifying Results");
+                  }
+
+                  const gridWikitext = generateGridWikitext(qualiResults);
+                  const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
+                  const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
+                  if (newGridContent !== updatedContent) {
+                    updatedContent = newGridContent;
+                    changes.push("Starting Grid");
+                  }
+                }
+
+                // Update Sprint Results
+                if (race.Sprint && sprintResults && sprintResults.length > 0) {
+                  const sprintWikitext = generateRaceWikitext(sprintResults, true);
+                  const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
+                  const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
+                  if (newContent !== updatedContent) {
+                    updatedContent = newContent;
+                    changes.push("Sprint Results");
+                  }
+                }
+
+                // Update Race Results
+                if (raceResults && raceResults.length > 0) {
+                  const raceWikitext = generateRaceWikitext(raceResults, false);
+                  const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
+                  const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
+                  if (newContent !== updatedContent) {
+                    updatedContent = newContent;
+                    changes.push("Race Results");
+                  }
+                }
+
+                // Update Championship Standings
+                if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+                  const standingsWikitext = generateStandingsWikitext(
+                    currentDrivers,
+                    prevDrivers,
+                    currentConstructors,
+                    prevConstructors
+                  );
+                  const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
+                  const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
+                  if (newContent !== updatedContent) {
+                    updatedContent = newContent;
+                    changes.push("Championship Standings");
+                  }
+                }
+
+                // If there are changes, save the page
+                if (changes.length > 0) {
+                  console.log(`  Updating GP page sections for ${gpPageTitle}: ${changes.join(', ')}`);
+                  const currentSession = await getSession();
+                  await editPage(
+                    domain,
+                    currentSession,
+                    gpPageTitle,
+                    updatedContent,
+                    `Automated update of GP page sections: ${changes.join(', ')}`,
+                    apiEndpoint
+                  );
+                  console.log(`  Successfully updated ${gpPageTitle} sections!`);
+                } else {
+                  console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
+                }
+              } else {
+                console.log(`GP page ${gpPageTitle} does not exist on the wiki. Skipping section updates.`);
               }
-            }
-
-            // 4b. Update Qualifying Results and Starting Grid
-            if (qualiResults && qualiResults.length > 0) {
-              const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
-              const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ==="], "=== Qualifying Results ===");
-              const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
-              if (newContent !== updatedContent) {
-                updatedContent = newContent;
-                changes.push("Qualifying Results");
-              }
-
-              const gridWikitext = generateGridWikitext(qualiResults);
-              const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "===Grid==="], "==== Starting Grid ====");
-              const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
-              if (newGridContent !== updatedContent) {
-                updatedContent = newGridContent;
-                changes.push("Starting Grid");
-              }
-            }
-
-            // 4c. Update Sprint Results
-            if (race.Sprint && sprintResults && sprintResults.length > 0) {
-              const sprintWikitext = generateRaceWikitext(sprintResults, true);
-              const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ==="], "=== Sprint Results ===");
-              const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
-              if (newContent !== updatedContent) {
-                updatedContent = newContent;
-                changes.push("Sprint Results");
-              }
-            }
-
-            // 4d. Update Race Results
-            if (raceResults && raceResults.length > 0) {
-              const raceWikitext = generateRaceWikitext(raceResults, false);
-              const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "===Results==="], "=== Race Results ===");
-              const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
-              if (newContent !== updatedContent) {
-                updatedContent = newContent;
-                changes.push("Race Results");
-              }
-            }
-
-            // 4e. Update Championship Standings
-            if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
-              const standingsWikitext = generateStandingsWikitext(
-                currentDrivers,
-                prevDrivers,
-                currentConstructors,
-                prevConstructors
-              );
-              const bestStandingsHeader = findBestHeader(updatedContent, ["== Standings ==", "==Standings=="], "== Standings ==");
-              const newContent = replaceSectionWikitext(updatedContent, bestStandingsHeader, standingsWikitext);
-              if (newContent !== updatedContent) {
-                updatedContent = newContent;
-                changes.push("Championship Standings");
-              }
-            }
-
-            // If there are changes, save the page
-            if (changes.length > 0) {
-              console.log(`  Updating GP page sections for ${gpPageTitle}: ${changes.join(', ')}`);
-              const currentSession = await getSession();
-              await editPage(
-                domain,
-                currentSession,
-                gpPageTitle,
-                updatedContent,
-                `Automated update of GP page sections: ${changes.join(', ')}`,
-                apiEndpoint
-              );
-              console.log(`  Successfully updated ${gpPageTitle} sections!`);
             } else {
-              console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
+              console.log(`GP page ${gpPageTitle} skipped: No weekend sessions (Quali/Sprint/Race) have concluded yet.`);
             }
-          } else {
-            console.log(`GP page ${gpPageTitle} does not exist on the wiki. Skipping section updates.`);
+          } catch (e: any) {
+            console.error(`Error updating GP page sections for round ${round}:`, e.message);
           }
-        } catch (e: any) {
-          console.error(`Error updating GP page sections for round ${round}:`, e.message);
         }
       }
 
@@ -1330,7 +1378,13 @@ async function syncCareerStandingsTemplates(env: any, getSession: () => Promise<
   }
 }
 
-async function syncStatsTemplates(env: any, getSession: () => Promise<any>, round: number): Promise<void> {
+async function syncStatsTemplates(
+  env: any,
+  getSession: () => Promise<any>,
+  round: number,
+  isSprintWeekend: boolean,
+  isFinalRound: boolean
+): Promise<void> {
   const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
   const apiEndpoint = env.WIKI_API_ENDPOINT;
   const proxySecret = env.PROXY_SECRET;
@@ -1345,23 +1399,60 @@ async function syncStatsTemplates(env: any, getSession: () => Promise<any>, roun
     const race = schedule.find(r => parseInt(r.round, 10) === round);
     const raceName = race ? race.raceName : '';
     
-    // Try to get winner of the race for the correction code
+    // Try to get winner of the race and check achievements
     let winnerCode = 'VER'; // default fallback
+    let hasDouble = false;
+    let hasHatTrick = false;
+    let hasGrandChelem = false;
+
     try {
       const results = await getRaceResult(2026, round, false);
-      if (results.length > 0 && results[0].driver?.code) {
-        winnerCode = results[0].driver.code;
+      if (results.length > 0) {
+        if (results[0].driver?.code) {
+          winnerCode = results[0].driver.code;
+        }
+
+        const winner = results.find(r => r.position === '1');
+        const poleSitter = results.find(r => r.grid === '1');
+        const fastestLap = results.find(r => r.FastestLap && r.FastestLap.rank === '1');
+
+        if (winner && poleSitter && winner.driver.driverId === poleSitter.driver.driverId) {
+          hasDouble = true;
+          if (fastestLap && winner.driver.driverId === fastestLap.driver.driverId) {
+            hasHatTrick = true;
+            hasGrandChelem = true; // Check Grand Chelems if Hat-trick occurred
+          }
+        }
       }
     } catch (e) {
       // ignore
     }
 
+    // Base templates list (that always get checked/updated after a GP concludes)
     const templates = [
-      "Championships", "Distance", "DistanceLed", "Doubles", "Entries",
-      "FastestLaps", "FrontRows", "Grand Chelems", "HatTricks", "Laps",
-      "LapsLed", "Podiums", "Points", "Poles", "RacesLed",
-      "SprintFastestLaps", "SprintPodiums", "SprintPoles", "SprintWins", "Starts", "Wins"
+      "Distance", "DistanceLed", "Entries", "FastestLaps", "FrontRows",
+      "Laps", "LapsLed", "Podiums", "Points", "Poles", "RacesLed", "Starts", "Wins"
     ];
+
+    // Sprint templates (only checked if it's a Sprint weekend)
+    if (isSprintWeekend) {
+      templates.push("SprintFastestLaps", "SprintPodiums", "SprintPoles", "SprintWins");
+    }
+
+    // Championships template (only checked at the final round of the season)
+    if (isFinalRound) {
+      templates.push("Championships");
+    }
+
+    if (hasDouble) {
+      templates.push("Doubles");
+    }
+    if (hasHatTrick) {
+      templates.push("HatTricks");
+    }
+    if (hasGrandChelem) {
+      templates.push("Grand Chelems");
+    }
 
     let session: any = null;
     const getSessionLocal = async () => {
