@@ -701,17 +701,9 @@ export default {
               const currentSession = await getSession();
               const wikitext = generateWikiResultsText(gpResults, false);
               await editPage(domain, currentSession, gpTitle, wikitext, "Automated results update from Jolpi API", apiEndpoint);
-              
-              if (env.F1_WIKI_STATE) {
-                await env.F1_WIKI_STATE.put(gpKey, 'true');
-                console.log(`  Marked round ${round} GP as updated in KV.`);
-              }
+              console.log(`  Updated GP template for round ${round}.`);
             } else if (gpWikitext) {
               console.log(`  GP template already has results on Fandom.`);
-              if (env.F1_WIKI_STATE) {
-                await env.F1_WIKI_STATE.put(gpKey, 'true');
-                console.log(`  Marked round ${round} GP as updated in KV (found existing results on Fandom).`);
-              }
             }
           }
         }
@@ -904,8 +896,29 @@ export default {
                 } else {
                   console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
                 }
+
+                // --- SET GP KEY TO TRUE ONLY AFTER GP CONCLUDED AND STANDINGS & RACE RESULTS ARE LOADED SUCCESSFULLY ---
+                if (isRaceConcluded && raceResults && raceResults.length > 0 && currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+                  if (env.F1_WIKI_STATE) {
+                    await env.F1_WIKI_STATE.put(gpKey, 'true');
+                    console.log(`  Round ${round} GP page sections and results finalized. Marked as updated in KV.`);
+                  }
+                }
               } else {
                 console.log(`GP page ${gpPageTitle} does not exist on the wiki. Skipping section updates.`);
+                // If GP page does not exist but the race is concluded and results are available, mark as updated anyway
+                // so we don't keep polling forever.
+                let gpResults: any[] = [];
+                try {
+                  gpResults = await getRaceResult(year, round, false);
+                } catch (e) {}
+                
+                if (isRaceConcluded && gpResults.length > 0) {
+                  if (env.F1_WIKI_STATE) {
+                    await env.F1_WIKI_STATE.put(gpKey, 'true');
+                    console.log(`  GP page ${gpPageTitle} does not exist, but race is concluded and results are available. Marked as updated in KV.`);
+                  }
+                }
               }
             } else {
               console.log(`GP page ${gpPageTitle} skipped: No weekend sessions (Quali/Sprint/Race) have concluded yet.`);
