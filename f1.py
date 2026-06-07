@@ -52,7 +52,7 @@ constructors = {
         "renault": "{{FRA}} {{Renault-CON}}",
         "sauber": "{{SUI}} {{Sauber-Ferrari}}",
         "rb": "{{ITA}} {{Racing Bulls-CON}}",
-        "cadillac": "{{USA}} {{Cadillac-CON}}",
+        "cadillac": "{{USA}} {{Cadillac-Ferrari}}",
         "audi": "{{SUI}} {{Audi-CON}}"
 }
 
