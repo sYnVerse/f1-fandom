@@ -723,6 +723,30 @@ function formatStatValue(templateName: string, value: number): string {
   return value.toString();
 }
 
+// Helper to format a driver line
+function formatDriverLine(wikiName: string, valueStr: string): string {
+  const paddedName = wikiName.padEnd(34, ' ');
+  return `| ${paddedName} = ${valueStr}`;
+}
+
+// Helper to get a numerical sort value from a wikitext value string
+function getSortValue(valStr: string): number {
+  const exprMatch = valStr.match(/\{\{#expr:\s*([\d.]+)/);
+  if (exprMatch) {
+    return parseFloat(exprMatch[1]);
+  }
+  if (valStr.includes('{{') || valStr.includes('{{{')) {
+    const leadingNumMatch = valStr.match(/^\s*([\d.]+)/);
+    if (leadingNumMatch) {
+      return parseFloat(leadingNumMatch[1]);
+    }
+    return 0;
+  }
+  const clean = valStr.replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(clean);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 // Parse and update a single template's wikitext content
 export function updateTemplateContent(
   templateName: string,
@@ -730,52 +754,181 @@ export function updateTemplateContent(
   cumulative2026Stats: Record<string, DriverStats>
 ): { wikitext: string; changed: boolean; updates: { driver: string; oldValue: string; newValue: string }[] } {
   const lines = currentWikitext.split('\n');
-  let changed = false;
   const updates: { driver: string; oldValue: string; newValue: string }[] = [];
 
-  // Track which active drivers have been processed
-  const processedDrivers = new Set<string>();
+  // 1. Locate current and other driver sections
+  let currentDriversLineIdx = -1;
+  let otherDriversLineIdx = -1;
 
-  const newLines = lines.map(line => {
-    // Match line: | Driver Name = Value
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/<!--\s*CURRENT DRIVERS\s*-->/i.test(line)) {
+      currentDriversLineIdx = i;
+    } else if (/<!--\s*OTHER DRIVERS\s*-->/i.test(line)) {
+      otherDriversLineIdx = i;
+    }
+  }
+
+  // Fallback to the existing line-by-line replacement if we can't locate both sections
+  if (currentDriversLineIdx === -1 || otherDriversLineIdx === -1) {
+    console.warn(`Could not find CURRENT DRIVERS or OTHER DRIVERS markers in ${templateName}. Falling back.`);
+    let changed = false;
+    const processedDrivers = new Set<string>();
+
+    const newLines = lines.map(line => {
+      const match = line.match(/^(\s*\|\s*)([^=]+?)(\s*=\s*)(.+?)(\s*)$/);
+      if (!match) return line;
+
+      const prefix = match[1];
+      const name = match[2].trim();
+      const separator = match[3];
+      const currentValue = match[4].trim();
+      const suffix = match[5];
+
+      const matchedDriverId = Object.keys(driverIdToWikiName).find(
+        id => normalizeName(driverIdToWikiName[id]) === normalizeName(name)
+      );
+
+      if (!matchedDriverId) return line;
+
+      processedDrivers.add(driverIdToWikiName[matchedDriverId]);
+
+      const baseValStr = (BASE_STATS_2025[templateName] && BASE_STATS_2025[templateName][driverIdToWikiName[matchedDriverId]]) || '0';
+      const addedVal = (cumulative2026Stats[matchedDriverId] && cumulative2026Stats[matchedDriverId][templateName as keyof DriverStats]) || 0;
+
+      let newValueStr = '';
+
+      if (templateName === 'Points') {
+        const trimmedVal = currentValue.trim();
+        if (trimmedVal.startsWith('{{#expr:') && trimmedVal.endsWith('}}')) {
+          if (trimmedVal.includes('Career Results/Points/2026')) {
+            processedDrivers.add(driverIdToWikiName[matchedDriverId]);
+            return line;
+          }
+          const inner = trimmedVal.slice(8, -2).trim();
+          newValueStr = `{{#expr: ${inner} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+        } else {
+          const basePoints = parseFloat(trimmedVal) || 0;
+          newValueStr = `{{#expr: ${basePoints} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+        }
+      } else {
+        const baseVal = parseFloat(baseValStr) || 0;
+        const totalVal = baseVal + addedVal;
+        newValueStr = formatStatValue(templateName, totalVal);
+      }
+
+      if (currentValue !== newValueStr) {
+        changed = true;
+        updates.push({ driver: driverIdToWikiName[matchedDriverId], oldValue: currentValue, newValue: newValueStr });
+        const paddedName = name.padEnd(34, ' ');
+        return `${prefix}${paddedName}${separator}${newValueStr}${suffix}`;
+      }
+
+      return line;
+    });
+
+    let finalWikitext = newLines.join('\n');
+    let newEntriesAdded = false;
+    let currentDriversIndex = finalWikitext.indexOf('<!-- CURRENT DRIVERS -->');
+    if (currentDriversIndex !== -1) {
+      const insertPos = finalWikitext.indexOf('\n', currentDriversIndex + '<!-- CURRENT DRIVERS -->'.length);
+      let entriesToInsert = '';
+      Object.keys(driverIdToWikiName).forEach(driverId => {
+        const wikiName = driverIdToWikiName[driverId];
+        if (!processedDrivers.has(wikiName)) {
+          const baseValStr = (BASE_STATS_2025[templateName] && BASE_STATS_2025[templateName][wikiName]) || '0';
+          const addedVal = (cumulative2026Stats[driverId] && cumulative2026Stats[driverId][templateName as keyof DriverStats]) || 0;
+          const baseVal = parseFloat(baseValStr) || 0;
+          const totalVal = baseVal + addedVal;
+          const hasBase = baseValStr !== '0' && baseValStr !== '';
+          if (totalVal > 0 || hasBase) {
+            let valueStr = '';
+            if (templateName === 'Points') {
+              const trimmedBase = baseValStr.trim();
+              if (trimmedBase.startsWith('{{#expr:') && trimmedBase.endsWith('}}')) {
+                const inner = trimmedBase.slice(8, -2).trim();
+                valueStr = `{{#expr: ${inner} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+              } else {
+                valueStr = `{{#expr: ${trimmedBase} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+              }
+            } else {
+              valueStr = formatStatValue(templateName, totalVal);
+            }
+            const paddedName = wikiName.padEnd(34, ' ');
+            entriesToInsert += `\n| ${paddedName} = ${valueStr}`;
+            processedDrivers.add(wikiName);
+            updates.push({ driver: wikiName, oldValue: '(none)', newValue: valueStr });
+            newEntriesAdded = true;
+          }
+        }
+      });
+      if (newEntriesAdded) {
+        finalWikitext = finalWikitext.slice(0, insertPos) + entriesToInsert + finalWikitext.slice(insertPos);
+        changed = true;
+      }
+    }
+    return { wikitext: finalWikitext, changed, updates };
+  }
+
+  // 2. Locate the end of the OTHER DRIVERS section (where #default or }}</includeonly> begins)
+  let otherDriversEndLineIdx = -1;
+  for (let i = otherDriversLineIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes('#default') || line.includes('}}</includeonly>')) {
+      otherDriversEndLineIdx = i;
+      break;
+    }
+  }
+  if (otherDriversEndLineIdx === -1) {
+    otherDriversEndLineIdx = lines.length;
+  }
+
+  // 3. Extract and parse all existing driver lines from the template
+  const currentDriverNames = new Set(Object.values(driverIdToWikiName).map(name => normalizeName(name)));
+  const existingTemplateDrivers = new Map<string, { originalName: string; originalValue: string }>();
+
+  for (let i = currentDriversLineIdx + 1; i < otherDriversEndLineIdx; i++) {
+    if (i === otherDriversLineIdx) continue; // Skip the "<!-- OTHER DRIVERS -->" divider line
+    const line = lines[i];
     const match = line.match(/^(\s*\|\s*)([^=]+?)(\s*=\s*)(.+?)(\s*)$/);
-    if (!match) return line;
+    if (match) {
+      const name = match[2].trim();
+      const value = match[4].trim();
+      existingTemplateDrivers.set(normalizeName(name), {
+        originalName: name,
+        originalValue: value
+      });
+    }
+  }
 
-    const prefix = match[1];
-    const name = match[2].trim();
-    const separator = match[3];
-    const currentValue = match[4].trim();
-    const suffix = match[5];
+  // 4. Construct current drivers list (active in 2026)
+  const currentDriversList: { wikiName: string; valueStr: string; sortValue: number }[] = [];
+  
+  Object.keys(driverIdToWikiName).forEach(driverId => {
+    const wikiName = driverIdToWikiName[driverId];
+    const normalized = normalizeName(wikiName);
 
-    // Find driver ID matching this wiki name
-    const matchedDriverId = Object.keys(driverIdToWikiName).find(
-      id => normalizeName(driverIdToWikiName[id]) === normalizeName(name)
-    );
+    const baseValStr = (BASE_STATS_2025[templateName] && BASE_STATS_2025[templateName][wikiName]) || '0';
+    const addedVal = (cumulative2026Stats[driverId] && cumulative2026Stats[driverId][templateName as keyof DriverStats]) || 0;
 
-    if (!matchedDriverId) return line;
-
-    processedDrivers.add(driverIdToWikiName[matchedDriverId]);
-
-    const baseValStr = (BASE_STATS_2025[templateName] && BASE_STATS_2025[templateName][driverIdToWikiName[matchedDriverId]]) || '0';
-    const addedVal = (cumulative2026Stats[matchedDriverId] && cumulative2026Stats[matchedDriverId][templateName as keyof DriverStats]) || 0;
+    const existing = existingTemplateDrivers.get(normalized);
+    const currentValue = existing ? existing.originalValue : '';
 
     let newValueStr = '';
-
     if (templateName === 'Points') {
-      // Points uses expressions
-      const trimmedVal = currentValue.trim();
-      if (trimmedVal.startsWith('{{#expr:') && trimmedVal.endsWith('}}')) {
-        // If it already has 2026 points expression, don't double append
-        if (trimmedVal.includes('Career Results/Points/2026')) {
-          processedDrivers.add(driverIdToWikiName[matchedDriverId]);
-          return line;
-        }
-        const inner = trimmedVal.slice(8, -2).trim();
+      if (currentValue && currentValue.includes('Career Results/Points/2026')) {
+        newValueStr = currentValue;
+      } else if (currentValue && currentValue.startsWith('{{#expr:') && currentValue.endsWith('}}')) {
+        const inner = currentValue.slice(8, -2).trim();
         newValueStr = `{{#expr: ${inner} + {{Career Results/Points/2026|{{{1}}}}} }}`;
       } else {
-        // If it's a simple number (e.g. 1797)
-        const basePoints = parseFloat(trimmedVal) || 0;
-        newValueStr = `{{#expr: ${basePoints} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+        const trimmedBase = baseValStr.trim();
+        if (trimmedBase.startsWith('{{#expr:') && trimmedBase.endsWith('}}')) {
+          const inner = trimmedBase.slice(8, -2).trim();
+          newValueStr = `{{#expr: ${inner} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+        } else {
+          newValueStr = `{{#expr: ${trimmedBase} + {{Career Results/Points/2026|{{{1}}}}} }}`;
+        }
       }
     } else {
       const baseVal = parseFloat(baseValStr) || 0;
@@ -783,62 +936,59 @@ export function updateTemplateContent(
       newValueStr = formatStatValue(templateName, totalVal);
     }
 
-    if (currentValue !== newValueStr) {
-      changed = true;
-      updates.push({ driver: driverIdToWikiName[matchedDriverId], oldValue: currentValue, newValue: newValueStr });
-      const paddedName = name.padEnd(34, ' ');
-      return `${prefix}${paddedName}${separator}${newValueStr}${suffix}`;
-    }
+    const baseSortVal = getSortValue(baseValStr);
+    const sortValue = baseSortVal + addedVal;
 
-    return line;
+    currentDriversList.push({
+      wikiName,
+      valueStr: newValueStr,
+      sortValue
+    });
+
+    if (currentValue !== newValueStr) {
+      updates.push({
+        driver: wikiName,
+        oldValue: currentValue || '(none)',
+        newValue: newValueStr
+      });
+    }
   });
 
-  // Add active drivers who are not yet present in the template but have stats > 0 in 2026
-  let finalWikitext = newLines.join('\n');
+  // 5. Construct other drivers list (not active in 2026)
+  const otherDriversList: { wikiName: string; valueStr: string; sortValue: number }[] = [];
   
-  let newEntriesAdded = false;
-  let currentDriversIndex = finalWikitext.indexOf('<!-- CURRENT DRIVERS -->');
-  if (currentDriversIndex !== -1) {
-    const insertPos = finalWikitext.indexOf('\n', currentDriversIndex + '<!-- CURRENT DRIVERS -->'.length);
-    
-    let entriesToInsert = '';
-    Object.keys(driverIdToWikiName).forEach(driverId => {
-      const wikiName = driverIdToWikiName[driverId];
-      if (!processedDrivers.has(wikiName)) {
-        const baseValStr = (BASE_STATS_2025[templateName] && BASE_STATS_2025[templateName][wikiName]) || '0';
-        const addedVal = (cumulative2026Stats[driverId] && cumulative2026Stats[driverId][templateName as keyof DriverStats]) || 0;
-        
-        const baseVal = parseFloat(baseValStr) || 0;
-        const totalVal = baseVal + addedVal;
-        const hasBase = baseValStr !== '0' && baseValStr !== '';
-        
-        if (totalVal > 0 || hasBase) {
-          let valueStr = '';
-          if (templateName === 'Points') {
-            const trimmedBase = baseValStr.trim();
-            if (trimmedBase.startsWith('{{#expr:') && trimmedBase.endsWith('}}')) {
-              const inner = trimmedBase.slice(8, -2).trim();
-              valueStr = `{{#expr: ${inner} + {{Career Results/Points/2026|{{{1}}}}} }}`;
-            } else {
-              valueStr = `{{#expr: ${trimmedBase} + {{Career Results/Points/2026|{{{1}}}}} }}`;
-            }
-          } else {
-            valueStr = formatStatValue(templateName, totalVal);
-          }
-          const paddedName = wikiName.padEnd(34, ' ');
-          entriesToInsert += `\n| ${paddedName} = ${valueStr}`;
-          processedDrivers.add(wikiName);
-          updates.push({ driver: wikiName, oldValue: '(none)', newValue: valueStr });
-          newEntriesAdded = true;
-        }
-      }
-    });
-    
-    if (newEntriesAdded) {
-      finalWikitext = finalWikitext.slice(0, insertPos) + entriesToInsert + finalWikitext.slice(insertPos);
-      changed = true;
+  existingTemplateDrivers.forEach((info, normalized) => {
+    if (!currentDriverNames.has(normalized)) {
+      const sortValue = getSortValue(info.originalValue);
+      otherDriversList.push({
+        wikiName: info.originalName,
+        valueStr: info.originalValue,
+        sortValue
+      });
     }
-  }
+  });
+
+  // 6. Sort both sections descending by sortValue, and alphabetically by wikiName as a tie-breaker
+  currentDriversList.sort((a, b) => b.sortValue - a.sortValue || a.wikiName.localeCompare(b.wikiName));
+  otherDriversList.sort((a, b) => b.sortValue - a.sortValue || a.wikiName.localeCompare(b.wikiName));
+
+  // 7. Re-assemble final wikitext
+  const headerLines = lines.slice(0, currentDriversLineIdx + 1);
+  const footerLines = lines.slice(otherDriversEndLineIdx);
+
+  const currentDriversLines = currentDriversList.map(d => formatDriverLine(d.wikiName, d.valueStr));
+  const otherDriversLines = otherDriversList.map(d => formatDriverLine(d.wikiName, d.valueStr));
+
+  const finalLines = [
+    ...headerLines,
+    ...currentDriversLines,
+    lines[otherDriversLineIdx], // The "<!-- OTHER DRIVERS -->" divider line
+    ...otherDriversLines,
+    ...footerLines
+  ];
+
+  const finalWikitext = finalLines.join('\n');
+  const changed = finalWikitext !== currentWikitext;
 
   return { wikitext: finalWikitext, changed, updates };
 }
