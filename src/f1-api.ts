@@ -115,7 +115,13 @@ export async function getSchedule(year: number): Promise<ScheduleRace[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
   const data = await res.json() as any;
-  return data.MRData.RaceTable.Races;
+  const races = data.MRData.RaceTable.Races as ScheduleRace[];
+  return races.map(race => {
+    if (race.raceName === 'Brazilian Grand Prix' && year >= 2021) {
+      return { ...race, raceName: 'São Paulo Grand Prix' };
+    }
+    return race;
+  });
 }
 
 // Fetch race results
