@@ -19,6 +19,8 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 - **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with the latest standings from the Jolpi API.
 - **Concluded Sessions Polling**: Automatically checks KV caches and conclusion status for completed Grand Prix and Sprint sessions, polling results and deploying them to wiki templates as soon as they become available.
 - **Scheduled Stats Sync**: Automatically computes and synchronizes career stats templates once a race weekend's Grand Prix results are published.
+- **Automated Infobox Updates**: Dynamically populates parameters in race infoboxes (`Infobox_Race` or `Infobox Sprint Race`) for qualifying pole, sprint standings, race winners, podium finishes, and fastest laps as sessions conclude.
+- **LLM-Powered Section Reports**: Automatically drafts and publishes factual, neutral, encyclopedia-style reports for section headings (`Background`, `Q1`, `Q2`, `Q3`, `Sprint Report`, and `Race Report`) using an LLM. Features native **Cloudflare Workers AI** (Llama 3) support with failover to **Google Gemini** or **OpenAI** APIs. Checks and safeguards sections to ensure human edits are never overwritten.
 
 ### Wiki Career Stats Tracking
 - **Cumulative Stat Compilations**: Combines 2025 career baseline data with 2026 round-by-round statistics to track cumulative progress.
@@ -84,10 +86,33 @@ f1-fandom/
 ## Getting Started
 
 1. Set up wiki authentication credentials (bot account on f1.fandom.com)
-2. Configure environment variables for wiki domain and bot password
-3. Deploy Cloudflare Worker to enable automated table generation
+2. Configure environment variables for wiki domain, bot password, and LLM configuration (`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `LLM_PROVIDER`)
+3. Deploy Cloudflare Worker to enable automated table and report generation
 4. Use the web dashboard or API endpoints to trigger updates
 5. Verify generated wikitext before publishing to wiki
+
+## Recent Updates & Changelog
+
+Here is a summary of the improvements and fixes made in recent commits:
+
+### Automated Reporting & Content Generation
+- **LLM-Powered Section Writing**: Added support for generating factual, neutral wikitext reports for GP sections (`Background`, `Q1`, `Q2`, `Q3`, `Sprint Report`, `Race Report`) using Llama 3, Google Gemini, or OpenAI with automatic fallback checks and custom edit safeguarding.
+- **Dynamic Infobox Updating**: Automatically updates pole times, podium finishers, nations, team templates, and fastest laps inside the GP article's infobox.
+
+### Stats, Standings & Caching Improvements
+- **Stats Cache Validation & Force-Refresh**: Added stats cache validation logic so cached rounds are only saved after race results are confirmed (preventing premature caching of qualifying data). Added a "Refresh Stats Cache" button to clear KV round keys and recompute.
+- **Fallback Grid Positions**: Improved race result parsing by automatically falling back to qualifying positions if grid values from the API are missing/null.
+- **Dynamic Points Formatting**: Implemented dynamic rowspans for points blanks, hiding "0" points and resolving table layout colspan issues.
+- **StatsF1 Verification**: Added verification steps to check classification results against StatsF1 and highlight mismatches in the dashboard.
+
+### Wiki Integration & Robustness
+- **Failsafe Heading Replacement**: Refactored heading detection and section replacement logic to support flexible, fuzzy spacing and levels in wikitext headings.
+- **Blank GP Page Generation**: Added worker API endpoint and frontend dashboard button to generate a clean wikitext draft for upcoming GP pages.
+- **Constructor & Track Mapping Refinements**:
+  - Mapped 'Brazilian Grand Prix' to 'São Paulo Grand Prix' (from 2021 onwards) to match wiki page titles.
+  - Mapped 'Barcelona Grand Prix' to 'Barcelona-Catalunya Grand Prix' (for the 2026 season).
+  - Updated constructors to support Revolut Audi F1 Team and Cadillac Formula 1 Team templates.
+- **CAPTCHA Stability**: Fixed Turnstile verification issues in frontend forms by adding resets in finally blocks.
 
 ---
 
