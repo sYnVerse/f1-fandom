@@ -1200,7 +1200,6 @@ export const frontendHtml = `<!DOCTYPE html>
             turnstileToken: token
           })
         });
-        resetTurnstile();
 
         if (!res.ok) throw new Error('Cloudflare block or bad F1.com practice URL.');
         
@@ -1218,6 +1217,8 @@ export const frontendHtml = `<!DOCTYPE html>
         
         // Build practice table with empty DNP cells since scraping failed
         buildDNPTestPracticeTable();
+      } finally {
+        resetTurnstile();
       }
     }
 
@@ -1235,14 +1236,17 @@ export const frontendHtml = `<!DOCTYPE html>
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ year, round, url: '', fallbackOnly: true, turnstileToken: token })
       })
-      .then(res => {
-        resetTurnstile();
+      .then(async res => {
+        if (!res.ok) throw new Error(await res.text());
         return res.json();
       })
       .then(data => {
         document.getElementById('practice-wikitext').value = data.wikitext || '';
       })
-      .catch(err => log('Failed to build empty practice table.', 'error'));
+      .catch(err => log('Failed to build empty practice table: ' + err.message, 'error'))
+      .finally(() => {
+        resetTurnstile();
+      });
     }
 
     // Parse manually pasted HTML for Practice
@@ -1272,7 +1276,6 @@ export const frontendHtml = `<!DOCTYPE html>
         })
       })
       .then(async res => {
-        resetTurnstile();
         if (!res.ok) throw new Error(await res.text());
         return res.json();
       })
@@ -1282,6 +1285,9 @@ export const frontendHtml = `<!DOCTYPE html>
       })
       .catch(e => {
         log(\`Error parsing pasted HTML: \${e.message}\`, 'error');
+      })
+      .finally(() => {
+        resetTurnstile();
       });
     }
 
@@ -1311,7 +1317,6 @@ export const frontendHtml = `<!DOCTYPE html>
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain, username, password, turnstileToken: token })
         });
-        resetTurnstile();
         
         const data = await res.json();
         
@@ -1326,6 +1331,8 @@ export const frontendHtml = `<!DOCTYPE html>
         log(\`Wiki connection failed: \${e.message}\`, 'error');
         statusDot.className = 'status-dot';
         statusText.textContent = 'Disconnected / Auth Error';
+      } finally {
+        resetTurnstile();
       }
     }
 
@@ -1397,7 +1404,6 @@ export const frontendHtml = `<!DOCTYPE html>
             turnstileToken: token
           })
         });
-        resetTurnstile();
 
         const data = await res.json();
         if (res.ok && data.success) {
@@ -1407,6 +1413,8 @@ export const frontendHtml = `<!DOCTYPE html>
         }
       } catch (e) {
         log(\`Test edit failed: \${e.message}\`, 'error');
+      } finally {
+        resetTurnstile();
       }
     }
 
@@ -1465,7 +1473,6 @@ export const frontendHtml = `<!DOCTYPE html>
             turnstileToken: token
           })
         });
-        resetTurnstile();
 
         const data = await publishRes.json();
         if (publishRes.ok && data.success) {
@@ -1476,6 +1483,8 @@ export const frontendHtml = `<!DOCTYPE html>
         }
       } catch (e) {
         log(\`Error publishing section: \${e.message}\`, 'error');
+      } finally {
+        resetTurnstile();
       }
     }
 
@@ -1524,6 +1533,8 @@ export const frontendHtml = `<!DOCTYPE html>
         }
       } catch (e) {
         log('Error deploying page: ' + e.message, 'error');
+      } finally {
+        resetTurnstile();
       }
     }
 
@@ -1857,7 +1868,6 @@ export const frontendHtml = `<!DOCTYPE html>
             turnstileToken: token
           })
         });
-        resetTurnstile();
 
         const data = await res.json();
         if (res.ok && data.success) {
@@ -1878,6 +1888,8 @@ export const frontendHtml = `<!DOCTYPE html>
       } catch (e) {
         log('Stats deployment failed: ' + e.message, 'error');
         document.getElementById('deploy-stats-btn').disabled = false;
+      } finally {
+        resetTurnstile();
       }
     }
   </script>

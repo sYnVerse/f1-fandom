@@ -213,9 +213,12 @@ export default {
         const body = await request.json() as any;
         const { year, round, url: fp1Url, pastedHtml, fallbackOnly, turnstileToken } = body;
 
-        const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
-        if (!isTokenValid) {
-          return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+        // Bypass Turnstile validation for fallback-only requests to prevent consumption race conditions
+        if (!fallbackOnly) {
+          const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
+          if (!isTokenValid) {
+            return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
+          }
         }
 
         if (!year || !round) {
