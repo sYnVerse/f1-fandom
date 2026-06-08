@@ -424,3 +424,54 @@ export function replaceSectionWikitext(fullText: string, header: string, newCont
   }
 }
 
+export function getSectionContent(fullText: string, header: string): string {
+  const cleanHeader = header.trim();
+  const match = cleanHeader.match(/^(=+)\s*(.*?)\s*(=+)$/);
+  
+  let regex: RegExp;
+  let levelNum = 2;
+  let name = cleanHeader;
+  
+  if (match) {
+    levelNum = match[1].length;
+    name = match[2].trim();
+    const escapedName = name
+      .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+      .replace(/\s+/g, '\\s+');
+    
+    regex = new RegExp(`(?:^|\\r?\\n)(?:[ \\t]*={${levelNum}}\\s*${escapedName}\\s*={${levelNum}}[ \\t]*(?:\\r?\\n|$))([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'i');
+  } else {
+    const escapedHeader = cleanHeader.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    regex = new RegExp(`(?:^|\\r?\\n)(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'i');
+  }
+
+  const result = regex.exec(fullText);
+  if (result) {
+    return match ? result[1] : result[2];
+  }
+  return "";
+}
+
+export function isSectionEmptyOrPlaceholder(sectionContent: string): boolean {
+  // Strip comments
+  let text = sectionContent.replace(/<!--[\s\S]*?-->/g, '');
+  
+  // Strip templates (e.g. {{Weather...}}, {{AvailableTyres...}}, {{Clear}})
+  text = text.replace(/\{\{[\s\S]*?\}\}/g, '');
+  
+  // Strip lists of images/videos/references placeholders
+  text = text.replace(/Images and Videos:\s*/gi, '');
+  text = text.replace(/References:\s*/gi, '');
+  text = text.replace(/<references\s*\/>/gi, '');
+  
+  // Strip whitespace
+  text = text.trim();
+  
+  // Check if remaining text is empty or common placeholders
+  if (text === "" || text.toLowerCase() === "tba" || text.toLowerCase() === "tbd") {
+    return true;
+  }
+  
+  return false;
+}
+

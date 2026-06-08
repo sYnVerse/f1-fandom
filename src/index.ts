@@ -29,7 +29,18 @@ import {
   getNationalityCode,
   getTeamTemplate
 } from './wikitext-generator';
-import { loginToWiki, getPageContent, editPage, replaceSectionWikitext } from './wiki';
+import { 
+  loginToWiki, 
+  getPageContent, 
+  editPage, 
+  replaceSectionWikitext,
+  getSectionContent,
+  isSectionEmptyOrPlaceholder
+} from './wiki';
+import { 
+  generatePromptContext, 
+  generateReportForSection 
+} from './llm-reporter';
 import { 
   get2026CumulativeStats, 
   updateTemplateContent, 
@@ -805,12 +816,13 @@ export default {
             const pageInfo = await getPageContent(domain, gpPageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
             let currentContent = '';
             let isNewPage = false;
+            let drivers: any[] = [];
 
             if (pageInfo.exists) {
               currentContent = pageInfo.content;
             } else {
               console.log(`GP page ${gpPageTitle} does not exist on the wiki. Generating a blank GP page...`);
-              const drivers = await getDriversForRaceWithFallback(year, round);
+              drivers = await getDriversForRaceWithFallback(year, round);
               const racingKey = getF1RacingKey(race.raceName);
               const officialName = await fetchOfficialRaceName(year, racingKey).catch(() => null);
               currentContent = generateBlankGPWikitext(race, drivers, officialName);
@@ -838,7 +850,8 @@ export default {
                 isRaceConcluded && round > 1 ? getDriverStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
                 isRaceConcluded ? getConstructorStandings(year, round).catch(() => []) : Promise.resolve([]),
                 isRaceConcluded && round > 1 ? getConstructorStandings(year, round - 1).catch(() => null) : Promise.resolve(null),
-                isSprintConcluded ? getRaceResult(year, round, true).catch(() => []) : Promise.resolve([])
+                isSprintConcluded ? getRaceResult(year, round, true).catch(() => []) : Promise.resolve([]),
+                getDriversForRaceWithFallback(year, round).catch(() => [])
               ]);
 
               qualiResults = fetched[0];
@@ -848,6 +861,7 @@ export default {
               currentConstructors = fetched[4];
               prevConstructors = fetched[5];
               sprintResults = fetched[6];
+              drivers = fetched[7];
 
               // Update Qualifying Results and Starting Grid
               if (qualiResults && qualiResults.length > 0) {
@@ -992,6 +1006,51 @@ export default {
                   if (infoboxChanged) {
                     updatedContent = updatedContent.slice(0, range.start) + infobox + updatedContent.slice(range.end);
                     changes.push("Infobox");
+                  }
+                }
+              }
+
+              // Generate descriptive reports using LLM
+              const reportSections = [
+                { header: "==Background==", title: "Background", check: () => true },
+                { header: "=== Q1 ===", title: "Q1", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
+                { header: "=== Q2 ===", title: "Q2", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
+                { header: "=== Q3 ===", title: "Q3", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
+                { header: "=== Sprint Report ===", title: "Sprint Report", check: () => race.Sprint && isSprintConcluded && sprintResults && sprintResults.length > 0 },
+                { header: "== Race == ", title: "Race Report", check: () => isRaceConcluded && raceResults && raceResults.length > 0 }
+              ];
+
+              let promptContext: string | null = null;
+
+              for (const sec of reportSections) {
+                if (sec.check()) {
+                  const sectionContent = getSectionContent(updatedContent, sec.header);
+                  if (isSectionEmptyOrPlaceholder(sectionContent)) {
+                    console.log(`Section ${sec.title} is empty/placeholder. Triggering LLM writer...`);
+
+                    // Lazy-build the context once
+                    if (!promptContext) {
+                      const standingsData = {
+                        driverStandings: currentDrivers,
+                        constructorStandings: currentConstructors
+                      };
+                      promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
+                    }
+
+                    try {
+                      const reportText = await generateReportForSection(env, sec.title, promptContext);
+                      if (reportText && reportText.length > 10) {
+                        const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
+                        if (replaced !== updatedContent) {
+                          updatedContent = replaced;
+                          changes.push(`${sec.title} Report`);
+                        }
+                      }
+                    } catch (err: any) {
+                      console.error(`Failed to generate report for ${sec.title}:`, err.message);
+                    }
+                  } else {
+                    console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
                   }
                 }
               }
