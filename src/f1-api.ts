@@ -120,6 +120,9 @@ export async function getSchedule(year: number): Promise<ScheduleRace[]> {
     if (race.raceName === 'Brazilian Grand Prix' && year >= 2021) {
       return { ...race, raceName: 'São Paulo Grand Prix' };
     }
+    if (race.raceName === 'Barcelona Grand Prix' && year === 2026) {
+      return { ...race, raceName: 'Barcelona-Catalunya Grand Prix' };
+    }
     return race;
   });
 }
