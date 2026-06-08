@@ -602,19 +602,37 @@ export async function calculateRoundStats(
   return roundStats;
 }
 
+// Check if round stats contain confirmed race results (at least one driver has Entries > 0)
+function hasRaceResults(stats: Record<string, Partial<DriverStats>>): boolean {
+  return Object.values(stats).some(d => (d.Entries || 0) > 0);
+}
+
 // Get or calculate round stats with Cloudflare KV caching
 export async function getRoundStatsCached(
   env: any,
   year: number,
   round: number,
-  trackLength?: number
+  trackLength?: number,
+  forceRefresh = false
 ): Promise<Record<string, Partial<DriverStats>>> {
   const kvKey = `2026_stats_round_${round}`;
-  if (env && env.F1_WIKI_STATE) {
+
+  // On force refresh, delete stale cached round data
+  if (forceRefresh && env && env.F1_WIKI_STATE) {
+    await env.F1_WIKI_STATE.delete(kvKey);
+    console.log(`Force-refreshed: deleted KV key ${kvKey}`);
+  }
+
+  if (!forceRefresh && env && env.F1_WIKI_STATE) {
     const cached = await env.F1_WIKI_STATE.get(kvKey);
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        // Validate that cached data has race results; if not, recompute
+        if (hasRaceResults(parsed)) {
+          return parsed;
+        }
+        console.warn(`Cached round ${round} stats have no race results (Entries=0). Recomputing...`);
       } catch (e) {
         console.error(`Failed to parse cached round stats: ${e}`);
       }
@@ -622,21 +640,33 @@ export async function getRoundStatsCached(
   }
 
   const computed = await calculateRoundStats(year, round, trackLength);
-  if (env && env.F1_WIKI_STATE && Object.keys(computed).length > 0) {
+  // Only cache if the data has confirmed race results (at least one driver with Entries > 0)
+  if (env && env.F1_WIKI_STATE && Object.keys(computed).length > 0 && hasRaceResults(computed)) {
     await env.F1_WIKI_STATE.put(kvKey, JSON.stringify(computed));
-    console.log(`Cached stats for Round ${round} in KV.`);
+    console.log(`Cached stats for Round ${round} in KV (race results confirmed).`);
+  } else if (Object.keys(computed).length > 0 && !hasRaceResults(computed)) {
+    console.warn(`Round ${round} stats not cached: no race results yet (only qualifying/sprint data).`);
   }
   return computed;
 }
 
 // Get cumulative 2026 stats up to a specific round
-export async function get2026CumulativeStats(env: any, upToRound: number): Promise<Record<string, DriverStats>> {
+export async function get2026CumulativeStats(env: any, upToRound: number, forceRefresh = false): Promise<Record<string, DriverStats>> {
   if (upToRound <= 0) return {};
 
   const targetKey = `2026_cumulative_stats_up_to_${upToRound}`;
 
+  // On force refresh, delete all cumulative and round KV keys up to this round
+  if (forceRefresh && env && env.F1_WIKI_STATE) {
+    console.log(`Force refresh: clearing cached stats for rounds 1-${upToRound}...`);
+    for (let r = 1; r <= upToRound; r++) {
+      await env.F1_WIKI_STATE.delete(`2026_stats_round_${r}`).catch(() => {});
+      await env.F1_WIKI_STATE.delete(`2026_cumulative_stats_up_to_${r}`).catch(() => {});
+    }
+  }
+
   // 1. Try to get cumulative stats for target round directly
-  if (env && env.F1_WIKI_STATE) {
+  if (!forceRefresh && env && env.F1_WIKI_STATE) {
     const cached = await env.F1_WIKI_STATE.get(targetKey);
     if (cached) {
       try {
@@ -651,7 +681,7 @@ export async function get2026CumulativeStats(env: any, upToRound: number): Promi
   let cumulative: Record<string, DriverStats> = {};
   let startRound = 1;
 
-  if (upToRound > 1) {
+  if (!forceRefresh && upToRound > 1) {
     const prevKey = `2026_cumulative_stats_up_to_${upToRound - 1}`;
     if (env && env.F1_WIKI_STATE) {
       const cachedPrev = await env.F1_WIKI_STATE.get(prevKey);
@@ -690,7 +720,7 @@ export async function get2026CumulativeStats(env: any, upToRound: number): Promi
     const circuitId = raceInfo?.Circuit?.circuitId;
     const trackLength = circuitId ? (CIRCUIT_LENGTHS[circuitId] || 0) : 0;
 
-    const roundData = await getRoundStatsCached(env, 2026, r, trackLength).catch(() => ({}));
+    const roundData = await getRoundStatsCached(env, 2026, r, trackLength, forceRefresh).catch(() => ({}));
     Object.entries(roundData).forEach(([driverId, stats]) => {
       initDriver(driverId);
       Object.entries(stats).forEach(([statKey, value]) => {

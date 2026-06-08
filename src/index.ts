@@ -355,14 +355,15 @@ export default {
         if (!roundStr) return corsResponse({ error: 'Round parameter required' }, 400);
         
         const round = parseInt(roundStr, 10);
+        const forceRefresh = url.searchParams.get('refresh') === 'true';
         const domain = _env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
         
         try {
-          console.log(`Calculating cumulative stats up to round ${round}...`);
+          console.log(`Calculating cumulative stats up to round ${round}${forceRefresh ? ' (FORCE REFRESH)' : ''}...`);
           
           // Run Jolpi API fetch, StatsF1 classification fetch, schedule fetch, and cumulative stats calculation concurrently
           const [cumulativeStats, jolpiResults, statsF1Results, schedule] = await Promise.all([
-            get2026CumulativeStats(_env, round),
+            get2026CumulativeStats(_env, round, forceRefresh),
             getRaceResult(2026, round, false).catch(() => []),
             getStatsF1Results(round).catch(() => null),
             getSchedule(2026).catch(() => [])

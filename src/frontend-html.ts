@@ -785,8 +785,9 @@ export const frontendHtml = `<!DOCTYPE html>
             <div class="fallback-box">
               <h3>F1 Career Stats Subtemplates</h3>
               <p>Preview and publish career stats subtemplates under <code>Category:Subtemplates of Template:Stats</code>. The calculations compile 2026 season stats up to the selected round and merge them with 2025 career base values.</p>
-              <div style="display: flex; gap: 10px;">
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn btn-secondary" onclick="previewStatsUpdates()" style="width: auto;">Preview Stats Updates</button>
+                <button class="btn btn-secondary" onclick="previewStatsUpdates(true)" style="width: auto; border-color: #e67e22; color: #e67e22;" title="Clears cached stats from KV and recomputes from the Jolpi F1 API">⟳ Refresh Stats Cache</button>
                 <button class="btn btn-primary" id="deploy-stats-btn" onclick="deployStatsUpdates()" style="width: auto;" disabled>Deploy Stats Templates</button>
               </div>
             </div>
@@ -1528,7 +1529,7 @@ export const frontendHtml = `<!DOCTYPE html>
 
     let statsPreviewData = [];
 
-    async function previewStatsUpdates() {
+    async function previewStatsUpdates(forceRefresh) {
       const year = document.getElementById('season-year').value;
       const dropdown = document.getElementById('race-round');
       const round = dropdown.value;
@@ -1543,12 +1544,16 @@ export const frontendHtml = `<!DOCTYPE html>
         return;
       }
 
-      log('Fetching stats preview up to Round ' + round + '...', 'info');
+      if (forceRefresh) {
+        log('Force-refreshing stats cache for rounds 1-' + round + '...', 'warning');
+      }
+      log('Fetching stats preview up to Round ' + round + (forceRefresh ? ' (cache refresh)' : '') + '...', 'info');
       const container = document.getElementById('stats-preview-container');
-      container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">Calculating and comparison-checking 21 templates...</div>';
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted);">' + (forceRefresh ? 'Clearing cached stats and recalculating' : 'Calculating and comparison-checking') + ' 21 templates...</div>';
       
       try {
-        const res = await fetch('/api/stats-preview?round=' + round);
+        const refreshParam = forceRefresh ? '&refresh=true' : '';
+        const res = await fetch('/api/stats-preview?round=' + round + refreshParam);
         if (!res.ok) throw new Error('API returned error: ' + res.statusText);
         
         const data = await res.json();
