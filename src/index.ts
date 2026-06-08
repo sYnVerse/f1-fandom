@@ -25,7 +25,9 @@ import {
   formatMobileDate,
   generateCareerPointsWikitext,
   generateCareerPositionWikitext,
-  generateCareerTeamPositionWikitext
+  generateCareerTeamPositionWikitext,
+  getNationalityCode,
+  getTeamTemplate
 } from './wikitext-generator';
 import { loginToWiki, getPageContent, editPage, replaceSectionWikitext } from './wiki';
 import { 
@@ -903,6 +905,96 @@ export default {
                   changes.push("Championship Standings");
                 }
               }
+
+              // Update Infobox
+              const infoboxUpdates: Record<string, string> = {};
+
+              if (qualiResults && qualiResults.length > 0) {
+                const poleSitter = qualiResults[0];
+                if (poleSitter) {
+                  const poleName = `${poleSitter.driver.givenName} ${poleSitter.driver.familyName}`;
+                  const poleNation = getNationalityCode(poleSitter.driver.nationality);
+                  const poleTeam = getTeamTemplate(poleSitter.constructor.constructorId, poleSitter.constructor.name);
+                  const poleTime = poleSitter.Q3 || poleSitter.Q2 || poleSitter.Q1 || "";
+
+                  infoboxUpdates["pole"] = poleName;
+                  infoboxUpdates["polenation"] = poleNation;
+                  infoboxUpdates["poleteam"] = poleTeam;
+                  if (poleTime) {
+                    infoboxUpdates["poletime"] = poleTime;
+                  }
+                }
+              }
+
+              if (race.Sprint && sprintResults && sprintResults.length > 0) {
+                const sprintWinner = sprintResults.find(r => r.position === "1");
+                const sprintSecond = sprintResults.find(r => r.position === "2");
+                const sprintThird = sprintResults.find(r => r.position === "3");
+                const sprintPole = sprintResults.find(r => r.grid === "1");
+
+                if (sprintWinner) {
+                  infoboxUpdates["sprintwinner"] = `${sprintWinner.driver.givenName} ${sprintWinner.driver.familyName}`;
+                }
+                if (sprintSecond) {
+                  infoboxUpdates["sprintsecond"] = `${sprintSecond.driver.givenName} ${sprintSecond.driver.familyName}`;
+                }
+                if (sprintThird) {
+                  infoboxUpdates["sprintthird"] = `${sprintThird.driver.givenName} ${sprintThird.driver.familyName}`;
+                }
+                if (sprintPole) {
+                  infoboxUpdates["sprintpole"] = `${sprintPole.driver.givenName} ${sprintPole.driver.familyName}`;
+                  infoboxUpdates["sprintpoleteam"] = getTeamTemplate(sprintPole.constructor.constructorId, sprintPole.constructor.name);
+                }
+              }
+
+              if (raceResults && raceResults.length > 0) {
+                const winner = raceResults.find(r => r.position === "1");
+                const second = raceResults.find(r => r.position === "2");
+                const third = raceResults.find(r => r.position === "3");
+                const flDriver = raceResults.find(r => r.FastestLap && r.FastestLap.rank === "1");
+
+                if (winner) {
+                  infoboxUpdates["winner"] = `${winner.driver.givenName} ${winner.driver.familyName}`;
+                  infoboxUpdates["winnernation"] = getNationalityCode(winner.driver.nationality);
+                  infoboxUpdates["winnerteam"] = getTeamTemplate(winner.constructor.constructorId, winner.constructor.name);
+                }
+                if (second) {
+                  infoboxUpdates["second"] = `${second.driver.givenName} ${second.driver.familyName}`;
+                  infoboxUpdates["secondnation"] = getNationalityCode(second.driver.nationality);
+                  infoboxUpdates["secondteam"] = getTeamTemplate(second.constructor.constructorId, second.constructor.name);
+                }
+                if (third) {
+                  infoboxUpdates["third"] = `${third.driver.givenName} ${third.driver.familyName}`;
+                  infoboxUpdates["thirdnation"] = getNationalityCode(third.driver.nationality);
+                  infoboxUpdates["thirdteam"] = getTeamTemplate(third.constructor.constructorId, third.constructor.name);
+                }
+                if (flDriver && flDriver.FastestLap) {
+                  infoboxUpdates["fastestlapdriver"] = `${flDriver.driver.givenName} ${flDriver.driver.familyName}`;
+                  infoboxUpdates["fastestlapnation"] = getNationalityCode(flDriver.driver.nationality);
+                  infoboxUpdates["fastestlapteam"] = getTeamTemplate(flDriver.constructor.constructorId, flDriver.constructor.name);
+                  infoboxUpdates["fastestlap"] = flDriver.FastestLap.Time.time;
+                  infoboxUpdates["fastestlapnumber"] = flDriver.FastestLap.lap;
+                }
+              }
+
+              if (Object.keys(infoboxUpdates).length > 0) {
+                const range = findInfoboxRange(updatedContent);
+                if (range) {
+                  let infobox = range.content;
+                  let infoboxChanged = false;
+                  for (const [key, val] of Object.entries(infoboxUpdates)) {
+                    const updatedInfobox = updateParameterInInfobox(infobox, key, val);
+                    if (updatedInfobox !== infobox) {
+                      infobox = updatedInfobox;
+                      infoboxChanged = true;
+                    }
+                  }
+                  if (infoboxChanged) {
+                    updatedContent = updatedContent.slice(0, range.start) + infobox + updatedContent.slice(range.end);
+                    changes.push("Infobox");
+                  }
+                }
+              }
             }
 
             // If there are changes, or if it is a new page, save/create the GP page
@@ -945,6 +1037,49 @@ export default {
 };
 
 // --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
+
+export function findInfoboxRange(wikitext: string): { start: number; end: number; content: string } | null {
+  const match = wikitext.match(/\{\{\s*Infobox[ _][a-zA-Z_]+/);
+  if (!match || match.index === undefined) return null;
+
+  const start = match.index;
+  let braceCount = 0;
+  let end = -1;
+
+  for (let i = start; i < wikitext.length; i++) {
+    if (wikitext[i] === '{' && wikitext[i + 1] === '{') {
+      braceCount++;
+      i++; // skip next brace
+    } else if (wikitext[i] === '}' && wikitext[i + 1] === '}') {
+      braceCount--;
+      i++; // skip next brace
+      if (braceCount === 0) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (end === -1) return null;
+  return { start, end, content: wikitext.slice(start, end) };
+}
+
+export function updateParameterInInfobox(infobox: string, key: string, value: string): string {
+  // Check if parameter exists in the infobox
+  const regex = new RegExp(`(\\|\\s*${key}\\s*=\\s*)(.*?)(?=\\r?\\n\\s*\\|\\s*[a-zA-Z0-9_]+\\s*=|\\r?\\n\\s*\\}\\})`, 's');
+  if (regex.test(infobox)) {
+    // Parameter exists, replace its value
+    return infobox.replace(regex, `$1${value}`);
+  } else {
+    // Parameter does not exist, append it before the closing }}
+    const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/);
+    if (closingMatch) {
+      const closing = closingMatch[0];
+      return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
+    }
+  }
+  return infobox;
+}
 
 export function findBestHeader(fullText: string, options: string[], defaultHeader: string): string {
   for (const opt of options) {

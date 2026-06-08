@@ -39,6 +39,12 @@ export function getFlag(nationality: string): string {
   return FLAGS[nationality] || "{{NoFlag}}";
 }
 
+export function getNationalityCode(nationality: string): string {
+  const flagTemplate = FLAGS[nationality] || "";
+  const match = flagTemplate.match(/\{\{([A-Z]{3})\}\}/);
+  return match ? match[1] : "";
+}
+
 const CONSTRUCTORS: Record<string, string> = {
   "mercedes": "{{GER}} {{Mercedes-CON}}",
   "red_bull": "{{AUT}} {{Red Bull-CON}}",
