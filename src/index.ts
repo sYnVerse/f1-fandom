@@ -1125,16 +1125,25 @@ export function findInfoboxRange(wikitext: string): { start: number; end: number
 
 export function updateParameterInInfobox(infobox: string, key: string, value: string): string {
   // Check if parameter exists in the infobox
-  const regex = new RegExp(`(\\|\\s*${key}\\s*=\\s*)(.*?)(?=\\r?\\n\\s*\\|\\s*[a-zA-Z0-9_]+\\s*=|\\r?\\n\\s*\\}\\})`, 's');
+  const regex = new RegExp(`(\\|[ \\t]*${key}[ \\t]*=[ \\t]*)(.*?)(?=\\s*\\|[ \\t]*[a-zA-Z0-9_]+[ \\t]*=|\\s*\\}\\})`, 's');
   if (regex.test(infobox)) {
     // Parameter exists, replace its value
     return infobox.replace(regex, `$1${value}`);
   } else {
     // Parameter does not exist, append it before the closing }}
-    const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/);
-    if (closingMatch) {
-      const closing = closingMatch[0];
-      return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
+    const isMultiLine = infobox.includes('\n');
+    if (isMultiLine) {
+      const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/) || infobox.match(/\s*\}\}\s*$/);
+      if (closingMatch) {
+        const closing = closingMatch[0];
+        return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
+      }
+    } else {
+      const closingMatch = infobox.match(/\s*\}\}\s*$/);
+      if (closingMatch) {
+        const closing = closingMatch[0];
+        return infobox.replace(closing, `|${key}=${value}${closing}`);
+      }
     }
   }
   return infobox;
