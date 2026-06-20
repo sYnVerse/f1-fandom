@@ -4,7 +4,19 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "production"
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
   - package-ecosystem: "pip"
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    allow:
+      - dependency-type: "production"
+    groups:
+      production-dependencies:
+        patterns:
+          - "*"
