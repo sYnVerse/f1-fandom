@@ -116,6 +116,9 @@ export async function getSchedule(year: number): Promise<ScheduleRace[]> {
   if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
   const data = await res.json() as any;
   const races = data.MRData.RaceTable.Races as ScheduleRace[];
+  if (!races || races.length === 0) {
+    throw new Error(`Ergast API returned no races for ${year}`);
+  }
   return races.map(race => {
     if (race.raceName === 'Brazilian Grand Prix' && year >= 2021) {
       return { ...race, raceName: 'São Paulo Grand Prix' };
@@ -125,6 +128,27 @@ export async function getSchedule(year: number): Promise<ScheduleRace[]> {
     }
     return race;
   });
+}
+
+export async function getScheduleWithRetry(
+  year: number,
+  attempts = 3,
+  delayMs = 1000
+): Promise<ScheduleRace[]> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await getSchedule(year);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        const backoff = delayMs * attempt;
+        console.warn(`getSchedule(${year}) attempt ${attempt} failed, retrying in ${backoff}ms...`, error);
+        await new Promise(resolve => setTimeout(resolve, backoff));
+      }
+    }
+  }
+  throw lastError;
 }
 
 // Fetch race results

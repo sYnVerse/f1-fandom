@@ -1,6 +1,7 @@
 import { frontendHtml } from './frontend-html';
 import { 
-  getSchedule, 
+  getSchedule,
+  getScheduleWithRetry,
   getRaceResult, 
   getQualifyingResult, 
   getDriverStandings, 
@@ -1430,6 +1431,8 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
   }
 }
 
+const ACTIVE_SEASON = 2026;
+
 async function syncLatestNewsEvents(env: any, getSession: () => Promise<any>): Promise<void> {
   const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
   const apiEndpoint = env.WIKI_API_ENDPOINT;
@@ -1438,13 +1441,26 @@ async function syncLatestNewsEvents(env: any, getSession: () => Promise<any>): P
   console.log("Starting latest news events sync...");
 
   try {
-    const currentYear = new Date().getFullYear();
-    console.log(`Fetching schedules for ${currentYear - 1}, ${currentYear}, and ${currentYear + 1}...`);
-    
-    const [prevSchedule, currentSchedule, nextSchedule] = await Promise.all([
-      getSchedule(currentYear - 1).catch(() => []),
-      getSchedule(currentYear).catch(() => []),
-      getSchedule(currentYear + 1).catch(() => [])
+    const seasonYear = ACTIVE_SEASON;
+    console.log(`Fetching schedules for ${seasonYear - 1}, ${seasonYear}, and ${seasonYear + 1}...`);
+
+    let currentSchedule: Awaited<ReturnType<typeof getSchedule>> = [];
+    try {
+      currentSchedule = await getScheduleWithRetry(seasonYear);
+    } catch (error) {
+      console.error(`Failed to load ${seasonYear} schedule after retries. Skipping events sync to avoid stale data.`, error);
+      return;
+    }
+
+    const [prevSchedule, nextSchedule] = await Promise.all([
+      getSchedule(seasonYear - 1).catch((error) => {
+        console.warn(`Failed to load ${seasonYear - 1} schedule (non-fatal):`, error);
+        return [];
+      }),
+      getSchedule(seasonYear + 1).catch((error) => {
+        console.warn(`Failed to load ${seasonYear + 1} schedule (non-fatal):`, error);
+        return [];
+      })
     ]);
 
     const mergedSchedule = [...prevSchedule, ...currentSchedule, ...nextSchedule];
@@ -1494,6 +1510,20 @@ async function syncLatestNewsEvents(env: any, getSession: () => Promise<any>): P
     }
 
     const isLatestOngoing = ongoingEvents.length > 0;
+
+    const hasConcludedCurrentSeasonRace = events.some(
+      e => String(e.year) === String(seasonYear) && e.endTime < now
+    );
+    if (
+      hasConcludedCurrentSeasonRace &&
+      latestEvent &&
+      Number(latestEvent.year) < seasonYear
+    ) {
+      console.error(
+        `Sanity check failed: ${seasonYear} has concluded races but latest event resolved to ${latestEvent.year} ${latestEvent.fullName}. Skipping edit to avoid reverting to stale data.`
+      );
+      return;
+    }
 
     console.log("Calculated events:", {
       previous: previousEvent ? `${previousEvent.year} ${previousEvent.fullName}` : 'None',
