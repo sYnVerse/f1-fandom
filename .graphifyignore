@@ -1,2 +1,10 @@
 node_modules/
 dist/
+.cursor/
+.claude/
+CLAUDE.md
+.github/
+scratch/
+scripts/
+__pycache__/
+wrangler/
