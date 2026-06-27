@@ -1,4 +1,12 @@
-import { getRaceResult, getQualifyingResult, getSchedule, RaceResult } from './f1-api';
+import {
+  getRaceResult,
+  getQualifyingResult,
+  getSchedule,
+  getLapChart,
+  RaceResult,
+  F1ApiContext,
+  ScheduleRace,
+} from './f1-api';
 
 export const CIRCUIT_LENGTHS: Record<string, number> = {
   "albert_park": 5.278,
@@ -428,17 +436,18 @@ export function normalizeName(name: string): string {
 export async function calculateRoundStats(
   year: number,
   round: number,
-  trackLengthParam?: number
+  trackLengthParam?: number,
+  ctx?: F1ApiContext
 ): Promise<Record<string, Partial<DriverStats>>> {
   console.log(`Calculating stats for ${year} Round ${round}...`);
 
   let trackLength = trackLengthParam;
-  const raceResultsPromise = getRaceResult(year, round, false).catch(() => []);
-  const qualiResultsPromise = getQualifyingResult(year, round).catch(() => []);
+  const raceResultsPromise = getRaceResult(year, round, false, ctx).catch(() => []);
+  const qualiResultsPromise = getQualifyingResult(year, round, ctx).catch(() => []);
 
-  let schedulePromise: Promise<any[]> = Promise.resolve([]);
+  let schedulePromise: Promise<ScheduleRace[]> = Promise.resolve([]);
   if (trackLength === undefined) {
-    schedulePromise = getSchedule(year).catch(() => []);
+    schedulePromise = getSchedule(year, ctx).catch(() => []);
   }
 
   const [raceResults, qualiResults, schedule] = await Promise.all([
@@ -455,7 +464,7 @@ export async function calculateRoundStats(
 
   let sprintResults: RaceResult[] = [];
   try {
-    sprintResults = await getRaceResult(year, round, true);
+    sprintResults = await getRaceResult(year, round, true, ctx);
   } catch (e) {
     // No sprint
   }
@@ -464,17 +473,11 @@ export async function calculateRoundStats(
   let lapsLedMap: Record<string, number> = {};
   if (raceResults.length > 0) {
     try {
-      const lapsUrl = `https://api.jolpi.ca/ergast/f1/${year}/${round}/laps.json?limit=2000`;
-      const lapsRes = await fetch(lapsUrl);
-      if (lapsRes.ok) {
-        const lapsData = await lapsRes.json() as any;
-        const races = lapsData?.MRData?.RaceTable?.Races || lapsData?.MRData?.LapsTable?.Races || [];
-        const laps = races[0]?.Laps || [];
-        for (const lap of laps) {
-          const leader = lap.Timings[0]?.driverId;
-          if (leader) {
-            lapsLedMap[leader] = (lapsLedMap[leader] || 0) + 1;
-          }
+      const laps = await getLapChart(year, round, ctx);
+      for (const lap of laps) {
+        const leader = lap.Timings[0]?.driverId;
+        if (leader) {
+          lapsLedMap[leader] = (lapsLedMap[leader] || 0) + 1;
         }
       }
     } catch (e) {
@@ -613,7 +616,8 @@ export async function getRoundStatsCached(
   year: number,
   round: number,
   trackLength?: number,
-  forceRefresh = false
+  forceRefresh = false,
+  ctx?: F1ApiContext
 ): Promise<Record<string, Partial<DriverStats>>> {
   const kvKey = `2026_stats_round_${round}`;
 
@@ -639,7 +643,7 @@ export async function getRoundStatsCached(
     }
   }
 
-  const computed = await calculateRoundStats(year, round, trackLength);
+  const computed = await calculateRoundStats(year, round, trackLength, ctx);
   // Only cache if the data has confirmed race results (at least one driver with Entries > 0)
   if (env && env.F1_WIKI_STATE && Object.keys(computed).length > 0 && hasRaceResults(computed)) {
     await env.F1_WIKI_STATE.put(kvKey, JSON.stringify(computed));
@@ -651,7 +655,13 @@ export async function getRoundStatsCached(
 }
 
 // Get cumulative 2026 stats up to a specific round
-export async function get2026CumulativeStats(env: any, upToRound: number, forceRefresh = false): Promise<Record<string, DriverStats>> {
+export async function get2026CumulativeStats(
+  env: any,
+  upToRound: number,
+  forceRefresh = false,
+  ctx?: F1ApiContext,
+  schedule?: ScheduleRace[]
+): Promise<Record<string, DriverStats>> {
   if (upToRound <= 0) return {};
 
   const targetKey = `2026_cumulative_stats_up_to_${upToRound}`;
@@ -708,19 +718,19 @@ export async function get2026CumulativeStats(env: any, upToRound: number, forceR
     }
   };
 
-  // Fetch schedule once if we have rounds to calculate
-  let schedule: any[] = [];
-  if (startRound <= upToRound) {
-    schedule = await getSchedule(2026).catch(() => []);
+  // Fetch schedule once if we have rounds to calculate (reuse caller-provided schedule when available)
+  let seasonSchedule: ScheduleRace[] = schedule ?? [];
+  if (startRound <= upToRound && seasonSchedule.length === 0) {
+    seasonSchedule = await getSchedule(2026, ctx).catch(() => []);
   }
 
   // Calculate remaining rounds
   for (let r = startRound; r <= upToRound; r++) {
-    const raceInfo = schedule.find(x => parseInt(x.round, 10) === r);
+    const raceInfo = seasonSchedule.find(x => parseInt(x.round, 10) === r);
     const circuitId = raceInfo?.Circuit?.circuitId;
     const trackLength = circuitId ? (CIRCUIT_LENGTHS[circuitId] || 0) : 0;
 
-    const roundData = await getRoundStatsCached(env, 2026, r, trackLength, forceRefresh).catch(() => ({}));
+    const roundData = await getRoundStatsCached(env, 2026, r, trackLength, forceRefresh, ctx).catch(() => ({}));
     Object.entries(roundData).forEach(([driverId, stats]) => {
       initDriver(driverId);
       Object.entries(stats).forEach(([statKey, value]) => {
