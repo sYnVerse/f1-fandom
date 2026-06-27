@@ -5,7 +5,9 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "build": "tsc --noEmit",
+    "test": "npm run build && npx tsx scripts/verify-sync-kv.ts && npx tsx scripts/verify-wikitext-parse.ts && npx tsx scripts/verify-infobox-update.ts && npx tsx scripts/verify-jolpica-cache.ts && npx tsx scripts/verify-practice-sessions.ts && npx tsx scripts/verify-llm-reporter.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240320.0",
