@@ -6,9 +6,10 @@ export function splitLines(text: string): string[] {
 
 export function parseWikiHeading(line: string): { level: number; name: string } | null {
   const trimmed = line.trim();
-  const equalsPrefix = trimmed.match(/^(=+)/);
-  if (!equalsPrefix) return null;
-  const level = equalsPrefix[1].length;
+  let level = 0;
+  while (level < trimmed.length && trimmed[level] === '=') {
+    level++;
+  }
   if (level < 2) return null;
   const suffix = '='.repeat(level);
   if (!trimmed.endsWith(suffix)) return null;
@@ -22,17 +23,16 @@ export function isWikiHeadingLine(line: string): boolean {
 }
 
 export function sectionHeadingMatches(line: string, header: string): boolean {
-  const cleanHeader = header.trim();
-  const headerParts = cleanHeader.match(/^(=+)\s*(.*?)\s*\1$/);
-  if (headerParts) {
+  const parsedHeader = parseWikiHeading(header.trim());
+  if (parsedHeader) {
     const parsed = parseWikiHeading(line);
     if (!parsed) return false;
     return (
-      parsed.level === headerParts[1].length &&
-      parsed.name.toLowerCase() === headerParts[2].trim().toLowerCase()
+      parsed.level === parsedHeader.level &&
+      parsed.name.toLowerCase() === parsedHeader.name.toLowerCase()
     );
   }
-  return line.trim() === cleanHeader;
+  return line.trim() === header.trim();
 }
 
 export interface SectionRange {
@@ -128,15 +128,18 @@ export function parsePipeParamLine(line: string): {
   value: string;
   suffix: string;
 } | null {
-  const prefixMatch = line.match(/^(\s*\|\s*)/);
-  if (!prefixMatch) return null;
+  let start = 0;
+  while (start < line.length && (line[start] === ' ' || line[start] === '\t')) start++;
+  if (line[start] !== '|') return null;
+  let prefixEnd = start + 1;
+  while (prefixEnd < line.length && (line[prefixEnd] === ' ' || line[prefixEnd] === '\t')) prefixEnd++;
+  const prefix = line.slice(start, prefixEnd);
 
-  const prefix = prefixMatch[1];
-  const eqIndex = line.indexOf('=', prefix.length);
+  const eqIndex = line.indexOf('=', prefixEnd);
   if (eqIndex === -1) return null;
 
-  const name = line.slice(prefix.length, eqIndex).trim();
-  const nameStart = line.indexOf(name, prefix.length);
+  const name = line.slice(prefixEnd, eqIndex).trim();
+  const nameStart = line.indexOf(name, prefixEnd);
   if (nameStart === -1) return null;
 
   const separator = line.slice(nameStart + name.length, eqIndex + 1);
