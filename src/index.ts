@@ -1012,6 +1012,11 @@ export default {
                   let infobox = range.content;
                   let infoboxChanged = false;
                   for (const [key, val] of Object.entries(infoboxUpdates)) {
+                    const currentValue = getInfoboxParameterValue(infobox, key);
+                    if (!isInfoboxParameterEmpty(currentValue)) {
+                      console.log(`  Infobox |${key}| already set (${currentValue}). Skipping to preserve existing value.`);
+                      continue;
+                    }
                     const updatedInfobox = updateParameterInInfobox(infobox, key, val);
                     if (updatedInfobox !== infobox) {
                       infobox = updatedInfobox;
@@ -1138,29 +1143,65 @@ export function findInfoboxRange(wikitext: string): { start: number; end: number
   return { start, end, content: wikitext.slice(start, end) };
 }
 
-export function updateParameterInInfobox(infobox: string, key: string, value: string): string {
-  // Check if parameter exists in the infobox
-  const regex = new RegExp(`(\\|[ \\t]*${key}[ \\t]*=[ \\t]*)(.*?)(?=\\s*\\|[ \\t]*[a-zA-Z0-9_]+[ \\t]*=|\\s*\\}\\})`, 's');
-  if (regex.test(infobox)) {
-    // Parameter exists, replace its value
-    return infobox.replace(regex, `$1${value}`);
-  } else {
-    // Parameter does not exist, append it before the closing }}
-    const isMultiLine = infobox.includes('\n');
-    if (isMultiLine) {
-      const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/) || infobox.match(/\s*\}\}\s*$/);
-      if (closingMatch) {
-        const closing = closingMatch[0];
-        return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
-      }
-    } else {
-      const closingMatch = infobox.match(/\s*\}\}\s*$/);
-      if (closingMatch) {
-        const closing = closingMatch[0];
-        return infobox.replace(closing, `|${key}=${value}${closing}`);
-      }
+function parseInfoboxParamLine(line: string): { name: string; eqIndex: number } | null {
+  const pipeIndex = line.indexOf('|');
+  if (pipeIndex === -1) return null;
+  const eqIndex = line.indexOf('=', pipeIndex);
+  if (eqIndex === -1) return null;
+  const name = line.slice(pipeIndex + 1, eqIndex).trim();
+  return { name, eqIndex };
+}
+
+function findInfoboxParamLineIndex(lines: string[], key: string): number {
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = parseInfoboxParamLine(lines[i]);
+    if (parsed && parsed.name === key) return i;
+  }
+  return -1;
+}
+
+export function getInfoboxParameterValue(infobox: string, key: string): string | null {
+  const lines = infobox.split(/\r?\n/);
+  for (const line of lines) {
+    const parsed = parseInfoboxParamLine(line);
+    if (parsed && parsed.name === key) {
+      return line.slice(parsed.eqIndex + 1).trim();
     }
   }
+  return null;
+}
+
+export function isInfoboxParameterEmpty(value: string | null): boolean {
+  if (value === null) return true;
+  return value.trim().length === 0;
+}
+
+export function updateParameterInInfobox(infobox: string, key: string, value: string): string {
+  const lines = infobox.split(/\r?\n/);
+  const lineIndex = findInfoboxParamLineIndex(lines, key);
+
+  if (lineIndex >= 0) {
+    const line = lines[lineIndex];
+    const parsed = parseInfoboxParamLine(line);
+    if (parsed) {
+      lines[lineIndex] = line.slice(0, parsed.eqIndex + 1) + ' ' + value;
+      return lines.join('\n');
+    }
+  }
+
+  // Parameter does not exist — insert before the closing }}
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() === '}}') {
+      lines.splice(i, 0, `| ${key} = ${value}`);
+      return lines.join('\n');
+    }
+  }
+
+  const closingIndex = infobox.lastIndexOf('}}');
+  if (closingIndex !== -1) {
+    return infobox.slice(0, closingIndex) + `|${key}=${value}` + infobox.slice(closingIndex);
+  }
+
   return infobox;
 }
 
