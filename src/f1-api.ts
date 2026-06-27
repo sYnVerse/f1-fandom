@@ -91,6 +91,22 @@ export interface ScheduleRace {
   };
   date: string;
   time?: string;
+  FirstPractice?: {
+    date: string;
+    time?: string;
+  };
+  SecondPractice?: {
+    date: string;
+    time?: string;
+  };
+  ThirdPractice?: {
+    date: string;
+    time?: string;
+  };
+  Qualifying?: {
+    date: string;
+    time?: string;
+  };
   Sprint?: {
     date: string;
     time?: string;
@@ -483,6 +499,30 @@ export function getF1RacingKey(raceName: string): string {
     }
   }
   return nameLower.replace(" grand prix", "").trim().replace(/\s+/g, "-");
+}
+
+/** Slug used in F1.com results URLs (e.g. austrian-grand-prix). */
+export function getF1RaceNameSlug(raceName: string): string {
+  return raceName.toLowerCase().replace(/\s+/g, '-');
+}
+
+/** Dynamic F1.com race ID for 2026 season (2-ID gap after Round 3). */
+export function getF1comRaceId(year: number, round: number): string {
+  if (year === 2026) {
+    return round <= 3 ? String(1278 + round) : String(1280 + round);
+  }
+  return String(1278 + round);
+}
+
+export function buildPracticeSessionUrl(
+  year: number,
+  round: number,
+  raceName: string,
+  session: 1 | 2 | 3
+): string {
+  const raceId = getF1comRaceId(year, round);
+  const raceSlug = getF1RaceNameSlug(raceName);
+  return `https://www.formula1.com/en/results/${year}/races/${raceId}/${raceSlug}/practice/${session}`;
 }
 
 function cleanOfficialName(name: string): string {

@@ -559,16 +559,60 @@ export function generatePracticeWikitext(
   qualiResults: QualifyingResult[] | null,
   fp1: Record<string, PracticeSessionData> | null,
   fp2: Record<string, PracticeSessionData> | null,
-  fp3: Record<string, PracticeSessionData> | null
+  fp3: Record<string, PracticeSessionData> | null,
+  options?: { hasSprint?: boolean }
 ): string {
-  // Sort drivers by permanent number
-  const sortedDrivers = [...drivers].sort((a, b) => {
-    const numA = parseInt(a.permanentNumber || '0', 10);
-    const numB = parseInt(b.permanentNumber || '0', 10);
+  const hasSprint = options?.hasSprint ?? false;
+
+  const mainDriverKeys = new Set<string>();
+  for (const driver of drivers) {
+    mainDriverKeys.add(driver.driverId.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
+  }
+
+  const isMainDriver = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    const clean = lower.replace(/[\s'-]/g, '');
+    return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
+  };
+
+  const collectTestDrivers = (
+    sessionData: Record<string, PracticeSessionData> | null
+  ): PracticeSessionData[] => {
+    if (!sessionData) return [];
+    const seen = new Set<string>();
+    const testDrivers: PracticeSessionData[] = [];
+    for (const data of Object.values(sessionData)) {
+      if (isMainDriver(data.driverName)) continue;
+      const key = data.driverName.toLowerCase().replace(/[\s'-]/g, '');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      testDrivers.push(data);
+    }
+    return testDrivers.sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+  };
+
+  const testDriverRows = [
+    ...collectTestDrivers(fp1),
+    ...collectTestDrivers(hasSprint ? null : fp2),
+    ...collectTestDrivers(hasSprint ? null : fp3),
+  ].filter((td, idx, arr) => {
+    const key = td.driverName.toLowerCase().replace(/[\s'-]/g, '');
+    return arr.findIndex(x => x.driverName.toLowerCase().replace(/[\s'-]/g, '') === key) === idx;
+  });
+
+  const tableDrivers: Array<Driver | PracticeSessionData> = [...drivers];
+  for (const td of testDriverRows) {
+    tableDrivers.push(td);
+  }
+
+  const sortedDrivers = [...tableDrivers].sort((a, b) => {
+    const numA = parseInt(('permanentNumber' in a ? a.permanentNumber : a.number) || '0', 10);
+    const numB = parseInt(('permanentNumber' in b ? b.permanentNumber : b.number) || '0', 10);
     return numA - numB;
   });
 
-  // Helper to map driver ID to constructor template
   const driverToConstructorTemplate: Record<string, string> = {};
   if (qualiResults) {
     qualiResults.forEach(q => {
@@ -576,12 +620,10 @@ export function generatePracticeWikitext(
     });
   }
 
-  // Find fastest absolute times for each session to convert differentials
   const findFastestTime = (sessionData: Record<string, PracticeSessionData> | null): string | null => {
     if (!sessionData) return null;
     let fastestTime: string | null = null;
 
-    // Look for P1 position first
     for (const data of Object.values(sessionData)) {
       if (data.position === '1') {
         fastestTime = data.time;
@@ -589,7 +631,6 @@ export function generatePracticeWikitext(
       }
     }
 
-    // Fallback search
     if (!fastestTime) {
       for (const data of Object.values(sessionData)) {
         const t = data.time;
@@ -608,43 +649,63 @@ export function generatePracticeWikitext(
   const fp2Fastest = findFastestTime(fp2);
   const fp3Fastest = findFastestTime(fp3);
 
+  const colspan = hasSprint ? 8 : 14;
+
   let output = `===Practice Results===
 The full practice results for the '''{{PAGENAME}}''' are outlined below:
 
 {| class="hidden wikitable sortable" style="width:100%"
-! rowspan="2" |<span style="cursor:help;" title="Car number">No.</span>!! rowspan="2" class="unsortable" |Driver!! rowspan="2" class="unsortable" |Team!! colspan="2" class="unsortable" |FP1 !! colspan="2" class="unsortable" |FP2 !! colspan="2" class="unsortable" |FP3
-|-
-!Time!!Pos!!Time!!Pos!!Time!!Pos`;
+! rowspan="2" |<span style="cursor:help;" title="Car number">No.</span>!! rowspan="2" class="unsortable" |Driver!! rowspan="2" class="unsortable" |Team!! colspan="2" class="unsortable" |FP1`;
 
-  for (const driver of sortedDrivers) {
-    const num = driver.permanentNumber || '0';
-    const name = `${driver.givenName} ${driver.familyName}`;
-    const flag = getFlag(driver.nationality);
-    const team = driverToConstructorTemplate[driver.driverId] || '{{Team-Placeholder}}';
+  if (!hasSprint) {
+    output += ' !! colspan="2" class="unsortable" |FP2 !! colspan="2" class="unsortable" |FP3';
+  }
+
+  output += `
+|-
+!Time!!Pos`;
+
+  if (!hasSprint) {
+    output += '!!Time!!Pos!!Time!!Pos';
+  }
+
+  for (const entry of sortedDrivers) {
+    const isTestDriver = 'driverName' in entry;
+    const num = isTestDriver ? entry.number : (entry.permanentNumber || '0');
+    const name = isTestDriver ? entry.driverName : `${entry.givenName} ${entry.familyName}`;
+    const flag = isTestDriver
+      ? (lookupTestDriverNationality(name) ? getFlag(lookupTestDriverNationality(name)!) : '{{FIA}}')
+      : getFlag(entry.nationality);
+
+    let team: string;
+    if (isTestDriver) {
+      const constructorId = teamNameToConstructorId(entry.teamName);
+      team = constructorId
+        ? (getTeamEntryDetails(constructorId)?.constructor || getTeamTemplate(constructorId, entry.teamName))
+        : `{{${entry.teamName}-CON}}`;
+    } else {
+      team = driverToConstructorTemplate[entry.driverId] || '{{Team-Placeholder}}';
+    }
 
     output += '\n|-';
     output += `\n! ${num}`;
     output += `\n| ${flag} [[${name}]]`;
     output += `\n| ${team}`;
 
-    // Render session cells helper
     const renderSessionCells = (
       sessionData: Record<string, PracticeSessionData> | null,
-      fastestTime: string | null
+      fastestTime: string | null,
+      driverName: string
     ): string => {
       if (!sessionData) {
         return '\n| colspan="2" align=center | {{abbr|DNP|Did Not Participate}}';
       }
 
-      // Try different matching styles (name, driver ID, lowercase, stripped)
       let matchedData: PracticeSessionData | null = null;
-      
       const checkKeys = [
-        name,
-        `${driver.givenName}${driver.familyName}`,
-        driver.driverId,
-        `${driver.givenName} ${driver.familyName}`
-      ].map(k => k.toLowerCase().replace(/[\s'-]/g, ''));
+        driverName,
+        driverName.replace(/[\s'-]/g, ''),
+      ].map(k => k.toLowerCase());
 
       for (const [k, d] of Object.entries(sessionData)) {
         const cleanK = k.toLowerCase().replace(/[\s'-]/g, '');
@@ -670,14 +731,22 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
       return '\n| colspan="2" align=center | {{abbr|DNP|Did Not Participate}}';
     };
 
-    output += renderSessionCells(fp1, fp1Fastest);
-    output += renderSessionCells(fp2, fp2Fastest);
-    output += renderSessionCells(fp3, fp3Fastest);
+    output += renderSessionCells(fp1, fp1Fastest, name);
+    if (!hasSprint) {
+      output += renderSessionCells(fp2, fp2Fastest, name);
+      output += renderSessionCells(fp3, fp3Fastest, name);
+    }
   }
 
-  output += `\n|-
-! colspan="14" style="text-align:center" |'''Source:''' <ref name="P1">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_1_classification.pdf {{PAGENAME}} - FP1 Classification] (PDF). Fédération Internationale de l'Automobile.</ref><ref name="P2">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_2_classification.pdf {{PAGENAME}} - FP2 Classification] (PDF). Fédération Internationale de l'Automobile.</ref><ref name="P3">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_3_classification.pdf {{PAGENAME}} - FP3 Classification] (PDF). Fédération Internationale de l'Automobile.</ref>
+  if (hasSprint) {
+    output += `\n|-
+! colspan="${colspan}" style="text-align:center" |'''Source:''' <ref name="P1">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_1_classification.pdf {{PAGENAME}} - FP1 Classification] (PDF). Fédération Internationale de l'Automobile.</ref>
 |}`;
+  } else {
+    output += `\n|-
+! colspan="${colspan}" style="text-align:center" |'''Source:''' <ref name="P1">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_1_classification.pdf {{PAGENAME}} - FP1 Classification] (PDF). Fédération Internationale de l'Automobile.</ref><ref name="P2">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_2_classification.pdf {{PAGENAME}} - FP2 Classification] (PDF). Fédération Internationale de l'Automobile.</ref><ref name="P3">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_3_classification.pdf {{PAGENAME}} - FP3 Classification] (PDF). Fédération Internationale de l'Automobile.</ref>
+|}`;
+  }
 
   return output;
 }
@@ -737,7 +806,7 @@ const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
   "perez": "cadillac"
 };
 
-interface TeamEntryDetails {
+export interface TeamEntryDetails {
   entrant: string;
   constructor: string;
   chassis: string;
@@ -844,6 +913,184 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
     tyre: "{{Pirelli}}"
   }
 };
+
+export function getTeamEntryDetails(constructorId: string): TeamEntryDetails | null {
+  return TEAM_DETAILS_2026[constructorId] || null;
+}
+
+const TEAM_NAME_TO_CONSTRUCTOR: Record<string, string> = {
+  'mclaren': 'mclaren',
+  'ferrari': 'ferrari',
+  'mercedes': 'mercedes',
+  'red bull': 'red_bull',
+  'red bull racing': 'red_bull',
+  'alpine': 'alpine',
+  'williams': 'williams',
+  'haas': 'haas',
+  'haas f1 team': 'haas',
+  'aston martin': 'aston_martin',
+  'sauber': 'sauber',
+  'audi': 'audi',
+  'racing bulls': 'rb',
+  'visa cash app racing bulls': 'rb',
+  'cadillac': 'cadillac',
+};
+
+export function teamNameToConstructorId(teamName: string): string | null {
+  const key = teamName.toLowerCase().trim();
+  if (TEAM_NAME_TO_CONSTRUCTOR[key]) {
+    return TEAM_NAME_TO_CONSTRUCTOR[key];
+  }
+  for (const [name, id] of Object.entries(TEAM_NAME_TO_CONSTRUCTOR)) {
+    if (key.includes(name) || name.includes(key)) {
+      return id;
+    }
+  }
+  return null;
+}
+
+const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
+  'patricio o\'ward': 'Mexican',
+  'patricio oward': 'Mexican',
+  'felipe drugovich': 'Brazilian',
+  'isack hadjar': 'French',
+  'arvid lindblad': 'British',
+  'gabriel bortoleto': 'Brazilian',
+  'franco colapinto': 'Argentine',
+  'andrea kimi antonelli': 'Italian',
+  'liam lawson': 'New Zealander',
+};
+
+export function lookupTestDriverNationality(driverName: string): string | null {
+  const key = driverName.toLowerCase().replace(/[\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (TEST_DRIVER_NATIONALITIES[key]) {
+    return TEST_DRIVER_NATIONALITIES[key];
+  }
+  for (const [name, nationality] of Object.entries(TEST_DRIVER_NATIONALITIES)) {
+    const normalized = name.replace(/[\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (key.includes(normalized) || normalized.includes(key)) {
+      return nationality;
+    }
+  }
+  return null;
+}
+
+export interface TestDriverEntry {
+  number: string;
+  name: string;
+  flag: string;
+  constructorId: string;
+}
+
+export function detectTestDriversFromFp1(
+  mainDrivers: Driver[],
+  fp1: Record<string, PracticeSessionData> | null
+): TestDriverEntry[] {
+  if (!fp1 || Object.keys(fp1).length === 0) return [];
+
+  const mainDriverKeys = new Set<string>();
+  for (const driver of mainDrivers) {
+    mainDriverKeys.add(driver.driverId.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
+  }
+
+  const testDrivers: TestDriverEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const data of Object.values(fp1)) {
+    const name = data.driverName;
+    const cleanName = name.toLowerCase().replace(/[\s'-]/g, '');
+    if (mainDriverKeys.has(name.toLowerCase()) || mainDriverKeys.has(cleanName)) {
+      continue;
+    }
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const constructorId = teamNameToConstructorId(data.teamName) || '';
+    const nationality = lookupTestDriverNationality(name);
+    const flag = nationality ? getFlag(nationality) : '{{FIA}}';
+
+    testDrivers.push({
+      number: data.number,
+      name,
+      flag,
+      constructorId,
+    });
+  }
+
+  return testDrivers.sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+}
+
+const ENTRY_LIST_HEADING_VARIANTS = [
+  '==Entry List==',
+  '== Entry List ==',
+  '===Entry List===',
+  '=== Entry List ===',
+];
+
+export function findEntryListHeadingIndex(wikitext: string): number {
+  let bestIndex = -1;
+  for (const variant of ENTRY_LIST_HEADING_VARIANTS) {
+    const idx = wikitext.indexOf(variant);
+    if (idx !== -1 && (bestIndex === -1 || idx < bestIndex)) {
+      bestIndex = idx;
+    }
+  }
+  return bestIndex;
+}
+
+export function addTestDriversToEntryList(wikitext: string, testDrivers: TestDriverEntry[]): string {
+  if (testDrivers.length === 0) return wikitext;
+
+  const headingIndex = findEntryListHeadingIndex(wikitext);
+  if (headingIndex === -1) return wikitext;
+
+  const afterHeading = wikitext.slice(headingIndex);
+  const newDrivers = testDrivers.filter(td => {
+    const nameLower = td.name.toLowerCase();
+    return !afterHeading.toLowerCase().includes(`[[${nameLower}]]`) &&
+      !afterHeading.toLowerCase().includes(td.name.toLowerCase());
+  });
+
+  if (newDrivers.length === 0) return wikitext;
+
+  const sourceMarkers = [
+    '! colspan="8" align="center" |\'\'\'Source\'\'\'',
+    '! colspan="8" | Source:',
+    '! colspan="8" align="center" |Source',
+  ];
+
+  let insertIndex = -1;
+  for (const marker of sourceMarkers) {
+    const idx = afterHeading.indexOf(marker);
+    if (idx !== -1) {
+      insertIndex = headingIndex + idx;
+      break;
+    }
+  }
+
+  if (insertIndex === -1) {
+    const closeIdx = afterHeading.indexOf('|}');
+    if (closeIdx === -1) return wikitext;
+    insertIndex = headingIndex + closeIdx;
+  }
+
+  let rows = '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+  for (const td of newDrivers) {
+    const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
+    const entrant = team ? team.entrant : '';
+    const constructor = team ? team.constructor : '';
+    const chassis = team ? team.chassis : '';
+    const engine = team ? team.engine : '';
+    const model = team ? team.model : '';
+    const tyre = team ? team.tyre : '{{Pirelli}}';
+
+    rows += `\n|-\n!${td.number}\n|${td.flag} [[${td.name}]]\n|${entrant}\n|${constructor}\n|${chassis}\n|${engine}\n|${model}\n|${tyre}`;
+  }
+
+  return wikitext.slice(0, insertIndex) + rows + '\n' + wikitext.slice(insertIndex);
+}
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

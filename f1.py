@@ -277,36 +277,39 @@ def scrape_f1_practice_data(year, race, custom_race_id=None, custom_race_name=No
                 
                 print(f"Found race: {race_info['raceName']} at {circuit_id}")
                 
-                # Race ID mapping based on F1.com URL structure
-                race_id_mapping = {
-                    'hungaroring': '1266',  # Hungarian GP
-                    'silverstone': '1267',  # British GP
-                    'monaco': '1268',       # Monaco GP
-                    'spa': '1269',          # Belgian GP
-                    'monza': '1270',        # Italian GP
-                    'red_bull_ring': '1271', # Austrian GP
-                    'catalunya': '1272',    # Spanish GP
-                    'villeneuve': '1273',   # Canadian GP
-                    'miami': '1274',        # Miami GP
-                    'imola': '1275',        # Emilia-Romagna GP
-                    'marina_bay': '1276',   # Singapore GP
-                    'suzuka': '1277',       # Japanese GP
-                    'losail': '1278',       # Qatar GP
-                    'cota': '1279',         # United States GP
-                    'rodriguez': '1280',    # Mexican GP
-                    'interlagos': '1281',   # Brazilian GP
-                    'vegas': '1282',        # Las Vegas GP
-                    'yas_marina': '1283',   # Abu Dhabi GP
-                    'jeddah': '1284',       # Saudi Arabian GP
-                    'albert_park': '1285',  # Australian GP
-                    'shanghai': '1286',     # Chinese GP
-                    'baku': '1287',         # Azerbaijan GP
-                    'zandvoort': '1288',    # Dutch GP
-                }
-                
-                race_id = race_id_mapping.get(circuit_id, '1266')  # Default to Hungarian GP ID
-                
-                print(f"Using race ID: {race_id} for circuit: {circuit_id}")
+                if year == 2026:
+                    race_id = str(1278 + race) if race <= 3 else str(1280 + race)
+                    print(f"Using dynamic 2026 race ID: {race_id} for round {race}")
+                else:
+                    # Race ID mapping based on F1.com URL structure
+                    race_id_mapping = {
+                        'hungaroring': '1266',  # Hungarian GP
+                        'silverstone': '1267',  # British GP
+                        'monaco': '1268',       # Monaco GP
+                        'spa': '1269',          # Belgian GP
+                        'monza': '1270',        # Italian GP
+                        'red_bull_ring': '1271', # Austrian GP
+                        'catalunya': '1272',    # Spanish GP
+                        'villeneuve': '1273',   # Canadian GP
+                        'miami': '1274',        # Miami GP
+                        'imola': '1275',        # Emilia-Romagna GP
+                        'marina_bay': '1276',   # Singapore GP
+                        'suzuka': '1277',       # Japanese GP
+                        'losail': '1278',       # Qatar GP
+                        'cota': '1279',         # United States GP
+                        'rodriguez': '1280',    # Mexican GP
+                        'interlagos': '1281',   # Brazilian GP
+                        'vegas': '1282',        # Las Vegas GP
+                        'yas_marina': '1283',   # Abu Dhabi GP
+                        'jeddah': '1284',       # Saudi Arabian GP
+                        'albert_park': '1285',  # Australian GP
+                        'shanghai': '1286',     # Chinese GP
+                        'baku': '1287',         # Azerbaijan GP
+                        'zandvoort': '1288',    # Dutch GP
+                    }
+                    
+                    race_id = race_id_mapping.get(circuit_id, '1266')  # Default to Hungarian GP ID
+                    print(f"Using race ID: {race_id} for circuit: {circuit_id}")
                 
             else:
                 print(f"Race {race} not found in {year} season")
