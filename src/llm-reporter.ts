@@ -183,12 +183,22 @@ function scoreArticleRelevance(slug: string, sessionName: string): number {
   return score;
 }
 
+function stripHtmlTags(input: string): string {
+  let prev: string;
+  let result = input;
+  do {
+    prev = result;
+    result = result.replace(/<[^>]*>/g, '');
+  } while (result !== prev);
+  return result.replace(/</g, '').replace(/>/g, '');
+}
+
 function extractArticleText(html: string): string {
   const paragraphs: string[] = [];
   const pRegex = /<p[^>]*class="[^"]*f1-paragraph[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
   let match;
   while ((match = pRegex.exec(html)) !== null) {
-    const text = match[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    const text = stripHtmlTags(match[1]).replace(/\s+/g, ' ').trim();
     if (text.length > 20) paragraphs.push(text);
   }
 
@@ -199,7 +209,7 @@ function extractArticleText(html: string): string {
       const genericPRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
       let pMatch;
       while ((pMatch = genericPRegex.exec(articleMatch[1])) !== null) {
-        const text = pMatch[1].replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const text = stripHtmlTags(pMatch[1]).replace(/\s+/g, ' ').trim();
         if (text.length > 20) paragraphs.push(text);
       }
     }
