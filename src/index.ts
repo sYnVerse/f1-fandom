@@ -12,10 +12,12 @@ import {
   mapDriverNames,
   fetchOfficialRaceName,
   getF1RacingKey,
+  buildPracticeSessionUrl,
   createF1ApiContext,
   fetchRoundJolpicaData,
   F1ApiContext,
   ScheduleRace,
+  PracticeSessionData,
 } from './f1-api';
 import { 
   generateGridWikitext, 
@@ -32,7 +34,10 @@ import {
   generateCareerPositionWikitext,
   generateCareerTeamPositionWikitext,
   getNationalityCode,
-  getTeamTemplate
+  getTeamTemplate,
+  addTestDriversToEntryList,
+  detectTestDriversFromFp1,
+  lookupTestDriverNationality,
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -44,7 +49,8 @@ import {
 } from './wiki';
 import { 
   generatePromptContext, 
-  generateReportForSection 
+  generateReportForSection,
+  appendKvWarning,
 } from './llm-reporter';
 import { 
   get2026CumulativeStats, 
@@ -694,6 +700,13 @@ export default {
         }
         const isQualiConcluded = now >= qualiEndTime;
 
+        const fp1EndTime = getPracticeEndTime(race.FirstPractice);
+        const fp2EndTime = getPracticeEndTime(race.SecondPractice);
+        const fp3EndTime = getPracticeEndTime(race.ThirdPractice);
+        const isFp1Concluded = fp1EndTime ? now >= fp1EndTime : false;
+        const isFp2Concluded = fp2EndTime ? now >= fp2EndTime : false;
+        const isFp3Concluded = fp3EndTime ? now >= fp3EndTime : false;
+
         let sprintEndTime: Date | null = null;
         let isSprintConcluded = false;
         if (race.Sprint) {
@@ -715,6 +728,9 @@ export default {
           isQualiConcluded,
           isSprintConcluded,
           isRaceConcluded,
+          isFp1Concluded,
+          isFp2Concluded,
+          isFp3Concluded,
         };
 
         const [
@@ -765,7 +781,14 @@ export default {
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
         const needStandings = needGpPage && isRaceConcluded;
-        const needDrivers = needGpPage && (isQualiConcluded || isSprintConcluded || isRaceConcluded);
+        const needDrivers = needGpPage && (
+          isQualiConcluded ||
+          isSprintConcluded ||
+          isRaceConcluded ||
+          isFp1Concluded ||
+          isFp2Concluded ||
+          isFp3Concluded
+        );
 
         let qualiResults: any[] = [];
         let gpResults: any[] = [];
@@ -917,6 +940,156 @@ export default {
             let updatedContent = currentContent;
             let changes: string[] = [];
             const raceResults = gpResults;
+            const racingKey = getF1RacingKey(race.raceName);
+
+            const needFp1 = needGpPage && isFp1Concluded;
+            const needFp2 = needGpPage && !race.Sprint && isFp2Concluded;
+            const needFp3 = needGpPage && !race.Sprint && isFp3Concluded;
+            const needPracticeScrape = needFp1 || needFp2 || needFp3;
+
+            let fp1Results: Record<string, PracticeSessionData> | null = null;
+            let fp2Results: Record<string, PracticeSessionData> | null = null;
+            let fp3Results: Record<string, PracticeSessionData> | null = null;
+
+            if (needPracticeScrape) {
+              if (drivers.length === 0) {
+                drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
+              }
+
+              const [fp1, fp2, fp3] = await Promise.all([
+                needFp1
+                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 1), drivers).catch(() => null)
+                  : Promise.resolve(null),
+                needFp2
+                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 2), drivers).catch(() => null)
+                  : Promise.resolve(null),
+                needFp3
+                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 3), drivers).catch(() => null)
+                  : Promise.resolve(null),
+              ]);
+
+              fp1Results = fp1;
+              fp2Results = fp2;
+              fp3Results = fp3;
+
+              const hasAnyPracticeData =
+                (fp1Results && Object.keys(fp1Results).length > 0) ||
+                (fp2Results && Object.keys(fp2Results).length > 0) ||
+                (fp3Results && Object.keys(fp3Results).length > 0);
+
+              if (hasAnyPracticeData) {
+                const practiceWikitext = generatePracticeWikitext(
+                  drivers,
+                  qualiResults.length > 0 ? qualiResults : null,
+                  fp1Results,
+                  fp2Results,
+                  fp3Results,
+                  { hasSprint: !!race.Sprint }
+                );
+
+                const bestPracticeHeader = findBestHeader(
+                  updatedContent,
+                  [
+                    "=== Practice Results ===",
+                    "==== Practice Results ====",
+                    "===Practice Results===",
+                  ],
+                  "=== Practice Results ==="
+                );
+
+                const newPracticeContent = replaceSectionWikitext(updatedContent, bestPracticeHeader, practiceWikitext);
+                if (newPracticeContent !== updatedContent) {
+                  updatedContent = newPracticeContent;
+                  changes.push("Practice Results");
+                }
+
+                if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0 && !isGpPageSectionSynced('practice_results_fp1')) {
+                  await markGpPageSectionSynced('practice_results_fp1');
+                }
+                if (needFp2 && fp2Results && Object.keys(fp2Results).length > 0 && !isGpPageSectionSynced('practice_results_fp2')) {
+                  await markGpPageSectionSynced('practice_results_fp2');
+                }
+                if (needFp3 && fp3Results && Object.keys(fp3Results).length > 0 && !isGpPageSectionSynced('practice_results_fp3')) {
+                  await markGpPageSectionSynced('practice_results_fp3');
+                }
+              }
+
+              if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0) {
+                const testDrivers = detectTestDriversFromFp1(drivers, fp1Results);
+                if (testDrivers.length > 0) {
+                  for (const td of testDrivers) {
+                    if (!lookupTestDriverNationality(td.name)) {
+                      await appendKvWarning(
+                        env.F1_WIKI_STATE,
+                        'missing_test_driver_flags',
+                        `Unknown nationality for test driver ${td.name} (Round ${round} ${raceName})`
+                      );
+                    }
+                  }
+                  const withTestDrivers = addTestDriversToEntryList(updatedContent, testDrivers);
+                  if (withTestDrivers !== updatedContent) {
+                    updatedContent = withTestDrivers;
+                    changes.push("Entry List (Test Drivers)");
+                  }
+                }
+              }
+
+              const fpReportSections: Array<{
+                header: string;
+                title: string;
+                section: GpPageSection;
+                sessionName: string;
+                results: Record<string, PracticeSessionData> | null;
+                required: boolean;
+              }> = [
+                { header: "=== FP1 ===", title: "FP1", section: 'fp1_report', sessionName: 'FP1', results: fp1Results, required: needFp1 },
+                { header: "=== FP2 ===", title: "FP2", section: 'fp2_report', sessionName: 'FP2', results: fp2Results, required: needFp2 },
+                { header: "=== FP3 ===", title: "FP3", section: 'fp3_report', sessionName: 'FP3', results: fp3Results, required: needFp3 },
+              ];
+
+              let practicePromptContext: string | null = null;
+
+              for (const sec of fpReportSections) {
+                if (!sec.required || isGpPageSectionSynced(sec.section)) continue;
+                if (!sec.results || Object.keys(sec.results).length === 0) continue;
+
+                const sectionContent = getSectionContent(updatedContent, sec.header);
+                if (!isSectionEmptyOrPlaceholder(sectionContent)) {
+                  await markGpPageSectionSynced(sec.section);
+                  continue;
+                }
+
+                if (!practicePromptContext) {
+                  practicePromptContext = generatePromptContext(
+                    race,
+                    drivers,
+                    { driverStandings: currentDrivers, constructorStandings: currentConstructors },
+                    qualiResults,
+                    sprintResults,
+                    raceResults,
+                    { fp1: fp1Results, fp2: fp2Results, fp3: fp3Results }
+                  );
+                }
+
+                try {
+                  const reportText = await generateReportForSection(env, sec.title, practicePromptContext, {
+                    year,
+                    racingKey,
+                    sessionName: sec.sessionName,
+                  });
+                  if (reportText && reportText.length > 10) {
+                    const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
+                    if (replaced !== updatedContent) {
+                      updatedContent = replaced;
+                      changes.push(`${sec.title} Report`);
+                    }
+                    await markGpPageSectionSynced(sec.section);
+                  }
+                } catch (err: any) {
+                  console.error(`Failed to generate report for ${sec.title}:`, err.message);
+                }
+              }
+            }
 
             if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
               if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
@@ -1170,6 +1343,12 @@ export default {
 };
 
 // --- HELPER FUNCTIONS FOR SCHEDULED SYNC ---
+
+function getPracticeEndTime(practice?: { date: string; time?: string }): Date | null {
+  if (!practice?.date) return null;
+  const start = new Date(`${practice.date}T${practice.time || "00:00:00Z"}`);
+  return new Date(start.getTime() + 60 * 60 * 1000);
+}
 
 export function findInfoboxRange(wikitext: string): { start: number; end: number; content: string } | null {
   const match = wikitext.match(/\{\{\s*Infobox[ _][a-zA-Z_]+/);
@@ -1436,6 +1615,30 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
         `;
       }
 
+      const rawFlagWarnings = await kv.get('missing_test_driver_flags');
+      const flagWarnings: string[] = rawFlagWarnings ? JSON.parse(rawFlagWarnings) : [];
+      let flagWarningSection = '';
+      if (flagWarnings.length > 0) {
+        flagWarningSection = `
+          <h3 style="margin: 24px 0 12px 0; color: #d97706; font-size: 16px; font-weight: 600;">Warnings (Unknown Test Driver Flags)</h3>
+          <ul style="margin: 0; padding-left: 20px; color: #92400e; font-size: 13px;">
+            ${flagWarnings.map(w => `<li style="margin-bottom: 6px;">${w}</li>`).join('')}
+          </ul>
+        `;
+      }
+
+      const rawCrawlerWarnings = await kv.get('f1_crawler_failures');
+      const crawlerWarnings: string[] = rawCrawlerWarnings ? JSON.parse(rawCrawlerWarnings) : [];
+      let crawlerWarningSection = '';
+      if (crawlerWarnings.length > 0) {
+        crawlerWarningSection = `
+          <h3 style="margin: 24px 0 12px 0; color: #d97706; font-size: 16px; font-weight: 600;">Warnings (F1.com Crawler Failures)</h3>
+          <ul style="margin: 0; padding-left: 20px; color: #92400e; font-size: 13px;">
+            ${crawlerWarnings.map(w => `<li style="margin-bottom: 6px;">${w}</li>`).join('')}
+          </ul>
+        `;
+      }
+
       const emailHtml = `
         <!DOCTYPE html>
         <html>
@@ -1481,6 +1684,8 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
 
                 <!-- Details Section -->
                 ${failedSection}
+                ${flagWarningSection}
+                ${crawlerWarningSection}
               </td>
             </tr>
             <!-- Footer -->
@@ -1511,11 +1716,11 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
 
       if (mailRes.ok) {
         console.log("Daily summary email sent successfully!");
-        // Update KV state to mark today as completed
         await kv.put(lastSentKey, pacificDateStr);
-        // Clear logs for the next day
         await kv.delete(logsKey);
-        console.log("Cleared API call logs in KV.");
+        await kv.delete('missing_test_driver_flags');
+        await kv.delete('f1_crawler_failures');
+        console.log("Cleared API call logs and warning keys in KV.");
       } else {
         console.error(`Failed to send daily summary email: ${mailRes.status} ${await mailRes.text()}`);
       }

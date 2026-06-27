@@ -46,6 +46,9 @@ const timing = {
   isQualiConcluded: true,
   isSprintConcluded: true,
   isRaceConcluded: true,
+  isFp1Concluded: true,
+  isFp2Concluded: true,
+  isFp3Concluded: true,
 };
 
 assert(gpPageSectionRequired('sprint_results', timing), 'Sprint results required on sprint weekend');
@@ -65,6 +68,12 @@ const allSynced = allRequiredGpPageSectionsSynced(
     q3_report: true,
     sprint_report: true,
     race_report: true,
+    practice_results_fp1: true,
+    practice_results_fp2: true,
+    practice_results_fp3: true,
+    fp1_report: true,
+    fp2_report: true,
+    fp3_report: true,
   },
   timing
 );

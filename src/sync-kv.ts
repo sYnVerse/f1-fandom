@@ -15,7 +15,13 @@ export type GpPageSection =
   | 'q2_report'
   | 'q3_report'
   | 'sprint_report'
-  | 'race_report';
+  | 'race_report'
+  | 'practice_results_fp1'
+  | 'practice_results_fp2'
+  | 'practice_results_fp3'
+  | 'fp1_report'
+  | 'fp2_report'
+  | 'fp3_report';
 
 export type CareerStandingsPage = 'points' | 'position' | 'team_position';
 
@@ -78,6 +84,12 @@ export const GP_PAGE_SECTIONS: GpPageSection[] = [
   'q3_report',
   'sprint_report',
   'race_report',
+  'practice_results_fp1',
+  'practice_results_fp2',
+  'practice_results_fp3',
+  'fp1_report',
+  'fp2_report',
+  'fp3_report',
 ];
 
 export async function isKvSynced(kv: any, key: string, legacyKeys: string[] = []): Promise<boolean> {
@@ -115,9 +127,20 @@ export function gpPageSectionRequired(
     isQualiConcluded: boolean;
     isSprintConcluded: boolean;
     isRaceConcluded: boolean;
+    isFp1Concluded: boolean;
+    isFp2Concluded: boolean;
+    isFp3Concluded: boolean;
   }
 ): boolean {
-  const { hasSprint, isQualiConcluded, isSprintConcluded, isRaceConcluded } = options;
+  const {
+    hasSprint,
+    isQualiConcluded,
+    isSprintConcluded,
+    isRaceConcluded,
+    isFp1Concluded,
+    isFp2Concluded,
+    isFp3Concluded,
+  } = options;
   switch (section) {
     case 'qualifying':
     case 'grid':
@@ -134,6 +157,15 @@ export function gpPageSectionRequired(
     case 'background_report':
     case 'race_report':
       return isRaceConcluded;
+    case 'practice_results_fp1':
+    case 'fp1_report':
+      return isFp1Concluded;
+    case 'practice_results_fp2':
+    case 'fp2_report':
+      return !hasSprint && isFp2Concluded;
+    case 'practice_results_fp3':
+    case 'fp3_report':
+      return !hasSprint && isFp3Concluded;
     default:
       return false;
   }
@@ -146,6 +178,9 @@ export function allRequiredGpPageSectionsSynced(
     isQualiConcluded: boolean;
     isSprintConcluded: boolean;
     isRaceConcluded: boolean;
+    isFp1Concluded: boolean;
+    isFp2Concluded: boolean;
+    isFp3Concluded: boolean;
   }
 ): boolean {
   return GP_PAGE_SECTIONS.every(
