@@ -53,6 +53,22 @@ import {
   driverIdToWikiName 
 } from './stats';
 import { getStatsF1Results, verifyResults } from './statsf1';
+import {
+  gpCareerTemplateKey,
+  sprintCareerTemplateKey,
+  statsTemplateKey,
+  gpPageSectionKey,
+  latestNewsEventsKey,
+  careerStandingsKey,
+  legacySprintUpdatedKey,
+  isKvSynced,
+  markKvSynced,
+  getGpPageSectionSyncState,
+  allRequiredGpPageSectionsSynced,
+  allStatsTemplatesSynced,
+  CareerStandingsPage,
+  GpPageSection,
+} from './sync-kv';
 
 // CORS response helper
 function corsResponse(body: string | object, status = 200, headers: Record<string, string> = {}): Response {
@@ -691,28 +707,59 @@ export default {
         const isRaceConcluded = now >= raceEndTime;
         const gpSessionCompleted = now >= raceEndTime;
 
-        const gpKey = `2026_round_${round}_gp_updated`;
-        const sprintKey = `2026_round_${round}_sprint_updated`;
-        const statsKey = `2026_round_${round}_stats_synced`;
+        const gpCareerKey = gpCareerTemplateKey(round);
+        const sprintCareerKey = sprintCareerTemplateKey(round);
+        const isFinalRound = round === schedule.length;
+        const pageTiming = {
+          hasSprint: !!race.Sprint,
+          isQualiConcluded,
+          isSprintConcluded,
+          isRaceConcluded,
+        };
 
-        const [gpUpdatedInKV, sprintUpdatedInKV, statsUpdatedInKV] = env.F1_WIKI_STATE
+        const [
+          gpCareerTemplateSynced,
+          sprintCareerTemplateSynced,
+          statsTemplatesSynced,
+          gpPageSectionState,
+        ] = env.F1_WIKI_STATE
           ? await Promise.all([
-              env.F1_WIKI_STATE.get(gpKey).then((v: string | null) => v === 'true'),
-              env.F1_WIKI_STATE.get(sprintKey).then((v: string | null) => v === 'true'),
-              env.F1_WIKI_STATE.get(statsKey).then((v: string | null) => v === 'true'),
+              isKvSynced(env.F1_WIKI_STATE, gpCareerKey),
+              isKvSynced(env.F1_WIKI_STATE, sprintCareerKey, [legacySprintUpdatedKey(round)]),
+              allStatsTemplatesSynced(env.F1_WIKI_STATE, round, {
+                isSprintWeekend: !!race.Sprint,
+                isFinalRound,
+              }),
+              getGpPageSectionSyncState(env.F1_WIKI_STATE, round),
             ])
-          : [false, false, false];
+          : [false, false, false, {} as Record<GpPageSection, boolean>];
 
-        const sprintFullyHandled = !race.Sprint || sprintUpdatedInKV || !isSprintConcluded;
-        if (gpUpdatedInKV && statsUpdatedInKV && sprintFullyHandled) {
+        const gpPageFullySynced = allRequiredGpPageSectionsSynced(gpPageSectionState, pageTiming);
+
+        const sprintFullyHandled = !race.Sprint || sprintCareerTemplateSynced || !isSprintConcluded;
+        const roundFullySynced =
+          (!gpSessionCompleted || gpCareerTemplateSynced) &&
+          sprintFullyHandled &&
+          (!isRaceConcluded || statsTemplatesSynced) &&
+          gpPageFullySynced;
+
+        if (roundFullySynced) {
           console.log(`Round ${round} (${raceName}) fully synced in KV. Skipping all Jolpica fetches.`);
           continue;
         }
 
-        const needGpCareerTemplate = gpSessionCompleted && !gpUpdatedInKV;
-        const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintUpdatedInKV;
-        const needStats = isRaceConcluded && !statsUpdatedInKV;
-        const needGpPage = !gpUpdatedInKV;
+        const needGpCareerTemplate = gpSessionCompleted && !gpCareerTemplateSynced;
+        const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
+        const needStats = isRaceConcluded && !statsTemplatesSynced;
+        const needGpPage = !gpPageFullySynced;
+
+        const markGpPageSectionSynced = async (section: GpPageSection) => {
+          gpPageSectionState[section] = true;
+          await markKvSynced(env.F1_WIKI_STATE, gpPageSectionKey(round, section));
+        };
+
+        const isGpPageSectionSynced = (section: GpPageSection): boolean =>
+          gpPageSectionState[section] === true;
 
         const needQuali = needGpPage && isQualiConcluded;
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
@@ -754,8 +801,8 @@ export default {
         }
 
         // --- 1. Smart Check for Grand Prix Career Results template ---
-        if (gpUpdatedInKV) {
-          console.log(`Round ${round} GP (${raceName}) already updated (KV cache). Skipping.`);
+        if (gpCareerTemplateSynced) {
+          console.log(`Round ${round} GP career template (${raceName}) already synced (KV cache). Skipping.`);
         } else if (!gpSessionCompleted) {
           console.log(`Round ${round} GP (${raceName}) not completed yet (ends: ${raceEndTime.toISOString()}). Skipping.`);
         } else if (gpResults.length > 0) {
@@ -777,8 +824,10 @@ export default {
             const wikitext = generateWikiResultsText(gpResults, false);
             await editPage(domain, currentSession, gpTitle, wikitext, "Automated results update from Jolpi API", apiEndpoint);
             console.log(`  Updated GP template for round ${round}.`);
+            await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
           } else if (gpWikitext) {
             console.log(`  GP template already has results on Fandom.`);
+            await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
           }
         } else {
           console.log(`  No GP results for round ${round} yet.`);
@@ -788,8 +837,8 @@ export default {
         if (race.Sprint) {
           const sprintName = raceName.replace("Grand Prix", "Sprint");
 
-          if (sprintUpdatedInKV) {
-            console.log(`Round ${round} Sprint (${sprintName}) already updated (KV cache). Skipping.`);
+          if (sprintCareerTemplateSynced) {
+            console.log(`Round ${round} Sprint career template (${sprintName}) already synced (KV cache). Skipping.`);
           } else if (!isSprintConcluded) {
             console.log(`Round ${round} Sprint (${sprintName}) not completed yet (ends: ${sprintEndTime?.toISOString()}). Skipping.`);
           } else if (sprintResults.length > 0) {
@@ -811,28 +860,23 @@ export default {
               const wikitext = generateWikiResultsText(sprintResults, true);
               await editPage(domain, currentSession, sprintTitle, wikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
 
-              if (env.F1_WIKI_STATE) {
-                await env.F1_WIKI_STATE.put(sprintKey, 'true');
-                console.log(`  Marked round ${round} Sprint as updated in KV.`);
-              }
+              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+              console.log(`  Marked round ${round} Sprint career template as synced in KV.`);
             } else if (sprintWikitext) {
               console.log(`  Sprint template already has results on Fandom.`);
-              if (env.F1_WIKI_STATE) {
-                await env.F1_WIKI_STATE.put(sprintKey, 'true');
-                console.log(`  Marked round ${round} Sprint as updated in KV (found existing results on Fandom).`);
-              }
+              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+              console.log(`  Marked round ${round} Sprint career template as synced in KV (found existing results on Fandom).`);
             }
           }
         }
 
         // --- 3. Smart Check for Stats Templates ---
-        if (statsUpdatedInKV) {
+        if (statsTemplatesSynced) {
           console.log(`Round ${round} Stats Templates already synced (KV cache). Skipping.`);
         } else if (!isRaceConcluded) {
           console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
         } else if (gpResults.length > 0) {
           console.log(`GP results available. Running stats sync for round ${round}...`);
-          const isFinalRound = round === schedule.length;
           await syncStatsTemplates(
             env,
             getSession,
@@ -843,16 +887,11 @@ export default {
             schedule,
             gpResults
           );
-
-          if (env.F1_WIKI_STATE) {
-            await env.F1_WIKI_STATE.put(statsKey, 'true');
-            console.log(`Marked round ${round} Stats Templates as synced in KV.`);
-          }
         }
 
         // --- 4. Smart Check for GP Page Sections ---
-        if (gpUpdatedInKV) {
-          console.log(`Round ${round} GP Page Sections already finalized (GP results updated in KV). Skipping.`);
+        if (gpPageFullySynced) {
+          console.log(`Round ${round} GP page sections already synced (KV cache). Skipping.`);
         } else {
           try {
             const gpPageTitle = `${year} ${raceName}`;
@@ -880,26 +919,31 @@ export default {
             const raceResults = gpResults;
 
             if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
-              if (qualiResults && qualiResults.length > 0) {
-                const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
-                const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ===", "==== Qualifying Results ====", "=== Qualifying ===", "==== Qualifying ===", "===Qualifying Results===", "===Qualifying==="], "=== Qualifying Results ===");
-                const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
-                if (newContent !== updatedContent) {
-                  updatedContent = newContent;
-                  changes.push("Qualifying Results");
+              if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
+                if (!isGpPageSectionSynced('qualifying')) {
+                  const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
+                  const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ===", "==== Qualifying Results ====", "=== Qualifying ===", "==== Qualifying ===", "===Qualifying Results===", "===Qualifying==="], "=== Qualifying Results ===");
+                  const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
+                  if (newContent !== updatedContent) {
+                    updatedContent = newContent;
+                    changes.push("Qualifying Results");
+                  }
+                  await markGpPageSectionSynced('qualifying');
                 }
 
-                const gridWikitext = generateGridWikitext(qualiResults);
-                const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "=== Starting Grid ===", "==== Race Grid ====", "=== Race Grid ===", "===Grid===", "==== Grid ====", "=== Grid ==="], "==== Starting Grid ====");
-                const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
-                if (newGridContent !== updatedContent) {
-                  updatedContent = newGridContent;
-                  changes.push("Starting Grid");
+                if (!isGpPageSectionSynced('grid')) {
+                  const gridWikitext = generateGridWikitext(qualiResults);
+                  const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "=== Starting Grid ===", "==== Race Grid ====", "=== Race Grid ===", "===Grid===", "==== Grid ====", "=== Grid ==="], "==== Starting Grid ====");
+                  const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
+                  if (newGridContent !== updatedContent) {
+                    updatedContent = newGridContent;
+                    changes.push("Starting Grid");
+                  }
+                  await markGpPageSectionSynced('grid');
                 }
               }
 
-              // Update Sprint Results
-              if (race.Sprint && sprintResults && sprintResults.length > 0) {
+              if (race.Sprint && isSprintConcluded && sprintResults && sprintResults.length > 0 && !isGpPageSectionSynced('sprint_results')) {
                 const sprintWikitext = generateRaceWikitext(sprintResults, true);
                 const bestSprintHeader = findBestHeader(updatedContent, ["=== Sprint Results ===", "==== Sprint Results ====", "=== Sprint ==="], "=== Sprint Results ===");
                 const newContent = replaceSectionWikitext(updatedContent, bestSprintHeader, sprintWikitext);
@@ -907,10 +951,10 @@ export default {
                   updatedContent = newContent;
                   changes.push("Sprint Results");
                 }
+                await markGpPageSectionSynced('sprint_results');
               }
 
-              // Update Race Results
-              if (raceResults && raceResults.length > 0) {
+              if (isRaceConcluded && raceResults && raceResults.length > 0 && !isGpPageSectionSynced('race_results')) {
                 const raceWikitext = generateRaceWikitext(raceResults, false);
                 const bestRaceHeader = findBestHeader(updatedContent, ["=== Race Results ===", "==== Race Results ====", "=== Results ===", "===Results===", "=== Race ==="], "=== Race Results ===");
                 const newContent = replaceSectionWikitext(updatedContent, bestRaceHeader, raceWikitext);
@@ -918,10 +962,17 @@ export default {
                   updatedContent = newContent;
                   changes.push("Race Results");
                 }
+                await markGpPageSectionSynced('race_results');
               }
 
-              // Update Championship Standings
-              if (currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
+              if (
+                isRaceConcluded &&
+                currentDrivers &&
+                currentDrivers.length > 0 &&
+                currentConstructors &&
+                currentConstructors.length > 0 &&
+                !isGpPageSectionSynced('standings')
+              ) {
                 const standingsWikitext = generateStandingsWikitext(
                   currentDrivers,
                   prevDrivers,
@@ -934,145 +985,155 @@ export default {
                   updatedContent = newContent;
                   changes.push("Championship Standings");
                 }
+                await markGpPageSectionSynced('standings');
               }
 
-              // Update Infobox
-              const infoboxUpdates: Record<string, string> = {};
+              if (isRaceConcluded && !isGpPageSectionSynced('infobox')) {
+                const infoboxUpdates: Record<string, string> = {};
 
-              if (qualiResults && qualiResults.length > 0) {
-                const poleSitter = qualiResults[0];
-                if (poleSitter) {
-                  const poleName = `${poleSitter.driver.givenName} ${poleSitter.driver.familyName}`;
-                  const poleNation = getNationalityCode(poleSitter.driver.nationality);
-                  const poleTeam = getTeamTemplate(poleSitter.constructor.constructorId, poleSitter.constructor.name);
-                  const poleTime = poleSitter.Q3 || poleSitter.Q2 || poleSitter.Q1 || "";
+                if (qualiResults && qualiResults.length > 0) {
+                  const poleSitter = qualiResults[0];
+                  if (poleSitter) {
+                    const poleName = `${poleSitter.driver.givenName} ${poleSitter.driver.familyName}`;
+                    const poleNation = getNationalityCode(poleSitter.driver.nationality);
+                    const poleTeam = getTeamTemplate(poleSitter.constructor.constructorId, poleSitter.constructor.name);
+                    const poleTime = poleSitter.Q3 || poleSitter.Q2 || poleSitter.Q1 || "";
 
-                  infoboxUpdates["pole"] = poleName;
-                  infoboxUpdates["polenation"] = poleNation;
-                  infoboxUpdates["poleteam"] = poleTeam;
-                  if (poleTime) {
-                    infoboxUpdates["poletime"] = poleTime;
-                  }
-                }
-              }
-
-              if (race.Sprint && sprintResults && sprintResults.length > 0) {
-                const sprintWinner = sprintResults.find(r => r.position === "1");
-                const sprintSecond = sprintResults.find(r => r.position === "2");
-                const sprintThird = sprintResults.find(r => r.position === "3");
-                const sprintPole = sprintResults.find(r => r.grid === "1");
-
-                if (sprintWinner) {
-                  infoboxUpdates["sprintwinner"] = `${sprintWinner.driver.givenName} ${sprintWinner.driver.familyName}`;
-                }
-                if (sprintSecond) {
-                  infoboxUpdates["sprintsecond"] = `${sprintSecond.driver.givenName} ${sprintSecond.driver.familyName}`;
-                }
-                if (sprintThird) {
-                  infoboxUpdates["sprintthird"] = `${sprintThird.driver.givenName} ${sprintThird.driver.familyName}`;
-                }
-                if (sprintPole) {
-                  infoboxUpdates["sprintpole"] = `${sprintPole.driver.givenName} ${sprintPole.driver.familyName}`;
-                  infoboxUpdates["sprintpoleteam"] = getTeamTemplate(sprintPole.constructor.constructorId, sprintPole.constructor.name);
-                }
-              }
-
-              if (raceResults && raceResults.length > 0) {
-                const winner = raceResults.find(r => r.position === "1");
-                const second = raceResults.find(r => r.position === "2");
-                const third = raceResults.find(r => r.position === "3");
-                const flDriver = raceResults.find(r => r.FastestLap && r.FastestLap.rank === "1");
-
-                if (winner) {
-                  infoboxUpdates["winner"] = `${winner.driver.givenName} ${winner.driver.familyName}`;
-                  infoboxUpdates["winnernation"] = getNationalityCode(winner.driver.nationality);
-                  infoboxUpdates["winnerteam"] = getTeamTemplate(winner.constructor.constructorId, winner.constructor.name);
-                }
-                if (second) {
-                  infoboxUpdates["second"] = `${second.driver.givenName} ${second.driver.familyName}`;
-                  infoboxUpdates["secondnation"] = getNationalityCode(second.driver.nationality);
-                  infoboxUpdates["secondteam"] = getTeamTemplate(second.constructor.constructorId, second.constructor.name);
-                }
-                if (third) {
-                  infoboxUpdates["third"] = `${third.driver.givenName} ${third.driver.familyName}`;
-                  infoboxUpdates["thirdnation"] = getNationalityCode(third.driver.nationality);
-                  infoboxUpdates["thirdteam"] = getTeamTemplate(third.constructor.constructorId, third.constructor.name);
-                }
-                if (flDriver && flDriver.FastestLap) {
-                  infoboxUpdates["fastestlapdriver"] = `${flDriver.driver.givenName} ${flDriver.driver.familyName}`;
-                  infoboxUpdates["fastestlapnation"] = getNationalityCode(flDriver.driver.nationality);
-                  infoboxUpdates["fastestlapteam"] = getTeamTemplate(flDriver.constructor.constructorId, flDriver.constructor.name);
-                  infoboxUpdates["fastestlap"] = flDriver.FastestLap.Time.time;
-                  infoboxUpdates["fastestlapnumber"] = flDriver.FastestLap.lap;
-                }
-              }
-
-              if (Object.keys(infoboxUpdates).length > 0) {
-                const range = findInfoboxRange(updatedContent);
-                if (range) {
-                  let infobox = range.content;
-                  let infoboxChanged = false;
-                  for (const [key, val] of Object.entries(infoboxUpdates)) {
-                    const currentValue = getInfoboxParameterValue(infobox, key);
-                    if (!isInfoboxParameterEmpty(currentValue)) {
-                      console.log(`  Infobox |${key}| already set (${currentValue}). Skipping to preserve existing value.`);
-                      continue;
-                    }
-                    const updatedInfobox = updateParameterInInfobox(infobox, key, val);
-                    if (updatedInfobox !== infobox) {
-                      infobox = updatedInfobox;
-                      infoboxChanged = true;
+                    infoboxUpdates["pole"] = poleName;
+                    infoboxUpdates["polenation"] = poleNation;
+                    infoboxUpdates["poleteam"] = poleTeam;
+                    if (poleTime) {
+                      infoboxUpdates["poletime"] = poleTime;
                     }
                   }
-                  if (infoboxChanged) {
-                    updatedContent = updatedContent.slice(0, range.start) + infobox + updatedContent.slice(range.end);
-                    changes.push("Infobox");
+                }
+
+                if (race.Sprint && sprintResults && sprintResults.length > 0) {
+                  const sprintWinner = sprintResults.find(r => r.position === "1");
+                  const sprintSecond = sprintResults.find(r => r.position === "2");
+                  const sprintThird = sprintResults.find(r => r.position === "3");
+                  const sprintPole = sprintResults.find(r => r.grid === "1");
+
+                  if (sprintWinner) {
+                    infoboxUpdates["sprintwinner"] = `${sprintWinner.driver.givenName} ${sprintWinner.driver.familyName}`;
+                  }
+                  if (sprintSecond) {
+                    infoboxUpdates["sprintsecond"] = `${sprintSecond.driver.givenName} ${sprintSecond.driver.familyName}`;
+                  }
+                  if (sprintThird) {
+                    infoboxUpdates["sprintthird"] = `${sprintThird.driver.givenName} ${sprintThird.driver.familyName}`;
+                  }
+                  if (sprintPole) {
+                    infoboxUpdates["sprintpole"] = `${sprintPole.driver.givenName} ${sprintPole.driver.familyName}`;
+                    infoboxUpdates["sprintpoleteam"] = getTeamTemplate(sprintPole.constructor.constructorId, sprintPole.constructor.name);
                   }
                 }
+
+                if (raceResults && raceResults.length > 0) {
+                  const winner = raceResults.find(r => r.position === "1");
+                  const second = raceResults.find(r => r.position === "2");
+                  const third = raceResults.find(r => r.position === "3");
+                  const flDriver = raceResults.find(r => r.FastestLap && r.FastestLap.rank === "1");
+
+                  if (winner) {
+                    infoboxUpdates["winner"] = `${winner.driver.givenName} ${winner.driver.familyName}`;
+                    infoboxUpdates["winnernation"] = getNationalityCode(winner.driver.nationality);
+                    infoboxUpdates["winnerteam"] = getTeamTemplate(winner.constructor.constructorId, winner.constructor.name);
+                  }
+                  if (second) {
+                    infoboxUpdates["second"] = `${second.driver.givenName} ${second.driver.familyName}`;
+                    infoboxUpdates["secondnation"] = getNationalityCode(second.driver.nationality);
+                    infoboxUpdates["secondteam"] = getTeamTemplate(second.constructor.constructorId, second.constructor.name);
+                  }
+                  if (third) {
+                    infoboxUpdates["third"] = `${third.driver.givenName} ${third.driver.familyName}`;
+                    infoboxUpdates["thirdnation"] = getNationalityCode(third.driver.nationality);
+                    infoboxUpdates["thirdteam"] = getTeamTemplate(third.constructor.constructorId, third.constructor.name);
+                  }
+                  if (flDriver && flDriver.FastestLap) {
+                    infoboxUpdates["fastestlapdriver"] = `${flDriver.driver.givenName} ${flDriver.driver.familyName}`;
+                    infoboxUpdates["fastestlapnation"] = getNationalityCode(flDriver.driver.nationality);
+                    infoboxUpdates["fastestlapteam"] = getTeamTemplate(flDriver.constructor.constructorId, flDriver.constructor.name);
+                    infoboxUpdates["fastestlap"] = flDriver.FastestLap.Time.time;
+                    infoboxUpdates["fastestlapnumber"] = flDriver.FastestLap.lap;
+                  }
+                }
+
+                if (Object.keys(infoboxUpdates).length > 0) {
+                  const range = findInfoboxRange(updatedContent);
+                  if (range) {
+                    let infobox = range.content;
+                    let infoboxChanged = false;
+                    for (const [key, val] of Object.entries(infoboxUpdates)) {
+                      const currentValue = getInfoboxParameterValue(infobox, key);
+                      if (!isInfoboxParameterEmpty(currentValue)) {
+                        console.log(`  Infobox |${key}| already set (${currentValue}). Skipping to preserve existing value.`);
+                        continue;
+                      }
+                      const updatedInfobox = updateParameterInInfobox(infobox, key, val);
+                      if (updatedInfobox !== infobox) {
+                        infobox = updatedInfobox;
+                        infoboxChanged = true;
+                      }
+                    }
+                    if (infoboxChanged) {
+                      updatedContent = updatedContent.slice(0, range.start) + infobox + updatedContent.slice(range.end);
+                      changes.push("Infobox");
+                    }
+                  }
+                }
+                await markGpPageSectionSynced('infobox');
               }
 
-              // Generate descriptive reports using LLM
-              const reportSections = [
-                { header: "==Background==", title: "Background", check: () => true },
-                { header: "=== Q1 ===", title: "Q1", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
-                { header: "=== Q2 ===", title: "Q2", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
-                { header: "=== Q3 ===", title: "Q3", check: () => isQualiConcluded && qualiResults && qualiResults.length > 0 },
-                { header: "=== Sprint Report ===", title: "Sprint Report", check: () => race.Sprint && isSprintConcluded && sprintResults && sprintResults.length > 0 },
-                { header: "== Race == ", title: "Race Report", check: () => isRaceConcluded && raceResults && raceResults.length > 0 }
+              const reportSections: Array<{
+                header: string;
+                title: string;
+                section: GpPageSection;
+                check: () => boolean;
+              }> = [
+                { header: "==Background==", title: "Background", section: 'background_report', check: () => isRaceConcluded },
+                { header: "=== Q1 ===", title: "Q1", section: 'q1_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
+                { header: "=== Q2 ===", title: "Q2", section: 'q2_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
+                { header: "=== Q3 ===", title: "Q3", section: 'q3_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
+                { header: "=== Sprint Report ===", title: "Sprint Report", section: 'sprint_report', check: () => !!race.Sprint && isSprintConcluded && !!sprintResults && sprintResults.length > 0 },
+                { header: "== Race == ", title: "Race Report", section: 'race_report', check: () => isRaceConcluded && !!raceResults && raceResults.length > 0 },
               ];
 
               let promptContext: string | null = null;
 
               for (const sec of reportSections) {
-                if (sec.check()) {
-                  const sectionContent = getSectionContent(updatedContent, sec.header);
-                  if (isSectionEmptyOrPlaceholder(sectionContent)) {
-                    console.log(`Section ${sec.title} is empty/placeholder. Triggering LLM writer...`);
+                if (!sec.check() || isGpPageSectionSynced(sec.section)) {
+                  continue;
+                }
 
-                    // Lazy-build the context once
-                    if (!promptContext) {
-                      const standingsData = {
-                        driverStandings: currentDrivers,
-                        constructorStandings: currentConstructors
-                      };
-                      promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
-                    }
+                const sectionContent = getSectionContent(updatedContent, sec.header);
+                if (isSectionEmptyOrPlaceholder(sectionContent)) {
+                  console.log(`Section ${sec.title} is empty/placeholder. Triggering LLM writer...`);
 
-                    try {
-                      const reportText = await generateReportForSection(env, sec.title, promptContext);
-                      if (reportText && reportText.length > 10) {
-                        const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
-                        if (replaced !== updatedContent) {
-                          updatedContent = replaced;
-                          changes.push(`${sec.title} Report`);
-                        }
-                      }
-                    } catch (err: any) {
-                      console.error(`Failed to generate report for ${sec.title}:`, err.message);
-                    }
-                  } else {
-                    console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
+                  if (!promptContext) {
+                    const standingsData = {
+                      driverStandings: currentDrivers,
+                      constructorStandings: currentConstructors
+                    };
+                    promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
                   }
+
+                  try {
+                    const reportText = await generateReportForSection(env, sec.title, promptContext);
+                    if (reportText && reportText.length > 10) {
+                      const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
+                      if (replaced !== updatedContent) {
+                        updatedContent = replaced;
+                        changes.push(`${sec.title} Report`);
+                      }
+                      await markGpPageSectionSynced(sec.section);
+                    }
+                  } catch (err: any) {
+                    console.error(`Failed to generate report for ${sec.title}:`, err.message);
+                  }
+                } else {
+                  console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
+                  await markGpPageSectionSynced(sec.section);
                 }
               }
             }
@@ -1094,14 +1155,6 @@ export default {
               console.log(`  Successfully published ${gpPageTitle}!`);
             } else {
               console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
-            }
-
-            // --- SET GP KEY TO TRUE ONLY AFTER GP CONCLUDED AND STANDINGS & RACE RESULTS ARE LOADED SUCCESSFULLY ---
-            if (isRaceConcluded && raceResults && raceResults.length > 0 && currentDrivers && currentDrivers.length > 0 && currentConstructors && currentConstructors.length > 0) {
-              if (env.F1_WIKI_STATE) {
-                await env.F1_WIKI_STATE.put(gpKey, 'true');
-                console.log(`  Round ${round} GP page sections and results finalized. Marked as updated in KV.`);
-              }
             }
           } catch (e: any) {
             console.error(`Error updating GP page sections for round ${round}:`, e.message);
@@ -1582,12 +1635,14 @@ async function syncLatestNewsEvents(
 
     if (pageInfo.exists && pageInfo.content.trim() === wikitext.trim()) {
       console.log(`${pageTitle} is already up to date. Skipping edit.`);
+      await markKvSynced(env.F1_WIKI_STATE, latestNewsEventsKey());
       return;
     }
 
     console.log(`Content differs or page does not exist. Updating ${pageTitle}...`);
     const session = await getSession();
     await editPage(domain, session, pageTitle, wikitext, "Automated update of previous, latest, and next events", apiEndpoint);
+    await markKvSynced(env.F1_WIKI_STATE, latestNewsEventsKey());
     console.log(`Successfully updated ${pageTitle}!`);
   } catch (e: any) {
     console.error("Failed to sync latest news events:", e.message);
@@ -1640,52 +1695,58 @@ async function syncCareerStandingsTemplates(
       return;
     }
 
+    const syncStandingsPage = async (
+      pageTitle: string,
+      pageKey: CareerStandingsPage,
+      wikitext: string,
+      summary: string
+    ) => {
+      console.log(`Checking current content of ${pageTitle}...`);
+      const page = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
+      const kvKey = careerStandingsKey(pageKey);
+      if (page.exists && page.content.trim() === wikitext.trim()) {
+        console.log(`${pageTitle} is already up to date.`);
+        await markKvSynced(env.F1_WIKI_STATE, kvKey);
+        return;
+      }
+      if (await isKvSynced(env.F1_WIKI_STATE, kvKey)) {
+        console.log(`${pageTitle} KV flag set but content differs; re-syncing.`);
+      }
+      console.log(`Content differs or page does not exist. Updating ${pageTitle}...`);
+      const session = await getSession();
+      await editPage(domain, session, pageTitle, wikitext, summary, apiEndpoint);
+      await markKvSynced(env.F1_WIKI_STATE, kvKey);
+      console.log(`Successfully updated ${pageTitle}!`);
+    };
+
     // 1. Points template
     if (driverStandings.length > 0) {
-      const pointsTitle = "Template:Career_Results/Points/2026";
-      const pointsWikitext = generateCareerPointsWikitext(driverStandings);
-      console.log(`Checking current content of ${pointsTitle}...`);
-      const pointsPage = await getPageContent(domain, pointsTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
-      if (!pointsPage.exists || pointsPage.content.trim() !== pointsWikitext.trim()) {
-        console.log(`Content differs or page does not exist. Updating ${pointsTitle}...`);
-        const session = await getSession();
-        await editPage(domain, session, pointsTitle, pointsWikitext, "Automated update of driver career points template", apiEndpoint);
-        console.log(`Successfully updated ${pointsTitle}!`);
-      } else {
-        console.log(`${pointsTitle} is already up to date.`);
-      }
+      await syncStandingsPage(
+        "Template:Career_Results/Points/2026",
+        'points',
+        generateCareerPointsWikitext(driverStandings),
+        "Automated update of driver career points template"
+      );
     }
 
     // 2. Position template
     if (driverStandings.length > 0) {
-      const posTitle = "Template:Career_Results/Position/2026";
-      const posWikitext = generateCareerPositionWikitext(driverStandings);
-      console.log(`Checking current content of ${posTitle}...`);
-      const posPage = await getPageContent(domain, posTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
-      if (!posPage.exists || posPage.content.trim() !== posWikitext.trim()) {
-        console.log(`Content differs or page does not exist. Updating ${posTitle}...`);
-        const session = await getSession();
-        await editPage(domain, session, posTitle, posWikitext, "Automated update of driver career positions template", apiEndpoint);
-        console.log(`Successfully updated ${posTitle}!`);
-      } else {
-        console.log(`${posTitle} is already up to date.`);
-      }
+      await syncStandingsPage(
+        "Template:Career_Results/Position/2026",
+        'position',
+        generateCareerPositionWikitext(driverStandings),
+        "Automated update of driver career positions template"
+      );
     }
 
     // 3. Team Position template
     if (constructorStandings.length > 0) {
-      const teamTitle = "Template:Career_Results/Team_Position/2026";
-      const teamWikitext = generateCareerTeamPositionWikitext(constructorStandings);
-      console.log(`Checking current content of ${teamTitle}...`);
-      const teamPage = await getPageContent(domain, teamTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE);
-      if (!teamPage.exists || teamPage.content.trim() !== teamWikitext.trim()) {
-        console.log(`Content differs or page does not exist. Updating ${teamTitle}...`);
-        const session = await getSession();
-        await editPage(domain, session, teamTitle, teamWikitext, "Automated update of constructor career positions template", apiEndpoint);
-        console.log(`Successfully updated ${teamTitle}!`);
-      } else {
-        console.log(`${teamTitle} is already up to date.`);
-      }
+      await syncStandingsPage(
+        "Template:Career_Results/Team_Position/2026",
+        'team_position',
+        generateCareerTeamPositionWikitext(constructorStandings),
+        "Automated update of constructor career positions template"
+      );
     }
 
   } catch (e: any) {
@@ -1762,12 +1823,18 @@ async function syncStatsTemplates(
 
     if (hasDouble) {
       templates.push("Doubles");
+    } else {
+      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'Doubles'));
     }
     if (hasHatTrick) {
       templates.push("HatTricks");
+    } else {
+      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'HatTricks'));
     }
     if (hasGrandChelem) {
       templates.push("Grand Chelems");
+    } else {
+      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'Grand Chelems'));
     }
 
     let session: any = null;
@@ -1780,6 +1847,12 @@ async function syncStatsTemplates(
 
     for (const temp of templates) {
       const pageTitle = `Template:Stats/${temp}`;
+      const templateKvKey = statsTemplateKey(round, temp);
+      if (await isKvSynced(env.F1_WIKI_STATE, templateKvKey)) {
+        console.log(`${pageTitle} already synced (KV cache). Skipping.`);
+        continue;
+      }
+
       const pageInfo = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE).catch(() => ({ exists: false, content: '' }));
       
       if (!pageInfo.exists) {
@@ -1801,6 +1874,7 @@ async function syncStatsTemplates(
       } else {
         console.log(`${pageTitle} is already up to date.`);
       }
+      await markKvSynced(env.F1_WIKI_STATE, templateKvKey);
     }
   } catch (e: any) {
     console.error(`Scheduled stats templates sync failed: ${e.message}`);
