@@ -1012,6 +1012,11 @@ export default {
                   let infobox = range.content;
                   let infoboxChanged = false;
                   for (const [key, val] of Object.entries(infoboxUpdates)) {
+                    const currentValue = getInfoboxParameterValue(infobox, key);
+                    if (!isInfoboxParameterEmpty(currentValue)) {
+                      console.log(`  Infobox |${key}| already set (${currentValue}). Skipping to preserve existing value.`);
+                      continue;
+                    }
                     const updatedInfobox = updateParameterInInfobox(infobox, key, val);
                     if (updatedInfobox !== infobox) {
                       infobox = updatedInfobox;
@@ -1138,27 +1143,41 @@ export function findInfoboxRange(wikitext: string): { start: number; end: number
   return { start, end, content: wikitext.slice(start, end) };
 }
 
+export function getInfoboxParameterValue(infobox: string, key: string): string | null {
+  const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const lineRegex = new RegExp(`^\\|[ \\t]*${escapedKey}[ \\t]*=[ \\t]*(.*)$`, 'm');
+  const match = infobox.match(lineRegex);
+  if (!match) return null;
+  return match[1].trim();
+}
+
+export function isInfoboxParameterEmpty(value: string | null): boolean {
+  if (value === null) return true;
+  return value.trim().length === 0;
+}
+
 export function updateParameterInInfobox(infobox: string, key: string, value: string): string {
-  // Check if parameter exists in the infobox
-  const regex = new RegExp(`(\\|[ \\t]*${key}[ \\t]*=[ \\t]*)(.*?)(?=\\s*\\|[ \\t]*[a-zA-Z0-9_]+[ \\t]*=|\\s*\\}\\})`, 's');
-  if (regex.test(infobox)) {
-    // Parameter exists, replace its value
-    return infobox.replace(regex, `$1${value}`);
+  const escapedKey = key.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  // Match one line per parameter — values may contain }} from wiki templates
+  const lineRegex = new RegExp(`^(\\|[ \\t]*${escapedKey}[ \\t]*=[ \\t]*)(.*)$`, 'm');
+
+  if (lineRegex.test(infobox)) {
+    return infobox.replace(lineRegex, `$1${value}`);
+  }
+
+  // Parameter does not exist, append it before the closing }}
+  const isMultiLine = infobox.includes('\n');
+  if (isMultiLine) {
+    const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/) || infobox.match(/\s*\}\}\s*$/);
+    if (closingMatch) {
+      const closing = closingMatch[0];
+      return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
+    }
   } else {
-    // Parameter does not exist, append it before the closing }}
-    const isMultiLine = infobox.includes('\n');
-    if (isMultiLine) {
-      const closingMatch = infobox.match(/\r?\n\s*\}\}\s*$/) || infobox.match(/\s*\}\}\s*$/);
-      if (closingMatch) {
-        const closing = closingMatch[0];
-        return infobox.replace(closing, `\n| ${key} = ${value}${closing}`);
-      }
-    } else {
-      const closingMatch = infobox.match(/\s*\}\}\s*$/);
-      if (closingMatch) {
-        const closing = closingMatch[0];
-        return infobox.replace(closing, `|${key}=${value}${closing}`);
-      }
+    const closingMatch = infobox.match(/\s*\}\}\s*$/);
+    if (closingMatch) {
+      const closing = closingMatch[0];
+      return infobox.replace(closing, `|${key}=${value}${closing}`);
     }
   }
   return infobox;
