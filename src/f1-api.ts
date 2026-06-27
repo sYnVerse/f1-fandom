@@ -1,3 +1,7 @@
+import { cachedJolpicaJson, createF1ApiContext, F1ApiContext } from './f1-api-cache';
+
+export { createF1ApiContext, F1ApiContext };
+
 export interface Driver {
   driverId: string;
   permanentNumber: string;
@@ -109,16 +113,7 @@ export interface PracticeResults {
 
 const BASE_URL = 'https://api.jolpi.ca/ergast/f1';
 
-// Fetch season schedule
-export async function getSchedule(year: number): Promise<ScheduleRace[]> {
-  const url = `${BASE_URL}/${year}.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  const races = data.MRData.RaceTable.Races as ScheduleRace[];
-  if (!races || races.length === 0) {
-    throw new Error(`Ergast API returned no races for ${year}`);
-  }
+function normalizeScheduleRaces(races: ScheduleRace[], year: number): ScheduleRace[] {
   return races.map(race => {
     if (race.raceName === 'Brazilian Grand Prix' && year >= 2021) {
       return { ...race, raceName: 'São Paulo Grand Prix' };
@@ -130,11 +125,32 @@ export async function getSchedule(year: number): Promise<ScheduleRace[]> {
   });
 }
 
+function scheduleCacheKey(year: number): string {
+  return `${BASE_URL}/${year}.json?limit=1000`;
+}
+
+// Fetch season schedule
+export async function getSchedule(year: number, ctx?: F1ApiContext): Promise<ScheduleRace[]> {
+  const url = scheduleCacheKey(year);
+  return cachedJolpicaJson(url, ctx, (data: any) => {
+    const list = data.MRData.RaceTable.Races as ScheduleRace[];
+    if (!list || list.length === 0) {
+      throw new Error(`Ergast API returned no races for ${year}`);
+    }
+    return normalizeScheduleRaces(list, year);
+  });
+}
+
 export async function getScheduleWithRetry(
   year: number,
   attempts = 3,
-  delayMs = 1000
+  delayMs = 1000,
+  ctx?: F1ApiContext
 ): Promise<ScheduleRace[]> {
+  if (ctx) {
+    return getSchedule(year, ctx);
+  }
+
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
@@ -151,30 +167,35 @@ export async function getScheduleWithRetry(
   throw lastError;
 }
 
-// Fetch race results
-export async function getRaceResult(year: number, round: number, isSprint = false): Promise<RaceResult[]> {
-  const endpoint = isSprint ? 'sprint' : 'results';
-  const url = `${BASE_URL}/${year}/${round}/${endpoint}.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  
-  const races = data.MRData.RaceTable.Races;
-  if (!races || races.length === 0) return [];
-  
-  const resultsKey = isSprint ? 'SprintResults' : 'Results';
-  const rawResults = races[0][resultsKey] || [];
-  const results = rawResults.map((r: any) => ({
+function mapRaceResults(rawResults: any[]): RaceResult[] {
+  return rawResults.map((r: any) => ({
     ...r,
     driver: r.Driver,
     constructor: r.Constructor
   }));
+}
 
-  // Fallback to qualifying results if grid values are null/undefined
+// Fetch race results
+export async function getRaceResult(
+  year: number,
+  round: number,
+  isSprint = false,
+  ctx?: F1ApiContext
+): Promise<RaceResult[]> {
+  const endpoint = isSprint ? 'sprint' : 'results';
+  const url = `${BASE_URL}/${year}/${round}/${endpoint}.json?limit=1000`;
+
+  const results = await cachedJolpicaJson(url, ctx, (data: any) => {
+    const races = data.MRData.RaceTable.Races;
+    if (!races || races.length === 0) return [];
+    const resultsKey = isSprint ? 'SprintResults' : 'Results';
+    return mapRaceResults(races[0][resultsKey] || []);
+  });
+
   const hasNullGrid = results.some((r: any) => r.grid === null || r.grid === undefined);
   if (hasNullGrid) {
     try {
-      const qualiResults = await getQualifyingResult(year, round);
+      const qualiResults = await getQualifyingResult(year, round, ctx);
       if (qualiResults && qualiResults.length > 0) {
         const qualiMap = new Map<string, string>();
         qualiResults.forEach((q: any) => {
@@ -200,75 +221,86 @@ export async function getRaceResult(year: number, round: number, isSprint = fals
 }
 
 // Fetch qualifying results
-export async function getQualifyingResult(year: number, round: number): Promise<QualifyingResult[]> {
+export async function getQualifyingResult(
+  year: number,
+  round: number,
+  ctx?: F1ApiContext
+): Promise<QualifyingResult[]> {
   const url = `${BASE_URL}/${year}/${round}/qualifying.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  
-  const races = data.MRData.RaceTable.Races;
-  if (!races || races.length === 0) return [];
-  const rawResults = races[0].QualifyingResults || [];
-  return rawResults.map((q: any) => ({
-    ...q,
-    driver: q.Driver,
-    constructor: q.Constructor
-  }));
+  return cachedJolpicaJson(url, ctx, (data: any) => {
+    const races = data.MRData.RaceTable.Races;
+    if (!races || races.length === 0) return [];
+    const rawResults = races[0].QualifyingResults || [];
+    return rawResults.map((q: any) => ({
+      ...q,
+      driver: q.Driver,
+      constructor: q.Constructor
+    }));
+  });
 }
 
 // Fetch driver standings
-export async function getDriverStandings(year: number, round?: number): Promise<DriverStanding[]> {
+export async function getDriverStandings(
+  year: number,
+  round?: number,
+  ctx?: F1ApiContext
+): Promise<DriverStanding[]> {
   const suffix = round ? `/${round}` : '';
   const url = `${BASE_URL}/${year}${suffix}/driverStandings.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  
-  const lists = data.MRData.StandingsTable.StandingsLists;
-  if (!lists || lists.length === 0) return [];
-  return lists[0].DriverStandings || [];
+  return cachedJolpicaJson(url, ctx, (data: any) => {
+    const lists = data.MRData.StandingsTable.StandingsLists;
+    if (!lists || lists.length === 0) return [];
+    return lists[0].DriverStandings || [];
+  });
 }
 
 // Fetch constructor standings
-export async function getConstructorStandings(year: number, round?: number): Promise<ConstructorStanding[]> {
+export async function getConstructorStandings(
+  year: number,
+  round?: number,
+  ctx?: F1ApiContext
+): Promise<ConstructorStanding[]> {
   const suffix = round ? `/${round}` : '';
   const url = `${BASE_URL}/${year}${suffix}/constructorStandings.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  
-  const lists = data.MRData.StandingsTable.StandingsLists;
-  if (!lists || lists.length === 0) return [];
-  return lists[0].ConstructorStandings || [];
+  return cachedJolpicaJson(url, ctx, (data: any) => {
+    const lists = data.MRData.StandingsTable.StandingsLists;
+    if (!lists || lists.length === 0) return [];
+    return lists[0].ConstructorStandings || [];
+  });
 }
 
 // Fetch list of drivers for a race (to initialize practice entries)
-export async function getDriversForRace(year: number, round: number): Promise<Driver[]> {
+export async function getDriversForRace(
+  year: number,
+  round: number,
+  ctx?: F1ApiContext
+): Promise<Driver[]> {
   const url = `${BASE_URL}/${year}/${round}/drivers.json?limit=1000`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ergast API error: ${res.statusText}`);
-  const data = await res.json() as any;
-  return data.MRData.DriverTable.Drivers || [];
+  return cachedJolpicaJson(url, ctx, (data: any) => data.MRData.DriverTable.Drivers || []);
 }
 
 // Fetch list of drivers for a race, with recursive fallback to preceding races/seasons if empty
-export async function getDriversForRaceWithFallback(year: number, round: number): Promise<Driver[]> {
-  let drivers = await getDriversForRace(year, round).catch(() => []);
+export async function getDriversForRaceWithFallback(
+  year: number,
+  round: number,
+  ctx?: F1ApiContext
+): Promise<Driver[]> {
+  let drivers = await getDriversForRace(year, round, ctx).catch(() => []);
   let currentYear = year;
   let prevRound = round - 1;
-  
+
   while (drivers.length === 0) {
     if (prevRound >= 1) {
-      drivers = await getDriversForRace(currentYear, prevRound).catch(() => []);
+      drivers = await getDriversForRace(currentYear, prevRound, ctx).catch(() => []);
       prevRound--;
     } else {
       currentYear--;
       try {
-        const prevSchedule = await getSchedule(currentYear);
+        const prevSchedule = await getSchedule(currentYear, ctx);
         if (prevSchedule && prevSchedule.length > 0) {
           prevRound = prevSchedule.length;
         } else {
-          break; // Avoid infinite loop if no more schedules
+          break;
         }
       } catch (e) {
         break;
@@ -278,63 +310,69 @@ export async function getDriversForRaceWithFallback(year: number, round: number)
   return drivers;
 }
 
+/** Fetch lap chart data for a round (used by stats). */
+export async function getLapChart(
+  year: number,
+  round: number,
+  ctx?: F1ApiContext
+): Promise<Array<{ Timings: Array<{ driverId: string }> }>> {
+  const url = `${BASE_URL}/${year}/${round}/laps.json?limit=2000`;
+  return cachedJolpicaJson(url, ctx, (data: any) => {
+    const races = data?.MRData?.RaceTable?.Races || data?.MRData?.LapsTable?.Races || [];
+    return races[0]?.Laps || [];
+  });
+}
+
 // Parse HTML string from F1.com practice session results
 export function parsePracticeHTML(html: string): Record<string, PracticeSessionData> {
   const results: Record<string, PracticeSessionData> = {};
-  
-  // Find table rows
+
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-  
+
   let trMatch;
   while ((trMatch = trRegex.exec(html)) !== null) {
     const rowHtml = trMatch[1];
     const cells: string[] = [];
     let tdMatch;
-    
+
     while ((tdMatch = tdRegex.exec(rowHtml)) !== null) {
-      // Strip tags and clean whitespace
       const cleanCell = tdMatch[1]
         .replace(/<[^>]*>/g, '')
         .replace(/\s+/g, ' ')
         .trim();
       cells.push(cleanCell);
     }
-    
-    // Check if the row has enough columns (typically 5-7 columns)
-    // Pos, No, Driver, Car/Team, Time, Gap, Laps
+
     if (cells.length >= 5) {
       const position = cells[0];
       const number = cells[1];
       const rawDriverName = cells[2];
       const teamName = cells[3];
       const time = cells[4];
-      
-      // If position is not a number, skip header/footer rows
+
       if (/^\d+$/.test(position)) {
         results[rawDriverName] = {
           position,
           number,
-          driverName: rawDriverName, // will be mapped later
+          driverName: rawDriverName,
           teamName,
           time
         };
       }
     }
   }
-  
+
   return results;
 }
 
-// Map practice results using fetched drivers to resolve name formats (e.g. LandoNorrisNOR -> Lando Norris)
+// Map practice results using fetched drivers to resolve name formats
 export function mapDriverNames(
   scrapedData: Record<string, PracticeSessionData>,
   drivers: Driver[]
 ): Record<string, PracticeSessionData> {
   const mappedResults: Record<string, PracticeSessionData> = {};
-  
-  // Create mapping keys from official drivers
-  // E.g. Lando Norris (code: NOR) -> LandoNorrisNOR
+
   const mapping: Record<string, Driver> = {};
   for (const driver of drivers) {
     const key1 = `${driver.givenName}${driver.familyName}${driver.code}`.replace(/[\s'-]/g, '');
@@ -344,8 +382,7 @@ export function mapDriverNames(
     mapping[driver.driverId.toLowerCase()] = driver;
     mapping[`${driver.givenName} ${driver.familyName}`.toLowerCase()] = driver;
   }
-  
-  // Fallback map for common outliers
+
   const customMapping: Record<string, string> = {
     'nico hulkenberg': 'Nico Hülkenberg',
     'nicohulkenberghul': 'Nico Hülkenberg',
@@ -359,12 +396,11 @@ export function mapDriverNames(
 
   for (const [rawName, data] of Object.entries(scrapedData)) {
     const cleanKey = rawName.replace(/[\s'-]/g, '').toLowerCase();
-    
+
     let matchedDriver: Driver | null = null;
     if (mapping[cleanKey]) {
       matchedDriver = mapping[cleanKey];
     } else {
-      // Try to find if any key contains the driver name
       for (const [key, driver] of Object.entries(mapping)) {
         if (cleanKey.includes(key) || key.includes(cleanKey)) {
           matchedDriver = driver;
@@ -372,12 +408,11 @@ export function mapDriverNames(
         }
       }
     }
-    
+
     let resolvedName = rawName;
     if (matchedDriver) {
       resolvedName = `${matchedDriver.givenName} ${matchedDriver.familyName}`;
     } else {
-      // Check custom mapping
       const keyLower = rawName.toLowerCase();
       for (const [k, v] of Object.entries(customMapping)) {
         if (keyLower.includes(k) || k.includes(keyLower)) {
@@ -386,13 +421,13 @@ export function mapDriverNames(
         }
       }
     }
-    
+
     mappedResults[resolvedName] = {
       ...data,
       driverName: resolvedName
     };
   }
-  
+
   return mappedResults;
 }
 
@@ -403,11 +438,11 @@ export async function scrapePracticeSession(url: string, drivers: Driver[]): Pro
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
   };
-  
+
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`Failed to fetch F1.com practice page: Status ${res.status}`);
   const html = await res.text();
-  
+
   const parsed = parsePracticeHTML(html);
   return mapDriverNames(parsed, drivers);
 }
@@ -467,22 +502,86 @@ export async function fetchOfficialRaceName(year: number, racingKey: string): Pr
     });
     if (!res.ok) return null;
     const html = await res.text();
-    
-    // Extract schema SportsEvent name, e.g., "name":"FORMULA 1 LOUIS VUITTON GRAND PRIX DE MONACO 2026"
+
     const nameMatch = html.match(/"@type"\s*:\s*"SportsEvent"[^}]+?"name"\s*:\s*"([^"]+)"/);
     if (nameMatch && nameMatch[1]) {
       return cleanOfficialName(nameMatch[1]);
     }
-    
-    // Fallback: title tag
+
     const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
     if (titleMatch && titleMatch[1]) {
       return cleanOfficialName(titleMatch[1].replace(" - F1 Race", "").trim());
     }
-    
+
     return null;
   } catch (e) {
     console.error("Error fetching official race name:", e);
     return null;
   }
+}
+
+/**
+ * Batch-fetch Jolpica data for a race round in one pass (deduplicated via ctx).
+ */
+export async function fetchRoundJolpicaData(
+  year: number,
+  round: number,
+  options: {
+    needQuali: boolean;
+    needGpResults: boolean;
+    needSprintResults: boolean;
+    needStandings: boolean;
+    needDrivers: boolean;
+    hasSprint: boolean;
+  },
+  ctx?: F1ApiContext
+): Promise<{
+  qualiResults: QualifyingResult[];
+  gpResults: RaceResult[];
+  sprintResults: RaceResult[];
+  drivers: Driver[];
+  currentDrivers: DriverStanding[];
+  prevDrivers: DriverStanding[] | null;
+  currentConstructors: ConstructorStanding[];
+  prevConstructors: ConstructorStanding[] | null;
+}> {
+  const {
+    needQuali,
+    needGpResults,
+    needSprintResults,
+    needStandings,
+    needDrivers,
+    hasSprint,
+  } = options;
+
+  const [
+    qualiResults,
+    gpResults,
+    sprintResults,
+    currentDrivers,
+    prevDrivers,
+    currentConstructors,
+    prevConstructors,
+    drivers,
+  ] = await Promise.all([
+    needQuali ? getQualifyingResult(year, round, ctx).catch(() => []) : Promise.resolve([]),
+    needGpResults ? getRaceResult(year, round, false, ctx).catch(() => []) : Promise.resolve([]),
+    needSprintResults && hasSprint ? getRaceResult(year, round, true, ctx).catch(() => []) : Promise.resolve([]),
+    needStandings ? getDriverStandings(year, round, ctx).catch(() => []) : Promise.resolve([]),
+    needStandings && round > 1 ? getDriverStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
+    needStandings ? getConstructorStandings(year, round, ctx).catch(() => []) : Promise.resolve([]),
+    needStandings && round > 1 ? getConstructorStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
+    needDrivers ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
+  ]);
+
+  return {
+    qualiResults,
+    gpResults,
+    sprintResults,
+    drivers,
+    currentDrivers,
+    prevDrivers,
+    currentConstructors,
+    prevConstructors,
+  };
 }
