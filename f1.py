@@ -1271,7 +1271,7 @@ def practice(year=None, race=None):
             print("| colspan=\"2\" align=center | {{abbr|DNP|Did Not Participate}}")
     
     print("|-")
-    print('! colspan="14" style="text-align:center" |\'\'\'Source:\'\'\' <ref name="P1">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_p1_classification.pdf {{PAGENAME}} - FP1 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref><ref name="P2">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_p2_classification.pdf {{PAGENAME}} - FP2 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref><ref name="P3">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_p3_classification.pdf {{PAGENAME}} - FP3 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref>')
+    print('! colspan="14" style="text-align:center" |\'\'\'Source:\'\'\' <ref name="P1">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_1_classification.pdf {{PAGENAME}} - FP1 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref><ref name="P2">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_2_classification.pdf {{PAGENAME}} - FP2 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref><ref name="P3">[https://www.fia.com/system/files/decision-document/{{lc: {{PAGENAMEE}}}}_-_free_practice_3_classification.pdf {{PAGENAME}} - FP3 Classification] (PDF). Fédération Internationale de l\'Automobile.</ref>')
     print("|}")
     
     if not practice_data or not any(practice_data.values()):
