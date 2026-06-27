@@ -7,6 +7,7 @@ import {
   F1ApiContext,
   ScheduleRace,
 } from './f1-api';
+import { parsePipeParamLine } from './wikitext-parse';
 
 export const CIRCUIT_LENGTHS: Record<string, number> = {
   "albert_park": 5.278,
@@ -816,14 +817,10 @@ export function updateTemplateContent(
     const processedDrivers = new Set<string>();
 
     const newLines = lines.map(line => {
-      const match = line.match(/^(\s*\|\s*)([^=]+?)(\s*=\s*)(.+?)(\s*)$/);
-      if (!match) return line;
+      const parsed = parsePipeParamLine(line);
+      if (!parsed) return line;
 
-      const prefix = match[1];
-      const name = match[2].trim();
-      const separator = match[3];
-      const currentValue = match[4].trim();
-      const suffix = match[5];
+      const { prefix, name, separator, value: currentValue, suffix } = parsed;
 
       const matchedDriverId = Object.keys(driverIdToWikiName).find(
         id => normalizeName(driverIdToWikiName[id]) === normalizeName(name)
@@ -930,10 +927,9 @@ export function updateTemplateContent(
   for (let i = currentDriversLineIdx + 1; i < otherDriversEndLineIdx; i++) {
     if (i === otherDriversLineIdx) continue; // Skip the "<!-- OTHER DRIVERS -->" divider line
     const line = lines[i];
-    const match = line.match(/^(\s*\|\s*)([^=]+?)(\s*=\s*)(.+?)(\s*)$/);
-    if (match) {
-      const name = match[2].trim();
-      const value = match[4].trim();
+    const parsed = parsePipeParamLine(line);
+    if (parsed) {
+      const { name, value } = parsed;
       existingTemplateDrivers.set(normalizeName(name), {
         originalName: name,
         originalValue: value

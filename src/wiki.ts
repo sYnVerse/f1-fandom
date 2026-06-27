@@ -1,3 +1,11 @@
+import {
+  findSectionRanges,
+  splitLines,
+  stripLeadingHeadingFromContent,
+  stripWikiComments,
+  stripWikiTemplates,
+} from './wikitext-parse';
+
 export interface WikiConfig {
   domain: string; // e.g. f1.fandom.com
   username: string;
@@ -353,125 +361,56 @@ export async function editPage(
 }
 
 export function replaceSectionWikitext(fullText: string, header: string, newContent: string): string {
-  // Clean up whitespace
   const cleanHeader = header.trim();
-  const match = cleanHeader.match(/^(=+)\s*(.*?)\s*(=+)$/);
-  
-  let regex: RegExp;
-  let levelNum = 2;
-  let name = cleanHeader;
-  
-  if (match) {
-    levelNum = match[1].length;
-    name = match[2].trim();
-    const escapedName = name
-      .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-      .replace(/\s+/g, '\\s+');
-    
-    // Matches the heading on its own line: preceding boundary/newline ($1), heading line ($2), and section content ($3)
-    regex = new RegExp(`(^|\\r?\\n)([ \\t]*={${levelNum}}\\s*${escapedName}\\s*={${levelNum}}[ \\t]*(?:\\r?\\n|$))([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'gi');
-  } else {
-    const escapedHeader = cleanHeader.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    regex = new RegExp(`(^|\\r?\\n)(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'gi');
-  }
+  const strippedContent = stripLeadingHeadingFromContent(newContent);
+  const lines = splitLines(fullText);
+  const ranges = findSectionRanges(fullText, cleanHeader);
 
-  // Strip any leading heading from newContent to avoid duplicate headings
-  const strippedContent = newContent.replace(/^\s*={1,6}\s*.*?\s*={1,6}\s*(?:\r?\n|$)/, '').trim();
-
-  // Find all matches for the section
-  const matches: RegExpExecArray[] = [];
-  let m: RegExpExecArray | null;
-  regex.lastIndex = 0;
-  while ((m = regex.exec(fullText)) !== null) {
-    matches.push(m);
-    if (m.index === regex.lastIndex) {
-      regex.lastIndex++;
-    }
-  }
-
-  if (matches.length > 0) {
-    // Reconstruct the text: replace the first occurrence, delete any duplicate occurrences
-    let result = '';
-    let lastIndex = 0;
-    
-    for (let i = 0; i < matches.length; i++) {
-      const matchObj = matches[i];
-      const matchIndex = matchObj.index;
-      const matchLength = matchObj[0].length;
-      
-      // Append text before this match
-      result += fullText.slice(lastIndex, matchIndex);
-      
-      if (i === 0) {
-        // First match: replace its content with the new content
-        const prefix = matchObj[1];
-        const headingLine = matchObj[2];
-        result += `${prefix}${headingLine}${strippedContent}\n\n`;
-      } else {
-        // Subsequent matches: duplicate sections, remove them completely
-        console.log(`Removing duplicate section heading: "${matchObj[2].trim()}"`);
-      }
-      
-      lastIndex = matchIndex + matchLength;
-    }
-    
-    // Append remaining text
-    result += fullText.slice(lastIndex);
-    return result;
-  } else {
-    // Section not found, append to the end of the page
+  if (ranges.length === 0) {
     return `${fullText.trim()}\n\n${cleanHeader}\n${strippedContent}\n`;
   }
+
+  let result: string[] = [];
+  let cursor = 0;
+
+  for (let i = 0; i < ranges.length; i++) {
+    const { startLine, endLine, headingLine } = ranges[i];
+    result.push(...lines.slice(cursor, startLine));
+
+    if (i === 0) {
+      result.push(headingLine, strippedContent, '');
+    } else {
+      console.log(`Removing duplicate section heading: "${headingLine.trim()}"`);
+    }
+
+    cursor = endLine;
+  }
+
+  result.push(...lines.slice(cursor));
+  return result.join('\n');
 }
 
 export function getSectionContent(fullText: string, header: string): string {
-  const cleanHeader = header.trim();
-  const match = cleanHeader.match(/^(=+)\s*(.*?)\s*(=+)$/);
-  
-  let regex: RegExp;
-  let levelNum = 2;
-  let name = cleanHeader;
-  
-  if (match) {
-    levelNum = match[1].length;
-    name = match[2].trim();
-    const escapedName = name
-      .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-      .replace(/\s+/g, '\\s+');
-    
-    regex = new RegExp(`(?:^|\\r?\\n)(?:[ \\t]*={${levelNum}}\\s*${escapedName}\\s*={${levelNum}}[ \\t]*(?:\\r?\\n|$))([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'i');
-  } else {
-    const escapedHeader = cleanHeader.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    regex = new RegExp(`(?:^|\\r?\\n)(${escapedHeader}\\s*[\\r\\n]+)([\\s\\S]*?)(?=\\r?\\n==+|$)`, 'i');
-  }
+  const ranges = findSectionRanges(fullText, header.trim());
+  if (ranges.length === 0) return '';
 
-  const result = regex.exec(fullText);
-  if (result) {
-    return match ? result[1] : result[2];
-  }
-  return "";
+  const lines = splitLines(fullText);
+  const { startLine, endLine } = ranges[0];
+  return lines.slice(startLine + 1, endLine).join('\n');
 }
 
 export function isSectionEmptyOrPlaceholder(sectionContent: string): boolean {
-  // Strip comments
-  let text = sectionContent.replace(/<!--[\s\S]*?-->/g, '');
-  
-  // Strip templates (e.g. {{Weather...}}, {{AvailableTyres...}}, {{Clear}})
-  text = text.replace(/\{\{[\s\S]*?\}\}/g, '');
-  
-  // Strip lists of images/videos/references placeholders
+  let text = stripWikiComments(sectionContent);
+  text = stripWikiTemplates(text);
   text = text.replace(/Images and Videos:\s*/gi, '');
   text = text.replace(/References:\s*/gi, '');
   text = text.replace(/<references\s*\/>/gi, '');
-  
-  // Strip whitespace
   text = text.trim();
-  
-  // Check if remaining text is empty or common placeholders
-  if (text === "" || text.toLowerCase() === "tba" || text.toLowerCase() === "tbd") {
+
+  if (text === '' || text.toLowerCase() === 'tba' || text.toLowerCase() === 'tbd') {
     return true;
   }
-  
+
   return false;
 }
 

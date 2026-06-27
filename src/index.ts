@@ -1,4 +1,5 @@
 import { frontendHtml } from './frontend-html';
+import { pageContainsHeader } from './wikitext-parse';
 import { 
   getSchedule,
   getRaceResult, 
@@ -1207,25 +1208,8 @@ export function updateParameterInInfobox(infobox: string, key: string, value: st
 
 export function findBestHeader(fullText: string, options: string[], defaultHeader: string): string {
   for (const opt of options) {
-    const cleanOpt = opt.trim();
-    const match = cleanOpt.match(/^(=+)\s*(.*?)\s*(=+)$/);
-    if (match) {
-      const level = match[1].length;
-      const name = match[2].trim();
-      const escapedName = name
-        .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
-        .replace(/\s+/g, '\\s+');
-      // Construct regex that matches the exact level of heading on its own line
-      const regex = new RegExp(`(^|\\r?\\n)[ \\t]*={${level}}\\s*${escapedName}\\s*={${level}}[ \\t]*(?:\\r?\\n|$)`, 'i');
-      if (regex.test(fullText)) {
-        return opt;
-      }
-    } else {
-      const escaped = cleanOpt.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const regex = new RegExp(`(^|\\r?\\n)[ \\t]*${escaped}[ \\t]*(?:\\r?\\n|$)`, 'i');
-      if (regex.test(fullText)) {
-        return opt;
-      }
+    if (pageContainsHeader(fullText, opt.trim())) {
+      return opt;
     }
   }
   return defaultHeader;
