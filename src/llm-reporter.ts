@@ -183,7 +183,7 @@ function scoreArticleRelevance(slug: string, sessionName: string): number {
   return score;
 }
 
-function stripHtmlTags(input: string): string {
+export function stripHtmlTags(input: string): string {
   let prev: string;
   let result = input;
   do {

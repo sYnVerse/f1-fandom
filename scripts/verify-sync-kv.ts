@@ -40,6 +40,30 @@ assert(
   gpPageSectionKey(7, 'race_results') === '2026_round_7_gp_page_race_results_synced',
   'GP page section key'
 );
+assert(
+  gpPageSectionKey(7, 'practice_results_fp1') === '2026_round_7_gp_page_practice_results_fp1_synced',
+  'Practice FP1 section key'
+);
+assert(
+  gpPageSectionKey(7, 'fp3_report') === '2026_round_7_gp_page_fp3_report_synced',
+  'FP3 report section key'
+);
+
+const fpOnlyTiming = {
+  hasSprint: false,
+  isQualiConcluded: false,
+  isSprintConcluded: false,
+  isRaceConcluded: false,
+  isFp1Concluded: true,
+  isFp2Concluded: false,
+  isFp3Concluded: false,
+};
+assert(gpPageSectionRequired('practice_results_fp1', fpOnlyTiming), 'FP1 practice required when concluded');
+assert(!gpPageSectionRequired('practice_results_fp2', fpOnlyTiming), 'FP2 not required before conclusion');
+assert(
+  !gpPageSectionRequired('fp2_report', { ...fpOnlyTiming, hasSprint: true, isFp2Concluded: true }),
+  'FP2 report not required on sprint weekend'
+);
 
 const timing = {
   hasSprint: true,
