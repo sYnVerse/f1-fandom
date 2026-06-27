@@ -1,0 +1,72 @@
+{
+  "f1.py": {
+    "mtime": 1780828583.058715,
+    "ast_hash": "08303fa5862cb8fdecd234c736b4c969",
+    "semantic_hash": "08303fa5862cb8fdecd234c736b4c969"
+  },
+  "package.json": {
+    "mtime": 1780201331.8055243,
+    "ast_hash": "dde54c8fce25e35c97f69e76a37016b0",
+    "semantic_hash": "dde54c8fce25e35c97f69e76a37016b0"
+  },
+  "pyergast.py": {
+    "mtime": 1780861190.0701988,
+    "ast_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9",
+    "semantic_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9"
+  },
+  "src/f1-api.ts": {
+    "mtime": 1782452060.7935245,
+    "ast_hash": "41397bc111441a14d7b8b3a74bb2d3da",
+    "semantic_hash": ""
+  },
+  "src/frontend-html.ts": {
+    "mtime": 1780889822.0692403,
+    "ast_hash": "47227c6d8812d968fd96c7906560a8d8",
+    "semantic_hash": "47227c6d8812d968fd96c7906560a8d8"
+  },
+  "src/index.ts": {
+    "mtime": 1782452060.8022916,
+    "ast_hash": "359220cc0ab2de746af3dd609d0a48bc",
+    "semantic_hash": ""
+  },
+  "src/llm-reporter.ts": {
+    "mtime": 1780899560.8090093,
+    "ast_hash": "e57619e21f76e02c4947b98c8ea833de",
+    "semantic_hash": "e57619e21f76e02c4947b98c8ea833de"
+  },
+  "src/stats.ts": {
+    "mtime": 1780888566.986321,
+    "ast_hash": "0e8ebe94a712b0567f1e188b558b0a4b",
+    "semantic_hash": "0e8ebe94a712b0567f1e188b558b0a4b"
+  },
+  "src/statsf1.ts": {
+    "mtime": 1780699321.9604466,
+    "ast_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb",
+    "semantic_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb"
+  },
+  "src/wiki.ts": {
+    "mtime": 1780894099.7722774,
+    "ast_hash": "5554f0d648032db06e11b8c375038bbb",
+    "semantic_hash": "5554f0d648032db06e11b8c375038bbb"
+  },
+  "src/wikitext-generator.ts": {
+    "mtime": 1780893402.2576897,
+    "ast_hash": "42ff17ca9c2f71de1b388e81d3f09756",
+    "semantic_hash": "42ff17ca9c2f71de1b388e81d3f09756"
+  },
+  "tsconfig.json": {
+    "mtime": 1780175692.3351696,
+    "ast_hash": "fe3f28b7328d6170e1e9801beadc1073",
+    "semantic_hash": "fe3f28b7328d6170e1e9801beadc1073"
+  },
+  ".github/dependabot.yml": {
+    "mtime": 1781982355.6259725,
+    "ast_hash": "350e7dc36d57a75a9a2db3a7cd71f78a",
+    "semantic_hash": "350e7dc36d57a75a9a2db3a7cd71f78a"
+  },
+  "README.md": {
+    "mtime": 1780894137.0015423,
+    "ast_hash": "c466e25ed0b8b4316792673217f6455b",
+    "semantic_hash": "c466e25ed0b8b4316792673217f6455b"
+  }
+}
