@@ -4,14 +4,34 @@
   "graph": {},
   "nodes": [
     {
+      "label": "CLAUDE.md",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude",
+      "community": 9,
+      "norm_label": "claude.md"
+    },
+    {
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "claude_graphify",
+      "community": 9,
+      "norm_label": "graphify"
+    },
+    {
       "label": "f1.py",
       "file_type": "code",
       "source_file": "f1.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "f1",
       "community": 4,
-      "norm_label": "f1.py"
+      "norm_label": "f1.py",
+      "id": "f1"
     },
     {
       "label": "find_107_time()",
@@ -19,9 +39,9 @@
       "source_file": "f1.py",
       "source_location": "L66",
       "_origin": "ast",
-      "id": "f1_find_107_time",
       "community": 4,
-      "norm_label": "find_107_time()"
+      "norm_label": "find_107_time()",
+      "id": "f1_find_107_time"
     },
     {
       "label": "convert_time_differential_to_absolute()",
@@ -29,9 +49,9 @@
       "source_file": "f1.py",
       "source_location": "L93",
       "_origin": "ast",
-      "id": "f1_convert_time_differential_to_absolute",
       "community": 4,
-      "norm_label": "convert_time_differential_to_absolute()"
+      "norm_label": "convert_time_differential_to_absolute()",
+      "id": "f1_convert_time_differential_to_absolute"
     },
     {
       "label": "getFlag()",
@@ -39,9 +59,9 @@
       "source_file": "f1.py",
       "source_location": "L134",
       "_origin": "ast",
-      "id": "f1_getflag",
       "community": 4,
-      "norm_label": "getflag()"
+      "norm_label": "getflag()",
+      "id": "f1_getflag"
     },
     {
       "label": "get_previous_race()",
@@ -49,9 +69,9 @@
       "source_file": "f1.py",
       "source_location": "L140",
       "_origin": "ast",
-      "id": "f1_get_previous_race",
       "community": 4,
-      "norm_label": "get_previous_race()"
+      "norm_label": "get_previous_race()",
+      "id": "f1_get_previous_race"
     },
     {
       "label": "validate_f1_url()",
@@ -59,9 +79,9 @@
       "source_file": "f1.py",
       "source_location": "L149",
       "_origin": "ast",
-      "id": "f1_validate_f1_url",
       "community": 4,
-      "norm_label": "validate_f1_url()"
+      "norm_label": "validate_f1_url()",
+      "id": "f1_validate_f1_url"
     },
     {
       "label": "calculate_position_change()",
@@ -69,9 +89,9 @@
       "source_file": "f1.py",
       "source_location": "L180",
       "_origin": "ast",
-      "id": "f1_calculate_position_change",
       "community": 4,
-      "norm_label": "calculate_position_change()"
+      "norm_label": "calculate_position_change()",
+      "id": "f1_calculate_position_change"
     },
     {
       "label": "scrape_f1_practice_data()",
@@ -79,9 +99,9 @@
       "source_file": "f1.py",
       "source_location": "L231",
       "_origin": "ast",
-      "id": "f1_scrape_f1_practice_data",
       "community": 4,
-      "norm_label": "scrape_f1_practice_data()"
+      "norm_label": "scrape_f1_practice_data()",
+      "id": "f1_scrape_f1_practice_data"
     },
     {
       "label": "create_practice_scraping_report()",
@@ -89,9 +109,9 @@
       "source_file": "f1.py",
       "source_location": "L421",
       "_origin": "ast",
-      "id": "f1_create_practice_scraping_report",
       "community": 4,
-      "norm_label": "create_practice_scraping_report()"
+      "norm_label": "create_practice_scraping_report()",
+      "id": "f1_create_practice_scraping_report"
     },
     {
       "label": "get_practice_data_from_f1_com()",
@@ -99,9 +119,9 @@
       "source_file": "f1.py",
       "source_location": "L467",
       "_origin": "ast",
-      "id": "f1_get_practice_data_from_f1_com",
       "community": 4,
-      "norm_label": "get_practice_data_from_f1_com()"
+      "norm_label": "get_practice_data_from_f1_com()",
+      "id": "f1_get_practice_data_from_f1_com"
     },
     {
       "label": "grid()",
@@ -109,9 +129,9 @@
       "source_file": "f1.py",
       "source_location": "L494",
       "_origin": "ast",
-      "id": "f1_grid",
       "community": 4,
-      "norm_label": "grid()"
+      "norm_label": "grid()",
+      "id": "f1_grid"
     },
     {
       "label": "qualifying()",
@@ -119,9 +139,9 @@
       "source_file": "f1.py",
       "source_location": "L518",
       "_origin": "ast",
-      "id": "f1_qualifying",
       "community": 4,
-      "norm_label": "qualifying()"
+      "norm_label": "qualifying()",
+      "id": "f1_qualifying"
     },
     {
       "label": "race()",
@@ -129,9 +149,9 @@
       "source_file": "f1.py",
       "source_location": "L675",
       "_origin": "ast",
-      "id": "f1_race",
       "community": 4,
-      "norm_label": "race()"
+      "norm_label": "race()",
+      "id": "f1_race"
     },
     {
       "label": "standings()",
@@ -139,9 +159,9 @@
       "source_file": "f1.py",
       "source_location": "L763",
       "_origin": "ast",
-      "id": "f1_standings",
       "community": 4,
-      "norm_label": "standings()"
+      "norm_label": "standings()",
+      "id": "f1_standings"
     },
     {
       "label": "practice()",
@@ -149,9 +169,9 @@
       "source_file": "f1.py",
       "source_location": "L902",
       "_origin": "ast",
-      "id": "f1_practice",
       "community": 4,
-      "norm_label": "practice()"
+      "norm_label": "practice()",
+      "id": "f1_practice"
     },
     {
       "label": "Convert a time differential (e.g., +0.087s) to an absolute time based on a base",
@@ -159,9 +179,9 @@
       "source_file": "f1.py",
       "source_location": "L94",
       "_origin": "ast",
-      "id": "f1_rationale_94",
       "community": 4,
-      "norm_label": "convert a time differential (e.g., +0.087s) to an absolute time based on a base"
+      "norm_label": "convert a time differential (e.g., +0.087s) to an absolute time based on a base",
+      "id": "f1_rationale_94"
     },
     {
       "label": "Get the previous race number for comparison.     Returns None if this is the fi",
@@ -169,9 +189,9 @@
       "source_file": "f1.py",
       "source_location": "L141",
       "_origin": "ast",
-      "id": "f1_rationale_141",
       "community": 4,
-      "norm_label": "get the previous race number for comparison.     returns none if this is the fi"
+      "norm_label": "get the previous race number for comparison.     returns none if this is the fi",
+      "id": "f1_rationale_141"
     },
     {
       "label": "Validate if a URL appears to be a valid F1.com practice session URL.",
@@ -179,9 +199,9 @@
       "source_file": "f1.py",
       "source_location": "L150",
       "_origin": "ast",
-      "id": "f1_rationale_150",
       "community": 4,
-      "norm_label": "validate if a url appears to be a valid f1.com practice session url."
+      "norm_label": "validate if a url appears to be a valid f1.com practice session url.",
+      "id": "f1_rationale_150"
     },
     {
       "label": "Calculate position change for a driver or constructor.          Parameters:",
@@ -189,9 +209,9 @@
       "source_file": "f1.py",
       "source_location": "L181",
       "_origin": "ast",
-      "id": "f1_rationale_181",
       "community": 4,
-      "norm_label": "calculate position change for a driver or constructor.          parameters:"
+      "norm_label": "calculate position change for a driver or constructor.          parameters:",
+      "id": "f1_rationale_181"
     },
     {
       "label": "Scrape practice session data from F1.com using Ergast API for correct race infor",
@@ -199,9 +219,9 @@
       "source_file": "f1.py",
       "source_location": "L232",
       "_origin": "ast",
-      "id": "f1_rationale_232",
       "community": 4,
-      "norm_label": "scrape practice session data from f1.com using ergast api for correct race infor"
+      "norm_label": "scrape practice session data from f1.com using ergast api for correct race infor",
+      "id": "f1_rationale_232"
     },
     {
       "label": "Create a comprehensive report about F1.com scraping attempts          Paramete",
@@ -209,9 +229,9 @@
       "source_file": "f1.py",
       "source_location": "L422",
       "_origin": "ast",
-      "id": "f1_rationale_422",
       "community": 4,
-      "norm_label": "create a comprehensive report about f1.com scraping attempts          paramete"
+      "norm_label": "create a comprehensive report about f1.com scraping attempts          paramete",
+      "id": "f1_rationale_422"
     },
     {
       "label": "Alternative approach: Try to get practice data from F1.com API or structured dat",
@@ -219,9 +239,9 @@
       "source_file": "f1.py",
       "source_location": "L468",
       "_origin": "ast",
-      "id": "f1_rationale_468",
       "community": 4,
-      "norm_label": "alternative approach: try to get practice data from f1.com api or structured dat"
+      "norm_label": "alternative approach: try to get practice data from f1.com api or structured dat",
+      "id": "f1_rationale_468"
     },
     {
       "label": "Generate practice results table for F1 Wiki.     Attempts to scrape practice da",
@@ -229,9 +249,9 @@
       "source_file": "f1.py",
       "source_location": "L903",
       "_origin": "ast",
-      "id": "f1_rationale_903",
       "community": 4,
-      "norm_label": "generate practice results table for f1 wiki.     attempts to scrape practice da"
+      "norm_label": "generate practice results table for f1 wiki.     attempts to scrape practice da",
+      "id": "f1_rationale_903"
     },
     {
       "label": "package.json",
@@ -239,9 +259,9 @@
       "source_file": "package.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "package",
       "community": 7,
-      "norm_label": "package.json"
+      "norm_label": "package.json",
+      "id": "package"
     },
     {
       "label": "name",
@@ -249,9 +269,9 @@
       "source_file": "package.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "package_name",
       "community": 7,
-      "norm_label": "name"
+      "norm_label": "name",
+      "id": "package_name"
     },
     {
       "label": "version",
@@ -259,9 +279,9 @@
       "source_file": "package.json",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "package_version",
       "community": 7,
-      "norm_label": "version"
+      "norm_label": "version",
+      "id": "package_version"
     },
     {
       "label": "description",
@@ -269,9 +289,9 @@
       "source_file": "package.json",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "package_description",
       "community": 7,
-      "norm_label": "description"
+      "norm_label": "description",
+      "id": "package_description"
     },
     {
       "label": "main",
@@ -279,9 +299,9 @@
       "source_file": "package.json",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "package_main",
       "community": 7,
-      "norm_label": "main"
+      "norm_label": "main",
+      "id": "package_main"
     },
     {
       "label": "scripts",
@@ -289,9 +309,9 @@
       "source_file": "package.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "package_scripts",
       "community": 7,
-      "norm_label": "scripts"
+      "norm_label": "scripts",
+      "id": "package_scripts"
     },
     {
       "label": "dev",
@@ -299,9 +319,9 @@
       "source_file": "package.json",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "package_scripts_dev",
       "community": 7,
-      "norm_label": "dev"
+      "norm_label": "dev",
+      "id": "package_scripts_dev"
     },
     {
       "label": "deploy",
@@ -309,9 +329,9 @@
       "source_file": "package.json",
       "source_location": "L8",
       "_origin": "ast",
-      "id": "package_scripts_deploy",
       "community": 7,
-      "norm_label": "deploy"
+      "norm_label": "deploy",
+      "id": "package_scripts_deploy"
     },
     {
       "label": "devDependencies",
@@ -319,9 +339,9 @@
       "source_file": "package.json",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "package_devdependencies",
       "community": 7,
-      "norm_label": "devdependencies"
+      "norm_label": "devdependencies",
+      "id": "package_devdependencies"
     },
     {
       "label": "@cloudflare/workers-types",
@@ -329,9 +349,9 @@
       "source_file": "package.json",
       "source_location": "L11",
       "_origin": "ast",
-      "id": "package_devdependencies_cloudflare_workers_types",
       "community": 7,
-      "norm_label": "@cloudflare/workers-types"
+      "norm_label": "@cloudflare/workers-types",
+      "id": "package_devdependencies_cloudflare_workers_types"
     },
     {
       "label": "typescript",
@@ -339,9 +359,9 @@
       "source_file": "package.json",
       "source_location": "L12",
       "_origin": "ast",
-      "id": "package_devdependencies_typescript",
       "community": 7,
-      "norm_label": "typescript"
+      "norm_label": "typescript",
+      "id": "package_devdependencies_typescript"
     },
     {
       "label": "wrangler",
@@ -349,9 +369,9 @@
       "source_file": "package.json",
       "source_location": "L13",
       "_origin": "ast",
-      "id": "package_devdependencies_wrangler",
       "community": 7,
-      "norm_label": "wrangler"
+      "norm_label": "wrangler",
+      "id": "package_devdependencies_wrangler"
     },
     {
       "label": "pyergast.py",
@@ -359,9 +379,9 @@
       "source_file": "pyergast.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "pyergast",
       "community": 2,
-      "norm_label": "pyergast.py"
+      "norm_label": "pyergast.py",
+      "id": "pyergast"
     },
     {
       "label": "get_drivers()",
@@ -369,9 +389,9 @@
       "source_file": "pyergast.py",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "pyergast_get_drivers",
       "community": 2,
-      "norm_label": "get_drivers()"
+      "norm_label": "get_drivers()",
+      "id": "pyergast_get_drivers"
     },
     {
       "label": "get_constructors()",
@@ -379,9 +399,9 @@
       "source_file": "pyergast.py",
       "source_location": "L82",
       "_origin": "ast",
-      "id": "pyergast_get_constructors",
       "community": 2,
-      "norm_label": "get_constructors()"
+      "norm_label": "get_constructors()",
+      "id": "pyergast_get_constructors"
     },
     {
       "label": "get_circuits()",
@@ -389,9 +409,9 @@
       "source_file": "pyergast.py",
       "source_location": "L139",
       "_origin": "ast",
-      "id": "pyergast_get_circuits",
       "community": 2,
-      "norm_label": "get_circuits()"
+      "norm_label": "get_circuits()",
+      "id": "pyergast_get_circuits"
     },
     {
       "label": "find_driverid()",
@@ -399,9 +419,9 @@
       "source_file": "pyergast.py",
       "source_location": "L220",
       "_origin": "ast",
-      "id": "pyergast_find_driverid",
       "community": 2,
-      "norm_label": "find_driverid()"
+      "norm_label": "find_driverid()",
+      "id": "pyergast_find_driverid"
     },
     {
       "label": "find_constructorid()",
@@ -409,9 +429,9 @@
       "source_file": "pyergast.py",
       "source_location": "L265",
       "_origin": "ast",
-      "id": "pyergast_find_constructorid",
       "community": 2,
-      "norm_label": "find_constructorid()"
+      "norm_label": "find_constructorid()",
+      "id": "pyergast_find_constructorid"
     },
     {
       "label": "find_circuitid()",
@@ -419,9 +439,9 @@
       "source_file": "pyergast.py",
       "source_location": "L306",
       "_origin": "ast",
-      "id": "pyergast_find_circuitid",
       "community": 2,
-      "norm_label": "find_circuitid()"
+      "norm_label": "find_circuitid()",
+      "id": "pyergast_find_circuitid"
     },
     {
       "label": "get_race_result()",
@@ -429,9 +449,9 @@
       "source_file": "pyergast.py",
       "source_location": "L348",
       "_origin": "ast",
-      "id": "pyergast_get_race_result",
       "community": 2,
-      "norm_label": "get_race_result()"
+      "norm_label": "get_race_result()",
+      "id": "pyergast_get_race_result"
     },
     {
       "label": "get_qualifying_result()",
@@ -439,9 +459,9 @@
       "source_file": "pyergast.py",
       "source_location": "L451",
       "_origin": "ast",
-      "id": "pyergast_get_qualifying_result",
       "community": 2,
-      "norm_label": "get_qualifying_result()"
+      "norm_label": "get_qualifying_result()",
+      "id": "pyergast_get_qualifying_result"
     },
     {
       "label": "get_schedule()",
@@ -449,9 +469,9 @@
       "source_file": "pyergast.py",
       "source_location": "L540",
       "_origin": "ast",
-      "id": "pyergast_get_schedule",
       "community": 2,
-      "norm_label": "get_schedule()"
+      "norm_label": "get_schedule()",
+      "id": "pyergast_get_schedule"
     },
     {
       "label": "driver_standings()",
@@ -459,9 +479,9 @@
       "source_file": "pyergast.py",
       "source_location": "L603",
       "_origin": "ast",
-      "id": "pyergast_driver_standings",
       "community": 2,
-      "norm_label": "driver_standings()"
+      "norm_label": "driver_standings()",
+      "id": "pyergast_driver_standings"
     },
     {
       "label": "constructor_standings()",
@@ -469,9 +489,9 @@
       "source_file": "pyergast.py",
       "source_location": "L673",
       "_origin": "ast",
-      "id": "pyergast_constructor_standings",
       "community": 2,
-      "norm_label": "constructor_standings()"
+      "norm_label": "constructor_standings()",
+      "id": "pyergast_constructor_standings"
     },
     {
       "label": "query_driver()",
@@ -479,9 +499,9 @@
       "source_file": "pyergast.py",
       "source_location": "L743",
       "_origin": "ast",
-      "id": "pyergast_query_driver",
       "community": 2,
-      "norm_label": "query_driver()"
+      "norm_label": "query_driver()",
+      "id": "pyergast_query_driver"
     },
     {
       "label": "query_constructor()",
@@ -489,9 +509,9 @@
       "source_file": "pyergast.py",
       "source_location": "L814",
       "_origin": "ast",
-      "id": "pyergast_query_constructor",
       "community": 2,
-      "norm_label": "query_constructor()"
+      "norm_label": "query_constructor()",
+      "id": "pyergast_query_constructor"
     },
     {
       "label": "unpack_lists()",
@@ -499,9 +519,9 @@
       "source_file": "pyergast.py",
       "source_location": "L875",
       "_origin": "ast",
-      "id": "pyergast_unpack_lists",
       "community": 2,
-      "norm_label": "unpack_lists()"
+      "norm_label": "unpack_lists()",
+      "id": "pyergast_unpack_lists"
     },
     {
       "label": "get_sprint_result()",
@@ -509,9 +529,9 @@
       "source_file": "pyergast.py",
       "source_location": "L899",
       "_origin": "ast",
-      "id": "pyergast_get_sprint_result",
       "community": 2,
-      "norm_label": "get_sprint_result()"
+      "norm_label": "get_sprint_result()",
+      "id": "pyergast_get_sprint_result"
     },
     {
       "label": "Queries the API to obtain the list of drivers in a pandas dataframe format.",
@@ -519,9 +539,9 @@
       "source_file": "pyergast.py",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "pyergast_rationale_6",
       "community": 2,
-      "norm_label": "queries the api to obtain the list of drivers in a pandas dataframe format."
+      "norm_label": "queries the api to obtain the list of drivers in a pandas dataframe format.",
+      "id": "pyergast_rationale_6"
     },
     {
       "label": "Queries the API to obtain the list of constructors in a pandas dataframe format.",
@@ -529,9 +549,9 @@
       "source_file": "pyergast.py",
       "source_location": "L83",
       "_origin": "ast",
-      "id": "pyergast_rationale_83",
       "community": 2,
-      "norm_label": "queries the api to obtain the list of constructors in a pandas dataframe format."
+      "norm_label": "queries the api to obtain the list of constructors in a pandas dataframe format.",
+      "id": "pyergast_rationale_83"
     },
     {
       "label": "Queries the API to obtain the list of circuits in a pandas dataframe format.",
@@ -539,9 +559,9 @@
       "source_file": "pyergast.py",
       "source_location": "L140",
       "_origin": "ast",
-      "id": "pyergast_rationale_140",
       "community": 2,
-      "norm_label": "queries the api to obtain the list of circuits in a pandas dataframe format."
+      "norm_label": "queries the api to obtain the list of circuits in a pandas dataframe format.",
+      "id": "pyergast_rationale_140"
     },
     {
       "label": "Searches the list of all drivers to find ones that are the same or similar to th",
@@ -549,9 +569,9 @@
       "source_file": "pyergast.py",
       "source_location": "L221",
       "_origin": "ast",
-      "id": "pyergast_rationale_221",
       "community": 2,
-      "norm_label": "searches the list of all drivers to find ones that are the same or similar to th"
+      "norm_label": "searches the list of all drivers to find ones that are the same or similar to th",
+      "id": "pyergast_rationale_221"
     },
     {
       "label": "Searches the list of all constructors to find ones that are the same or similar",
@@ -559,9 +579,9 @@
       "source_file": "pyergast.py",
       "source_location": "L266",
       "_origin": "ast",
-      "id": "pyergast_rationale_266",
       "community": 2,
-      "norm_label": "searches the list of all constructors to find ones that are the same or similar"
+      "norm_label": "searches the list of all constructors to find ones that are the same or similar",
+      "id": "pyergast_rationale_266"
     },
     {
       "label": "Searches the list of all the circuits that are similar to the input      Param",
@@ -569,9 +589,9 @@
       "source_file": "pyergast.py",
       "source_location": "L307",
       "_origin": "ast",
-      "id": "pyergast_rationale_307",
       "community": 2,
-      "norm_label": "searches the list of all the circuits that are similar to the input      param"
+      "norm_label": "searches the list of all the circuits that are similar to the input      param",
+      "id": "pyergast_rationale_307"
     },
     {
       "label": "Queries the API to return race results in a pandas dataframe format.     By def",
@@ -579,9 +599,9 @@
       "source_file": "pyergast.py",
       "source_location": "L349",
       "_origin": "ast",
-      "id": "pyergast_rationale_349",
       "community": 2,
-      "norm_label": "queries the api to return race results in a pandas dataframe format.     by def"
+      "norm_label": "queries the api to return race results in a pandas dataframe format.     by def",
+      "id": "pyergast_rationale_349"
     },
     {
       "label": "Queries the API to return qualifying results in a pandas dataframe format.",
@@ -589,9 +609,9 @@
       "source_file": "pyergast.py",
       "source_location": "L452",
       "_origin": "ast",
-      "id": "pyergast_rationale_452",
       "community": 2,
-      "norm_label": "queries the api to return qualifying results in a pandas dataframe format."
+      "norm_label": "queries the api to return qualifying results in a pandas dataframe format.",
+      "id": "pyergast_rationale_452"
     },
     {
       "label": "Queries the API to return the schedule of a specified season. Defaults to most r",
@@ -599,9 +619,9 @@
       "source_file": "pyergast.py",
       "source_location": "L541",
       "_origin": "ast",
-      "id": "pyergast_rationale_541",
       "community": 2,
-      "norm_label": "queries the api to return the schedule of a specified season. defaults to most r"
+      "norm_label": "queries the api to return the schedule of a specified season. defaults to most r",
+      "id": "pyergast_rationale_541"
     },
     {
       "label": "Fetch the driver standings after a specific race in a specific year. Defaults to",
@@ -609,9 +629,9 @@
       "source_file": "pyergast.py",
       "source_location": "L604",
       "_origin": "ast",
-      "id": "pyergast_rationale_604",
       "community": 2,
-      "norm_label": "fetch the driver standings after a specific race in a specific year. defaults to"
+      "norm_label": "fetch the driver standings after a specific race in a specific year. defaults to",
+      "id": "pyergast_rationale_604"
     },
     {
       "label": "Fetch the constructor standings after a specific race in a specific year. Defaul",
@@ -619,9 +639,9 @@
       "source_file": "pyergast.py",
       "source_location": "L674",
       "_origin": "ast",
-      "id": "pyergast_rationale_674",
       "community": 2,
-      "norm_label": "fetch the constructor standings after a specific race in a specific year. defaul"
+      "norm_label": "fetch the constructor standings after a specific race in a specific year. defaul",
+      "id": "pyergast_rationale_674"
     },
     {
       "label": "Fetches the driver's historical driver standings position      Parameters",
@@ -629,9 +649,9 @@
       "source_file": "pyergast.py",
       "source_location": "L744",
       "_origin": "ast",
-      "id": "pyergast_rationale_744",
       "community": 2,
-      "norm_label": "fetches the driver's historical driver standings position      parameters"
+      "norm_label": "fetches the driver's historical driver standings position      parameters",
+      "id": "pyergast_rationale_744"
     },
     {
       "label": "Fetches the consturctor's historical constructor standings position      Param",
@@ -639,9 +659,9 @@
       "source_file": "pyergast.py",
       "source_location": "L815",
       "_origin": "ast",
-      "id": "pyergast_rationale_815",
       "community": 2,
-      "norm_label": "fetches the consturctor's historical constructor standings position      param"
+      "norm_label": "fetches the consturctor's historical constructor standings position      param",
+      "id": "pyergast_rationale_815"
     },
     {
       "label": "Helper function that unpacks dictionaries in a dataframe and packs them into a n",
@@ -649,9 +669,9 @@
       "source_file": "pyergast.py",
       "source_location": "L876",
       "_origin": "ast",
-      "id": "pyergast_rationale_876",
       "community": 2,
-      "norm_label": "helper function that unpacks dictionaries in a dataframe and packs them into a n"
+      "norm_label": "helper function that unpacks dictionaries in a dataframe and packs them into a n",
+      "id": "pyergast_rationale_876"
     },
     {
       "label": "Queries the API to return sprint results in a pandas dataframe format.     By d",
@@ -659,9 +679,9 @@
       "source_file": "pyergast.py",
       "source_location": "L900",
       "_origin": "ast",
-      "id": "pyergast_rationale_900",
       "community": 2,
-      "norm_label": "queries the api to return sprint results in a pandas dataframe format.     by d"
+      "norm_label": "queries the api to return sprint results in a pandas dataframe format.     by d",
+      "id": "pyergast_rationale_900"
     },
     {
       "label": "f1-api.ts",
@@ -669,9 +689,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_f1_api",
       "community": 6,
-      "norm_label": "f1-api.ts"
+      "norm_label": "f1-api.ts",
+      "id": "src_f1_api"
     },
     {
       "label": "Driver",
@@ -679,9 +699,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_f1_api_driver",
       "community": 6,
-      "norm_label": "driver"
+      "norm_label": "driver",
+      "id": "src_f1_api_driver"
     },
     {
       "label": "Constructor",
@@ -689,9 +709,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L12",
       "_origin": "ast",
-      "id": "src_f1_api_constructor",
       "community": 6,
-      "norm_label": "constructor"
+      "norm_label": "constructor",
+      "id": "src_f1_api_constructor"
     },
     {
       "label": "RaceResult",
@@ -699,9 +719,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L19",
       "_origin": "ast",
-      "id": "src_f1_api_raceresult",
       "community": 3,
-      "norm_label": "raceresult"
+      "norm_label": "raceresult",
+      "id": "src_f1_api_raceresult"
     },
     {
       "label": "QualifyingResult",
@@ -709,9 +729,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L46",
       "_origin": "ast",
-      "id": "src_f1_api_qualifyingresult",
       "community": 6,
-      "norm_label": "qualifyingresult"
+      "norm_label": "qualifyingresult",
+      "id": "src_f1_api_qualifyingresult"
     },
     {
       "label": "DriverStanding",
@@ -719,9 +739,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L56",
       "_origin": "ast",
-      "id": "src_f1_api_driverstanding",
       "community": 6,
-      "norm_label": "driverstanding"
+      "norm_label": "driverstanding",
+      "id": "src_f1_api_driverstanding"
     },
     {
       "label": "ConstructorStanding",
@@ -729,9 +749,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L65",
       "_origin": "ast",
-      "id": "src_f1_api_constructorstanding",
       "community": 6,
-      "norm_label": "constructorstanding"
+      "norm_label": "constructorstanding",
+      "id": "src_f1_api_constructorstanding"
     },
     {
       "label": "ScheduleRace",
@@ -739,9 +759,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L73",
       "_origin": "ast",
-      "id": "src_f1_api_schedulerace",
       "community": 6,
-      "norm_label": "schedulerace"
+      "norm_label": "schedulerace",
+      "id": "src_f1_api_schedulerace"
     },
     {
       "label": "PracticeSessionData",
@@ -749,9 +769,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L96",
       "_origin": "ast",
-      "id": "src_f1_api_practicesessiondata",
       "community": 6,
-      "norm_label": "practicesessiondata"
+      "norm_label": "practicesessiondata",
+      "id": "src_f1_api_practicesessiondata"
     },
     {
       "label": "PracticeResults",
@@ -759,9 +779,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L104",
       "_origin": "ast",
-      "id": "src_f1_api_practiceresults",
       "community": 6,
-      "norm_label": "practiceresults"
+      "norm_label": "practiceresults",
+      "id": "src_f1_api_practiceresults"
     },
     {
       "label": "getSchedule()",
@@ -769,9 +789,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L113",
       "_origin": "ast",
-      "id": "src_f1_api_getschedule",
-      "community": 1,
-      "norm_label": "getschedule()"
+      "community": 3,
+      "norm_label": "getschedule()",
+      "id": "src_f1_api_getschedule"
     },
     {
       "label": "getScheduleWithRetry()",
@@ -779,9 +799,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L133",
       "_origin": "ast",
-      "id": "src_f1_api_getschedulewithretry",
-      "community": 0,
-      "norm_label": "getschedulewithretry()"
+      "community": 3,
+      "norm_label": "getschedulewithretry()",
+      "id": "src_f1_api_getschedulewithretry"
     },
     {
       "label": "getRaceResult()",
@@ -789,9 +809,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L155",
       "_origin": "ast",
-      "id": "src_f1_api_getraceresult",
       "community": 3,
-      "norm_label": "getraceresult()"
+      "norm_label": "getraceresult()",
+      "id": "src_f1_api_getraceresult"
     },
     {
       "label": "getQualifyingResult()",
@@ -799,9 +819,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L203",
       "_origin": "ast",
-      "id": "src_f1_api_getqualifyingresult",
       "community": 3,
-      "norm_label": "getqualifyingresult()"
+      "norm_label": "getqualifyingresult()",
+      "id": "src_f1_api_getqualifyingresult"
     },
     {
       "label": "getDriverStandings()",
@@ -809,9 +829,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L220",
       "_origin": "ast",
-      "id": "src_f1_api_getdriverstandings",
       "community": 1,
-      "norm_label": "getdriverstandings()"
+      "norm_label": "getdriverstandings()",
+      "id": "src_f1_api_getdriverstandings"
     },
     {
       "label": "getConstructorStandings()",
@@ -819,9 +839,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L233",
       "_origin": "ast",
-      "id": "src_f1_api_getconstructorstandings",
       "community": 1,
-      "norm_label": "getconstructorstandings()"
+      "norm_label": "getconstructorstandings()",
+      "id": "src_f1_api_getconstructorstandings"
     },
     {
       "label": "getDriversForRace()",
@@ -829,9 +849,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L246",
       "_origin": "ast",
-      "id": "src_f1_api_getdriversforrace",
       "community": 1,
-      "norm_label": "getdriversforrace()"
+      "norm_label": "getdriversforrace()",
+      "id": "src_f1_api_getdriversforrace"
     },
     {
       "label": "getDriversForRaceWithFallback()",
@@ -839,9 +859,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L255",
       "_origin": "ast",
-      "id": "src_f1_api_getdriversforracewithfallback",
       "community": 1,
-      "norm_label": "getdriversforracewithfallback()"
+      "norm_label": "getdriversforracewithfallback()",
+      "id": "src_f1_api_getdriversforracewithfallback"
     },
     {
       "label": "parsePracticeHTML()",
@@ -849,9 +869,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L282",
       "_origin": "ast",
-      "id": "src_f1_api_parsepracticehtml",
-      "community": 6,
-      "norm_label": "parsepracticehtml()"
+      "community": 1,
+      "norm_label": "parsepracticehtml()",
+      "id": "src_f1_api_parsepracticehtml"
     },
     {
       "label": "mapDriverNames()",
@@ -859,9 +879,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L330",
       "_origin": "ast",
-      "id": "src_f1_api_mapdrivernames",
-      "community": 6,
-      "norm_label": "mapdrivernames()"
+      "community": 1,
+      "norm_label": "mapdrivernames()",
+      "id": "src_f1_api_mapdrivernames"
     },
     {
       "label": "scrapePracticeSession()",
@@ -869,9 +889,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L400",
       "_origin": "ast",
-      "id": "src_f1_api_scrapepracticesession",
-      "community": 6,
-      "norm_label": "scrapepracticesession()"
+      "community": 1,
+      "norm_label": "scrapepracticesession()",
+      "id": "src_f1_api_scrapepracticesession"
     },
     {
       "label": "RACING_KEY_MAPPING",
@@ -879,9 +899,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L415",
       "_origin": "ast",
-      "id": "src_f1_api_racing_key_mapping",
       "community": 6,
-      "norm_label": "racing_key_mapping"
+      "norm_label": "racing_key_mapping",
+      "id": "src_f1_api_racing_key_mapping"
     },
     {
       "label": "getF1RacingKey()",
@@ -889,9 +909,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L443",
       "_origin": "ast",
-      "id": "src_f1_api_getf1racingkey",
-      "community": 6,
-      "norm_label": "getf1racingkey()"
+      "community": 1,
+      "norm_label": "getf1racingkey()",
+      "id": "src_f1_api_getf1racingkey"
     },
     {
       "label": "cleanOfficialName()",
@@ -899,9 +919,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L453",
       "_origin": "ast",
-      "id": "src_f1_api_cleanofficialname",
       "community": 6,
-      "norm_label": "cleanofficialname()"
+      "norm_label": "cleanofficialname()",
+      "id": "src_f1_api_cleanofficialname"
     },
     {
       "label": "fetchOfficialRaceName()",
@@ -909,9 +929,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L460",
       "_origin": "ast",
-      "id": "src_f1_api_fetchofficialracename",
       "community": 6,
-      "norm_label": "fetchofficialracename()"
+      "norm_label": "fetchofficialracename()",
+      "id": "src_f1_api_fetchofficialracename"
     },
     {
       "label": "frontend-html.ts",
@@ -919,9 +939,9 @@
       "source_file": "src/frontend-html.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_frontend_html",
       "community": 1,
-      "norm_label": "frontend-html.ts"
+      "norm_label": "frontend-html.ts",
+      "id": "src_frontend_html"
     },
     {
       "label": "index.ts",
@@ -929,9 +949,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_index",
       "community": 1,
-      "norm_label": "index.ts"
+      "norm_label": "index.ts",
+      "id": "src_index"
     },
     {
       "label": "corsResponse()",
@@ -939,9 +959,9 @@
       "source_file": "src/index.ts",
       "source_location": "L54",
       "_origin": "ast",
-      "id": "src_index_corsresponse",
       "community": 1,
-      "norm_label": "corsresponse()"
+      "norm_label": "corsresponse()",
+      "id": "src_index_corsresponse"
     },
     {
       "label": "verifyTurnstile()",
@@ -949,9 +969,9 @@
       "source_file": "src/index.ts",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "src_index_verifyturnstile",
       "community": 1,
-      "norm_label": "verifyturnstile()"
+      "norm_label": "verifyturnstile()",
+      "id": "src_index_verifyturnstile"
     },
     {
       "label": "fetch()",
@@ -959,9 +979,9 @@
       "source_file": "src/index.ts",
       "source_location": "L106",
       "_origin": "ast",
-      "id": "src_index_fetch",
       "community": 1,
-      "norm_label": "fetch()"
+      "norm_label": "fetch()",
+      "id": "src_index_fetch"
     },
     {
       "label": "scheduled()",
@@ -969,9 +989,9 @@
       "source_file": "src/index.ts",
       "source_location": "L546",
       "_origin": "ast",
-      "id": "src_index_scheduled",
       "community": 1,
-      "norm_label": "scheduled()"
+      "norm_label": "scheduled()",
+      "id": "src_index_scheduled"
     },
     {
       "label": "findInfoboxRange()",
@@ -979,9 +999,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1101",
       "_origin": "ast",
-      "id": "src_index_findinfoboxrange",
       "community": 1,
-      "norm_label": "findinfoboxrange()"
+      "norm_label": "findinfoboxrange()",
+      "id": "src_index_findinfoboxrange"
     },
     {
       "label": "updateParameterInInfobox()",
@@ -989,9 +1009,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1127",
       "_origin": "ast",
-      "id": "src_index_updateparameterininfobox",
       "community": 1,
-      "norm_label": "updateparameterininfobox()"
+      "norm_label": "updateparameterininfobox()",
+      "id": "src_index_updateparameterininfobox"
     },
     {
       "label": "findBestHeader()",
@@ -999,9 +1019,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1153",
       "_origin": "ast",
-      "id": "src_index_findbestheader",
       "community": 1,
-      "norm_label": "findbestheader()"
+      "norm_label": "findbestheader()",
+      "id": "src_index_findbestheader"
     },
     {
       "label": "wikiDriverList",
@@ -1009,9 +1029,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1182",
       "_origin": "ast",
-      "id": "src_index_wikidriverlist",
       "community": 1,
-      "norm_label": "wikidriverlist"
+      "norm_label": "wikidriverlist",
+      "id": "src_index_wikidriverlist"
     },
     {
       "label": "getOrdinal()",
@@ -1019,9 +1039,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1207",
       "_origin": "ast",
-      "id": "src_index_getordinal",
       "community": 1,
-      "norm_label": "getordinal()"
+      "norm_label": "getordinal()",
+      "id": "src_index_getordinal"
     },
     {
       "label": "formatResult()",
@@ -1029,9 +1049,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1213",
       "_origin": "ast",
-      "id": "src_index_formatresult",
       "community": 1,
-      "norm_label": "formatresult()"
+      "norm_label": "formatresult()",
+      "id": "src_index_formatresult"
     },
     {
       "label": "isPlaceholder()",
@@ -1039,9 +1059,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1242",
       "_origin": "ast",
-      "id": "src_index_isplaceholder",
       "community": 1,
-      "norm_label": "isplaceholder()"
+      "norm_label": "isplaceholder()",
+      "id": "src_index_isplaceholder"
     },
     {
       "label": "generateWikiResultsText()",
@@ -1049,9 +1069,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1253",
       "_origin": "ast",
-      "id": "src_index_generatewikiresultstext",
       "community": 1,
-      "norm_label": "generatewikiresultstext()"
+      "norm_label": "generatewikiresultstext()",
+      "id": "src_index_generatewikiresultstext"
     },
     {
       "label": "checkAndSendDailySummary()",
@@ -1059,9 +1079,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1273",
       "_origin": "ast",
-      "id": "src_index_checkandsenddailysummary",
       "community": 1,
-      "norm_label": "checkandsenddailysummary()"
+      "norm_label": "checkandsenddailysummary()",
+      "id": "src_index_checkandsenddailysummary"
     },
     {
       "label": "syncLatestNewsEvents()",
@@ -1069,9 +1089,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1436",
       "_origin": "ast",
-      "id": "src_index_synclatestnewsevents",
       "community": 0,
-      "norm_label": "synclatestnewsevents()"
+      "norm_label": "synclatestnewsevents()",
+      "id": "src_index_synclatestnewsevents"
     },
     {
       "label": "getRaceStartDate()",
@@ -1079,9 +1099,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1556",
       "_origin": "ast",
-      "id": "src_index_getracestartdate",
       "community": 1,
-      "norm_label": "getracestartdate()"
+      "norm_label": "getracestartdate()",
+      "id": "src_index_getracestartdate"
     },
     {
       "label": "getRaceTimes()",
@@ -1089,9 +1109,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1569",
       "_origin": "ast",
-      "id": "src_index_getracetimes",
       "community": 1,
-      "norm_label": "getracetimes()"
+      "norm_label": "getracetimes()",
+      "id": "src_index_getracetimes"
     },
     {
       "label": "syncCareerStandingsTemplates()",
@@ -1099,9 +1119,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1577",
       "_origin": "ast",
-      "id": "src_index_synccareerstandingstemplates",
       "community": 1,
-      "norm_label": "synccareerstandingstemplates()"
+      "norm_label": "synccareerstandingstemplates()",
+      "id": "src_index_synccareerstandingstemplates"
     },
     {
       "label": "syncStatsTemplates()",
@@ -1109,9 +1129,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1651",
       "_origin": "ast",
-      "id": "src_index_syncstatstemplates",
-      "community": 1,
-      "norm_label": "syncstatstemplates()"
+      "community": 3,
+      "norm_label": "syncstatstemplates()",
+      "id": "src_index_syncstatstemplates"
     },
     {
       "label": "llm-reporter.ts",
@@ -1119,9 +1139,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_llm_reporter",
       "community": 1,
-      "norm_label": "llm-reporter.ts"
+      "norm_label": "llm-reporter.ts",
+      "id": "src_llm_reporter"
     },
     {
       "label": "generatePromptContext()",
@@ -1129,9 +1149,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_llm_reporter_generatepromptcontext",
       "community": 1,
-      "norm_label": "generatepromptcontext()"
+      "norm_label": "generatepromptcontext()",
+      "id": "src_llm_reporter_generatepromptcontext"
     },
     {
       "label": "getPromptForSection()",
@@ -1139,9 +1159,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "src_llm_reporter_getpromptforsection",
       "community": 1,
-      "norm_label": "getpromptforsection()"
+      "norm_label": "getpromptforsection()",
+      "id": "src_llm_reporter_getpromptforsection"
     },
     {
       "label": "callGemini()",
@@ -1149,9 +1169,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L115",
       "_origin": "ast",
-      "id": "src_llm_reporter_callgemini",
       "community": 1,
-      "norm_label": "callgemini()"
+      "norm_label": "callgemini()",
+      "id": "src_llm_reporter_callgemini"
     },
     {
       "label": "callOpenAI()",
@@ -1159,9 +1179,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L141",
       "_origin": "ast",
-      "id": "src_llm_reporter_callopenai",
       "community": 1,
-      "norm_label": "callopenai()"
+      "norm_label": "callopenai()",
+      "id": "src_llm_reporter_callopenai"
     },
     {
       "label": "callWorkersAI()",
@@ -1169,9 +1189,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L166",
       "_origin": "ast",
-      "id": "src_llm_reporter_callworkersai",
       "community": 1,
-      "norm_label": "callworkersai()"
+      "norm_label": "callworkersai()",
+      "id": "src_llm_reporter_callworkersai"
     },
     {
       "label": "generateReportForSection()",
@@ -1179,9 +1199,9 @@
       "source_file": "src/llm-reporter.ts",
       "source_location": "L178",
       "_origin": "ast",
-      "id": "src_llm_reporter_generatereportforsection",
       "community": 1,
-      "norm_label": "generatereportforsection()"
+      "norm_label": "generatereportforsection()",
+      "id": "src_llm_reporter_generatereportforsection"
     },
     {
       "label": "stats.ts",
@@ -1189,9 +1209,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_stats",
       "community": 3,
-      "norm_label": "stats.ts"
+      "norm_label": "stats.ts",
+      "id": "src_stats"
     },
     {
       "label": "CIRCUIT_LENGTHS",
@@ -1199,9 +1219,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "src_stats_circuit_lengths",
       "community": 3,
-      "norm_label": "circuit_lengths"
+      "norm_label": "circuit_lengths",
+      "id": "src_stats_circuit_lengths"
     },
     {
       "label": "BASE_STATS_2025",
@@ -1209,9 +1229,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L30",
       "_origin": "ast",
-      "id": "src_stats_base_stats_2025",
       "community": 3,
-      "norm_label": "base_stats_2025"
+      "norm_label": "base_stats_2025",
+      "id": "src_stats_base_stats_2025"
     },
     {
       "label": "DriverStats",
@@ -1219,9 +1239,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L372",
       "_origin": "ast",
-      "id": "src_stats_driverstats",
       "community": 3,
-      "norm_label": "driverstats"
+      "norm_label": "driverstats",
+      "id": "src_stats_driverstats"
     },
     {
       "label": "driverIdToWikiName",
@@ -1229,9 +1249,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L396",
       "_origin": "ast",
-      "id": "src_stats_driveridtowikiname",
       "community": 3,
-      "norm_label": "driveridtowikiname"
+      "norm_label": "driveridtowikiname",
+      "id": "src_stats_driveridtowikiname"
     },
     {
       "label": "normalizeName()",
@@ -1239,9 +1259,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L423",
       "_origin": "ast",
-      "id": "src_stats_normalizename",
       "community": 3,
-      "norm_label": "normalizename()"
+      "norm_label": "normalizename()",
+      "id": "src_stats_normalizename"
     },
     {
       "label": "calculateRoundStats()",
@@ -1249,9 +1269,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L428",
       "_origin": "ast",
-      "id": "src_stats_calculateroundstats",
       "community": 3,
-      "norm_label": "calculateroundstats()"
+      "norm_label": "calculateroundstats()",
+      "id": "src_stats_calculateroundstats"
     },
     {
       "label": "hasRaceResults()",
@@ -1259,9 +1279,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L606",
       "_origin": "ast",
-      "id": "src_stats_hasraceresults",
       "community": 3,
-      "norm_label": "hasraceresults()"
+      "norm_label": "hasraceresults()",
+      "id": "src_stats_hasraceresults"
     },
     {
       "label": "getRoundStatsCached()",
@@ -1269,9 +1289,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L611",
       "_origin": "ast",
-      "id": "src_stats_getroundstatscached",
       "community": 3,
-      "norm_label": "getroundstatscached()"
+      "norm_label": "getroundstatscached()",
+      "id": "src_stats_getroundstatscached"
     },
     {
       "label": "get2026CumulativeStats()",
@@ -1279,9 +1299,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L654",
       "_origin": "ast",
-      "id": "src_stats_get2026cumulativestats",
-      "community": 1,
-      "norm_label": "get2026cumulativestats()"
+      "community": 3,
+      "norm_label": "get2026cumulativestats()",
+      "id": "src_stats_get2026cumulativestats"
     },
     {
       "label": "formatStatValue()",
@@ -1289,9 +1309,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L749",
       "_origin": "ast",
-      "id": "src_stats_formatstatvalue",
       "community": 3,
-      "norm_label": "formatstatvalue()"
+      "norm_label": "formatstatvalue()",
+      "id": "src_stats_formatstatvalue"
     },
     {
       "label": "formatDriverLine()",
@@ -1299,9 +1319,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L757",
       "_origin": "ast",
-      "id": "src_stats_formatdriverline",
       "community": 3,
-      "norm_label": "formatdriverline()"
+      "norm_label": "formatdriverline()",
+      "id": "src_stats_formatdriverline"
     },
     {
       "label": "getSortValue()",
@@ -1309,9 +1329,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L763",
       "_origin": "ast",
-      "id": "src_stats_getsortvalue",
       "community": 3,
-      "norm_label": "getsortvalue()"
+      "norm_label": "getsortvalue()",
+      "id": "src_stats_getsortvalue"
     },
     {
       "label": "updateTemplateContent()",
@@ -1319,9 +1339,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L781",
       "_origin": "ast",
-      "id": "src_stats_updatetemplatecontent",
-      "community": 1,
-      "norm_label": "updatetemplatecontent()"
+      "community": 3,
+      "norm_label": "updatetemplatecontent()",
+      "id": "src_stats_updatetemplatecontent"
     },
     {
       "label": "updateCorrectionText()",
@@ -1329,9 +1349,9 @@
       "source_file": "src/stats.ts",
       "source_location": "L1027",
       "_origin": "ast",
-      "id": "src_stats_updatecorrectiontext",
-      "community": 1,
-      "norm_label": "updatecorrectiontext()"
+      "community": 3,
+      "norm_label": "updatecorrectiontext()",
+      "id": "src_stats_updatecorrectiontext"
     },
     {
       "label": "statsf1.ts",
@@ -1339,9 +1359,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_statsf1",
       "community": 3,
-      "norm_label": "statsf1.ts"
+      "norm_label": "statsf1.ts",
+      "id": "src_statsf1"
     },
     {
       "label": "ROUND_TO_STATS_F1_SLUG",
@@ -1349,9 +1369,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "src_statsf1_round_to_stats_f1_slug",
       "community": 3,
-      "norm_label": "round_to_stats_f1_slug"
+      "norm_label": "round_to_stats_f1_slug",
+      "id": "src_statsf1_round_to_stats_f1_slug"
     },
     {
       "label": "StatsF1DriverResult",
@@ -1359,9 +1379,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L29",
       "_origin": "ast",
-      "id": "src_statsf1_statsf1driverresult",
       "community": 3,
-      "norm_label": "statsf1driverresult"
+      "norm_label": "statsf1driverresult",
+      "id": "src_statsf1_statsf1driverresult"
     },
     {
       "label": "StatsF1VerificationReport",
@@ -1369,9 +1389,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L40",
       "_origin": "ast",
-      "id": "src_statsf1_statsf1verificationreport",
       "community": 3,
-      "norm_label": "statsf1verificationreport"
+      "norm_label": "statsf1verificationreport",
+      "id": "src_statsf1_statsf1verificationreport"
     },
     {
       "label": "cleanText()",
@@ -1379,9 +1399,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L50",
       "_origin": "ast",
-      "id": "src_statsf1_cleantext",
       "community": 3,
-      "norm_label": "cleantext()"
+      "norm_label": "cleantext()",
+      "id": "src_statsf1_cleantext"
     },
     {
       "label": "findDriverId()",
@@ -1389,9 +1409,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L60",
       "_origin": "ast",
-      "id": "src_statsf1_finddriverid",
       "community": 3,
-      "norm_label": "finddriverid()"
+      "norm_label": "finddriverid()",
+      "id": "src_statsf1_finddriverid"
     },
     {
       "label": "getStatsF1Results()",
@@ -1399,9 +1419,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L96",
       "_origin": "ast",
-      "id": "src_statsf1_getstatsf1results",
       "community": 3,
-      "norm_label": "getstatsf1results()"
+      "norm_label": "getstatsf1results()",
+      "id": "src_statsf1_getstatsf1results"
     },
     {
       "label": "verifyResults()",
@@ -1409,9 +1429,9 @@
       "source_file": "src/statsf1.ts",
       "source_location": "L190",
       "_origin": "ast",
-      "id": "src_statsf1_verifyresults",
       "community": 3,
-      "norm_label": "verifyresults()"
+      "norm_label": "verifyresults()",
+      "id": "src_statsf1_verifyresults"
     },
     {
       "label": "wiki.ts",
@@ -1419,9 +1439,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_wiki",
       "community": 1,
-      "norm_label": "wiki.ts"
+      "norm_label": "wiki.ts",
+      "id": "src_wiki"
     },
     {
       "label": "WikiConfig",
@@ -1429,9 +1449,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_wiki_wikiconfig",
       "community": 1,
-      "norm_label": "wikiconfig"
+      "norm_label": "wikiconfig",
+      "id": "src_wiki_wikiconfig"
     },
     {
       "label": "WikiSession",
@@ -1439,9 +1459,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "src_wiki_wikisession",
       "community": 1,
-      "norm_label": "wikisession"
+      "norm_label": "wikisession",
+      "id": "src_wiki_wikisession"
     },
     {
       "label": "getApiUrl()",
@@ -1449,9 +1469,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L18",
       "_origin": "ast",
-      "id": "src_wiki_getapiurl",
       "community": 1,
-      "norm_label": "getapiurl()"
+      "norm_label": "getapiurl()",
+      "id": "src_wiki_getapiurl"
     },
     {
       "label": "logApiCall()",
@@ -1459,9 +1479,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L28",
       "_origin": "ast",
-      "id": "src_wiki_logapicall",
       "community": 1,
-      "norm_label": "logapicall()"
+      "norm_label": "logapicall()",
+      "id": "src_wiki_logapicall"
     },
     {
       "label": "loginToWiki()",
@@ -1469,9 +1489,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L59",
       "_origin": "ast",
-      "id": "src_wiki_logintowiki",
       "community": 1,
-      "norm_label": "logintowiki()"
+      "norm_label": "logintowiki()",
+      "id": "src_wiki_logintowiki"
     },
     {
       "label": "WikiPageContent",
@@ -1479,9 +1499,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L232",
       "_origin": "ast",
-      "id": "src_wiki_wikipagecontent",
       "community": 1,
-      "norm_label": "wikipagecontent"
+      "norm_label": "wikipagecontent",
+      "id": "src_wiki_wikipagecontent"
     },
     {
       "label": "getPageContent()",
@@ -1489,9 +1509,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L239",
       "_origin": "ast",
-      "id": "src_wiki_getpagecontent",
       "community": 1,
-      "norm_label": "getpagecontent()"
+      "norm_label": "getpagecontent()",
+      "id": "src_wiki_getpagecontent"
     },
     {
       "label": "editPage()",
@@ -1499,9 +1519,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L289",
       "_origin": "ast",
-      "id": "src_wiki_editpage",
       "community": 1,
-      "norm_label": "editpage()"
+      "norm_label": "editpage()",
+      "id": "src_wiki_editpage"
     },
     {
       "label": "replaceSectionWikitext()",
@@ -1509,9 +1529,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L355",
       "_origin": "ast",
-      "id": "src_wiki_replacesectionwikitext",
       "community": 1,
-      "norm_label": "replacesectionwikitext()"
+      "norm_label": "replacesectionwikitext()",
+      "id": "src_wiki_replacesectionwikitext"
     },
     {
       "label": "getSectionContent()",
@@ -1519,9 +1539,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L427",
       "_origin": "ast",
-      "id": "src_wiki_getsectioncontent",
       "community": 1,
-      "norm_label": "getsectioncontent()"
+      "norm_label": "getsectioncontent()",
+      "id": "src_wiki_getsectioncontent"
     },
     {
       "label": "isSectionEmptyOrPlaceholder()",
@@ -1529,9 +1549,9 @@
       "source_file": "src/wiki.ts",
       "source_location": "L455",
       "_origin": "ast",
-      "id": "src_wiki_issectionemptyorplaceholder",
       "community": 1,
-      "norm_label": "issectionemptyorplaceholder()"
+      "norm_label": "issectionemptyorplaceholder()",
+      "id": "src_wiki_issectionemptyorplaceholder"
     },
     {
       "label": "wikitext-generator.ts",
@@ -1539,9 +1559,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_wikitext_generator",
       "community": 0,
-      "norm_label": "wikitext-generator.ts"
+      "norm_label": "wikitext-generator.ts",
+      "id": "src_wikitext_generator"
     },
     {
       "label": "FLAGS",
@@ -1549,9 +1569,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L11",
       "_origin": "ast",
-      "id": "src_wikitext_generator_flags",
       "community": 0,
-      "norm_label": "flags"
+      "norm_label": "flags",
+      "id": "src_wikitext_generator_flags"
     },
     {
       "label": "getFlag()",
@@ -1559,9 +1579,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L38",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getflag",
       "community": 0,
-      "norm_label": "getflag()"
+      "norm_label": "getflag()",
+      "id": "src_wikitext_generator_getflag"
     },
     {
       "label": "getNationalityCode()",
@@ -1569,9 +1589,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L42",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getnationalitycode",
       "community": 1,
-      "norm_label": "getnationalitycode()"
+      "norm_label": "getnationalitycode()",
+      "id": "src_wikitext_generator_getnationalitycode"
     },
     {
       "label": "CONSTRUCTORS",
@@ -1579,9 +1599,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L48",
       "_origin": "ast",
-      "id": "src_wikitext_generator_constructors",
       "community": 0,
-      "norm_label": "constructors"
+      "norm_label": "constructors",
+      "id": "src_wikitext_generator_constructors"
     },
     {
       "label": "STATUSES",
@@ -1589,9 +1609,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L67",
       "_origin": "ast",
-      "id": "src_wikitext_generator_statuses",
       "community": 0,
-      "norm_label": "statuses"
+      "norm_label": "statuses",
+      "id": "src_wikitext_generator_statuses"
     },
     {
       "label": "getTeamTemplate()",
@@ -1599,9 +1619,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L73",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getteamtemplate",
       "community": 0,
-      "norm_label": "getteamtemplate()"
+      "norm_label": "getteamtemplate()",
+      "id": "src_wikitext_generator_getteamtemplate"
     },
     {
       "label": "convertTimeDifferentialToAbsolute()",
@@ -1609,9 +1629,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L81",
       "_origin": "ast",
-      "id": "src_wikitext_generator_converttimedifferentialtoabsolute",
       "community": 0,
-      "norm_label": "converttimedifferentialtoabsolute()"
+      "norm_label": "converttimedifferentialtoabsolute()",
+      "id": "src_wikitext_generator_converttimedifferentialtoabsolute"
     },
     {
       "label": "calculate107Time()",
@@ -1619,9 +1639,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L120",
       "_origin": "ast",
-      "id": "src_wikitext_generator_calculate107time",
       "community": 0,
-      "norm_label": "calculate107time()"
+      "norm_label": "calculate107time()",
+      "id": "src_wikitext_generator_calculate107time"
     },
     {
       "label": "timeToSeconds()",
@@ -1629,9 +1649,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L137",
       "_origin": "ast",
-      "id": "src_wikitext_generator_timetoseconds",
       "community": 0,
-      "norm_label": "timetoseconds()"
+      "norm_label": "timetoseconds()",
+      "id": "src_wikitext_generator_timetoseconds"
     },
     {
       "label": "generateGridWikitext()",
@@ -1639,9 +1659,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L147",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generategridwikitext",
       "community": 0,
-      "norm_label": "generategridwikitext()"
+      "norm_label": "generategridwikitext()",
+      "id": "src_wikitext_generator_generategridwikitext"
     },
     {
       "label": "generateQualifyingWikitext()",
@@ -1649,9 +1669,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L167",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatequalifyingwikitext",
       "community": 0,
-      "norm_label": "generatequalifyingwikitext()"
+      "norm_label": "generatequalifyingwikitext()",
+      "id": "src_wikitext_generator_generatequalifyingwikitext"
     },
     {
       "label": "generateRaceWikitext()",
@@ -1659,9 +1679,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L318",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generateracewikitext",
       "community": 0,
-      "norm_label": "generateracewikitext()"
+      "norm_label": "generateracewikitext()",
+      "id": "src_wikitext_generator_generateracewikitext"
     },
     {
       "label": "generateStandingsWikitext()",
@@ -1669,9 +1689,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L415",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatestandingswikitext",
       "community": 0,
-      "norm_label": "generatestandingswikitext()"
+      "norm_label": "generatestandingswikitext()",
+      "id": "src_wikitext_generator_generatestandingswikitext"
     },
     {
       "label": "generatePracticeWikitext()",
@@ -1679,9 +1699,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L557",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatepracticewikitext",
       "community": 0,
-      "norm_label": "generatepracticewikitext()"
+      "norm_label": "generatepracticewikitext()",
+      "id": "src_wikitext_generator_generatepracticewikitext"
     },
     {
       "label": "COUNTRY_FLAGS",
@@ -1689,9 +1709,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L685",
       "_origin": "ast",
-      "id": "src_wikitext_generator_country_flags",
       "community": 0,
-      "norm_label": "country_flags"
+      "norm_label": "country_flags",
+      "id": "src_wikitext_generator_country_flags"
     },
     {
       "label": "DRIVER_TO_CONSTRUCTOR_2026",
@@ -1699,9 +1719,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L715",
       "_origin": "ast",
-      "id": "src_wikitext_generator_driver_to_constructor_2026",
       "community": 0,
-      "norm_label": "driver_to_constructor_2026"
+      "norm_label": "driver_to_constructor_2026",
+      "id": "src_wikitext_generator_driver_to_constructor_2026"
     },
     {
       "label": "TeamEntryDetails",
@@ -1709,9 +1729,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L740",
       "_origin": "ast",
-      "id": "src_wikitext_generator_teamentrydetails",
       "community": 0,
-      "norm_label": "teamentrydetails"
+      "norm_label": "teamentrydetails",
+      "id": "src_wikitext_generator_teamentrydetails"
     },
     {
       "label": "TEAM_DETAILS_2026",
@@ -1719,9 +1739,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L749",
       "_origin": "ast",
-      "id": "src_wikitext_generator_team_details_2026",
       "community": 0,
-      "norm_label": "team_details_2026"
+      "norm_label": "team_details_2026",
+      "id": "src_wikitext_generator_team_details_2026"
     },
     {
       "label": "MONTH_NAMES",
@@ -1729,9 +1749,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L848",
       "_origin": "ast",
-      "id": "src_wikitext_generator_month_names",
       "community": 0,
-      "norm_label": "month_names"
+      "norm_label": "month_names",
+      "id": "src_wikitext_generator_month_names"
     },
     {
       "label": "formatDateRange()",
@@ -1739,9 +1759,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L853",
       "_origin": "ast",
-      "id": "src_wikitext_generator_formatdaterange",
       "community": 0,
-      "norm_label": "formatdaterange()"
+      "norm_label": "formatdaterange()",
+      "id": "src_wikitext_generator_formatdaterange"
     },
     {
       "label": "formatDateString()",
@@ -1749,9 +1769,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L875",
       "_origin": "ast",
-      "id": "src_wikitext_generator_formatdatestring",
       "community": 0,
-      "norm_label": "formatdatestring()"
+      "norm_label": "formatdatestring()",
+      "id": "src_wikitext_generator_formatdatestring"
     },
     {
       "label": "getOrdinalSuffix()",
@@ -1759,9 +1779,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L883",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getordinalsuffix",
       "community": 0,
-      "norm_label": "getordinalsuffix()"
+      "norm_label": "getordinalsuffix()",
+      "id": "src_wikitext_generator_getordinalsuffix"
     },
     {
       "label": "generateBlankGPWikitext()",
@@ -1769,9 +1789,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L889",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generateblankgpwikitext",
       "community": 0,
-      "norm_label": "generateblankgpwikitext()"
+      "norm_label": "generateblankgpwikitext()",
+      "id": "src_wikitext_generator_generateblankgpwikitext"
     },
     {
       "label": "EventInfo",
@@ -1779,9 +1799,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1079",
       "_origin": "ast",
-      "id": "src_wikitext_generator_eventinfo",
       "community": 0,
-      "norm_label": "eventinfo"
+      "norm_label": "eventinfo",
+      "id": "src_wikitext_generator_eventinfo"
     },
     {
       "label": "parseDateString()",
@@ -1789,9 +1809,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1089",
       "_origin": "ast",
-      "id": "src_wikitext_generator_parsedatestring",
       "community": 0,
-      "norm_label": "parsedatestring()"
+      "norm_label": "parsedatestring()",
+      "id": "src_wikitext_generator_parsedatestring"
     },
     {
       "label": "MONTHS_FULL",
@@ -1799,9 +1819,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1094",
       "_origin": "ast",
-      "id": "src_wikitext_generator_months_full",
       "community": 0,
-      "norm_label": "months_full"
+      "norm_label": "months_full",
+      "id": "src_wikitext_generator_months_full"
     },
     {
       "label": "MONTHS_SHORT",
@@ -1809,9 +1829,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1099",
       "_origin": "ast",
-      "id": "src_wikitext_generator_months_short",
       "community": 0,
-      "norm_label": "months_short"
+      "norm_label": "months_short",
+      "id": "src_wikitext_generator_months_short"
     },
     {
       "label": "formatDesktopDate()",
@@ -1819,9 +1839,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1104",
       "_origin": "ast",
-      "id": "src_wikitext_generator_formatdesktopdate",
       "community": 0,
-      "norm_label": "formatdesktopdate()"
+      "norm_label": "formatdesktopdate()",
+      "id": "src_wikitext_generator_formatdesktopdate"
     },
     {
       "label": "formatMobileDate()",
@@ -1829,9 +1849,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1115",
       "_origin": "ast",
-      "id": "src_wikitext_generator_formatmobiledate",
       "community": 0,
-      "norm_label": "formatmobiledate()"
+      "norm_label": "formatmobiledate()",
+      "id": "src_wikitext_generator_formatmobiledate"
     },
     {
       "label": "generateLatestEventsWikitext()",
@@ -1839,9 +1859,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1126",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatelatesteventswikitext",
       "community": 0,
-      "norm_label": "generatelatesteventswikitext()"
+      "norm_label": "generatelatesteventswikitext()",
+      "id": "src_wikitext_generator_generatelatesteventswikitext"
     },
     {
       "label": "getDriverWikiName()",
@@ -1849,9 +1869,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1166",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getdriverwikiname",
       "community": 0,
-      "norm_label": "getdriverwikiname()"
+      "norm_label": "getdriverwikiname()",
+      "id": "src_wikitext_generator_getdriverwikiname"
     },
     {
       "label": "getTeamWikiName()",
@@ -1859,9 +1879,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1177",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getteamwikiname",
       "community": 0,
-      "norm_label": "getteamwikiname()"
+      "norm_label": "getteamwikiname()",
+      "id": "src_wikitext_generator_getteamwikiname"
     },
     {
       "label": "getOrdinal()",
@@ -1869,9 +1889,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1190",
       "_origin": "ast",
-      "id": "src_wikitext_generator_getordinal",
       "community": 0,
-      "norm_label": "getordinal()"
+      "norm_label": "getordinal()",
+      "id": "src_wikitext_generator_getordinal"
     },
     {
       "label": "generateCareerPointsWikitext()",
@@ -1879,9 +1899,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1196",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatecareerpointswikitext",
       "community": 1,
-      "norm_label": "generatecareerpointswikitext()"
+      "norm_label": "generatecareerpointswikitext()",
+      "id": "src_wikitext_generator_generatecareerpointswikitext"
     },
     {
       "label": "generateCareerPositionWikitext()",
@@ -1889,9 +1909,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1211",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatecareerpositionwikitext",
       "community": 1,
-      "norm_label": "generatecareerpositionwikitext()"
+      "norm_label": "generatecareerpositionwikitext()",
+      "id": "src_wikitext_generator_generatecareerpositionwikitext"
     },
     {
       "label": "generateCareerTeamPositionWikitext()",
@@ -1899,9 +1919,9 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1226",
       "_origin": "ast",
-      "id": "src_wikitext_generator_generatecareerteampositionwikitext",
       "community": 1,
-      "norm_label": "generatecareerteampositionwikitext()"
+      "norm_label": "generatecareerteampositionwikitext()",
+      "id": "src_wikitext_generator_generatecareerteampositionwikitext"
     },
     {
       "label": "tsconfig.json",
@@ -1909,9 +1929,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "tsconfig",
       "community": 5,
-      "norm_label": "tsconfig.json"
+      "norm_label": "tsconfig.json",
+      "id": "tsconfig"
     },
     {
       "label": "compilerOptions",
@@ -1919,9 +1939,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L2",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions",
       "community": 5,
-      "norm_label": "compileroptions"
+      "norm_label": "compileroptions",
+      "id": "tsconfig_compileroptions"
     },
     {
       "label": "target",
@@ -1929,9 +1949,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L3",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_target",
       "community": 5,
-      "norm_label": "target"
+      "norm_label": "target",
+      "id": "tsconfig_compileroptions_target"
     },
     {
       "label": "lib",
@@ -1939,9 +1959,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L4",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_lib",
       "community": 5,
-      "norm_label": "lib"
+      "norm_label": "lib",
+      "id": "tsconfig_compileroptions_lib"
     },
     {
       "label": "module",
@@ -1949,9 +1969,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_module",
       "community": 5,
-      "norm_label": "module"
+      "norm_label": "module",
+      "id": "tsconfig_compileroptions_module"
     },
     {
       "label": "moduleResolution",
@@ -1959,9 +1979,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_moduleresolution",
       "community": 5,
-      "norm_label": "moduleresolution"
+      "norm_label": "moduleresolution",
+      "id": "tsconfig_compileroptions_moduleresolution"
     },
     {
       "label": "types",
@@ -1969,9 +1989,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_types",
       "community": 5,
-      "norm_label": "types"
+      "norm_label": "types",
+      "id": "tsconfig_compileroptions_types"
     },
     {
       "label": "strict",
@@ -1979,9 +1999,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L8",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_strict",
       "community": 5,
-      "norm_label": "strict"
+      "norm_label": "strict",
+      "id": "tsconfig_compileroptions_strict"
     },
     {
       "label": "noImplicitAny",
@@ -1989,9 +2009,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L9",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_noimplicitany",
       "community": 5,
-      "norm_label": "noimplicitany"
+      "norm_label": "noimplicitany",
+      "id": "tsconfig_compileroptions_noimplicitany"
     },
     {
       "label": "strictNullChecks",
@@ -1999,9 +2019,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_strictnullchecks",
       "community": 5,
-      "norm_label": "strictnullchecks"
+      "norm_label": "strictnullchecks",
+      "id": "tsconfig_compileroptions_strictnullchecks"
     },
     {
       "label": "strictFunctionTypes",
@@ -2009,9 +2029,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L11",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_strictfunctiontypes",
       "community": 5,
-      "norm_label": "strictfunctiontypes"
+      "norm_label": "strictfunctiontypes",
+      "id": "tsconfig_compileroptions_strictfunctiontypes"
     },
     {
       "label": "noImplicitThis",
@@ -2019,9 +2039,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L12",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_noimplicitthis",
       "community": 5,
-      "norm_label": "noimplicitthis"
+      "norm_label": "noimplicitthis",
+      "id": "tsconfig_compileroptions_noimplicitthis"
     },
     {
       "label": "alwaysStrict",
@@ -2029,9 +2049,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L13",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_alwaysstrict",
       "community": 5,
-      "norm_label": "alwaysstrict"
+      "norm_label": "alwaysstrict",
+      "id": "tsconfig_compileroptions_alwaysstrict"
     },
     {
       "label": "noUnusedLocals",
@@ -2039,9 +2059,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L14",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_nounusedlocals",
       "community": 5,
-      "norm_label": "nounusedlocals"
+      "norm_label": "nounusedlocals",
+      "id": "tsconfig_compileroptions_nounusedlocals"
     },
     {
       "label": "noUnusedParameters",
@@ -2049,9 +2069,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L15",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_nounusedparameters",
       "community": 5,
-      "norm_label": "nounusedparameters"
+      "norm_label": "nounusedparameters",
+      "id": "tsconfig_compileroptions_nounusedparameters"
     },
     {
       "label": "noImplicitReturns",
@@ -2059,9 +2079,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L16",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_noimplicitreturns",
       "community": 5,
-      "norm_label": "noimplicitreturns"
+      "norm_label": "noimplicitreturns",
+      "id": "tsconfig_compileroptions_noimplicitreturns"
     },
     {
       "label": "noFallthroughCasesInSwitch",
@@ -2069,9 +2089,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L17",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_nofallthroughcasesinswitch",
       "community": 5,
-      "norm_label": "nofallthroughcasesinswitch"
+      "norm_label": "nofallthroughcasesinswitch",
+      "id": "tsconfig_compileroptions_nofallthroughcasesinswitch"
     },
     {
       "label": "esModuleInterop",
@@ -2079,9 +2099,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L18",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_esmoduleinterop",
       "community": 5,
-      "norm_label": "esmoduleinterop"
+      "norm_label": "esmoduleinterop",
+      "id": "tsconfig_compileroptions_esmoduleinterop"
     },
     {
       "label": "experimentalDecorators",
@@ -2089,9 +2109,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L19",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_experimentaldecorators",
       "community": 5,
-      "norm_label": "experimentaldecorators"
+      "norm_label": "experimentaldecorators",
+      "id": "tsconfig_compileroptions_experimentaldecorators"
     },
     {
       "label": "emitDecoratorMetadata",
@@ -2099,9 +2119,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L20",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_emitdecoratormetadata",
       "community": 5,
-      "norm_label": "emitdecoratormetadata"
+      "norm_label": "emitdecoratormetadata",
+      "id": "tsconfig_compileroptions_emitdecoratormetadata"
     },
     {
       "label": "skipLibCheck",
@@ -2109,9 +2129,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L21",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_skiplibcheck",
       "community": 5,
-      "norm_label": "skiplibcheck"
+      "norm_label": "skiplibcheck",
+      "id": "tsconfig_compileroptions_skiplibcheck"
     },
     {
       "label": "forceConsistentCasingInFileNames",
@@ -2119,9 +2139,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L22",
       "_origin": "ast",
-      "id": "tsconfig_compileroptions_forceconsistentcasinginfilenames",
       "community": 5,
-      "norm_label": "forceconsistentcasinginfilenames"
+      "norm_label": "forceconsistentcasinginfilenames",
+      "id": "tsconfig_compileroptions_forceconsistentcasinginfilenames"
     },
     {
       "label": "include",
@@ -2129,9 +2149,9 @@
       "source_file": "tsconfig.json",
       "source_location": "L24",
       "_origin": "ast",
-      "id": "tsconfig_include",
       "community": 5,
-      "norm_label": "include"
+      "norm_label": "include",
+      "id": "tsconfig_include"
     },
     {
       "label": "README.md",
@@ -2139,9 +2159,9 @@
       "source_file": "README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "readme",
       "community": 8,
-      "norm_label": "readme.md"
+      "norm_label": "readme.md",
+      "id": "readme"
     },
     {
       "label": "F1 Fandom Wiki Automator",
@@ -2149,9 +2169,9 @@
       "source_file": "README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "readme_f1_fandom_wiki_automator",
       "community": 8,
-      "norm_label": "f1 fandom wiki automator"
+      "norm_label": "f1 fandom wiki automator",
+      "id": "readme_f1_fandom_wiki_automator"
     },
     {
       "label": "Features",
@@ -2159,9 +2179,9 @@
       "source_file": "README.md",
       "source_location": "L5",
       "_origin": "ast",
-      "id": "readme_features",
       "community": 8,
-      "norm_label": "features"
+      "norm_label": "features",
+      "id": "readme_features"
     },
     {
       "label": "Core Functionality",
@@ -2169,9 +2189,9 @@
       "source_file": "README.md",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "readme_core_functionality",
       "community": 8,
-      "norm_label": "core functionality"
+      "norm_label": "core functionality",
+      "id": "readme_core_functionality"
     },
     {
       "label": "Automated Syncing & Background Tasks (Cron Workers)",
@@ -2179,9 +2199,9 @@
       "source_file": "README.md",
       "source_location": "L17",
       "_origin": "ast",
-      "id": "readme_automated_syncing_background_tasks_cron_workers",
       "community": 8,
-      "norm_label": "automated syncing & background tasks (cron workers)"
+      "norm_label": "automated syncing & background tasks (cron workers)",
+      "id": "readme_automated_syncing_background_tasks_cron_workers"
     },
     {
       "label": "Wiki Career Stats Tracking",
@@ -2189,9 +2209,9 @@
       "source_file": "README.md",
       "source_location": "L25",
       "_origin": "ast",
-      "id": "readme_wiki_career_stats_tracking",
       "community": 8,
-      "norm_label": "wiki career stats tracking"
+      "norm_label": "wiki career stats tracking",
+      "id": "readme_wiki_career_stats_tracking"
     },
     {
       "label": "Web Dashboard & API Endpoints",
@@ -2199,9 +2219,9 @@
       "source_file": "README.md",
       "source_location": "L30",
       "_origin": "ast",
-      "id": "readme_web_dashboard_api_endpoints",
       "community": 8,
-      "norm_label": "web dashboard & api endpoints"
+      "norm_label": "web dashboard & api endpoints",
+      "id": "readme_web_dashboard_api_endpoints"
     },
     {
       "label": "Daily Reporting",
@@ -2209,9 +2229,9 @@
       "source_file": "README.md",
       "source_location": "L36",
       "_origin": "ast",
-      "id": "readme_daily_reporting",
       "community": 8,
-      "norm_label": "daily reporting"
+      "norm_label": "daily reporting",
+      "id": "readme_daily_reporting"
     },
     {
       "label": "Data Processing",
@@ -2219,9 +2239,9 @@
       "source_file": "README.md",
       "source_location": "L39",
       "_origin": "ast",
-      "id": "readme_data_processing",
       "community": 8,
-      "norm_label": "data processing"
+      "norm_label": "data processing",
+      "id": "readme_data_processing"
     },
     {
       "label": "Python Utilities",
@@ -2229,9 +2249,9 @@
       "source_file": "README.md",
       "source_location": "L45",
       "_origin": "ast",
-      "id": "readme_python_utilities",
       "community": 8,
-      "norm_label": "python utilities"
+      "norm_label": "python utilities",
+      "id": "readme_python_utilities"
     },
     {
       "label": "Technology Stack",
@@ -2239,9 +2259,9 @@
       "source_file": "README.md",
       "source_location": "L51",
       "_origin": "ast",
-      "id": "readme_technology_stack",
       "community": 8,
-      "norm_label": "technology stack"
+      "norm_label": "technology stack",
+      "id": "readme_technology_stack"
     },
     {
       "label": "Use Cases",
@@ -2249,9 +2269,9 @@
       "source_file": "README.md",
       "source_location": "L62",
       "_origin": "ast",
-      "id": "readme_use_cases",
       "community": 8,
-      "norm_label": "use cases"
+      "norm_label": "use cases",
+      "id": "readme_use_cases"
     },
     {
       "label": "Project Structure",
@@ -2259,9 +2279,9 @@
       "source_file": "README.md",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "readme_project_structure",
       "community": 8,
-      "norm_label": "project structure"
+      "norm_label": "project structure",
+      "id": "readme_project_structure"
     },
     {
       "label": "Getting Started",
@@ -2269,9 +2289,9 @@
       "source_file": "README.md",
       "source_location": "L86",
       "_origin": "ast",
-      "id": "readme_getting_started",
       "community": 8,
-      "norm_label": "getting started"
+      "norm_label": "getting started",
+      "id": "readme_getting_started"
     },
     {
       "label": "Recent Updates & Changelog",
@@ -2279,9 +2299,9 @@
       "source_file": "README.md",
       "source_location": "L94",
       "_origin": "ast",
-      "id": "readme_recent_updates_changelog",
       "community": 8,
-      "norm_label": "recent updates & changelog"
+      "norm_label": "recent updates & changelog",
+      "id": "readme_recent_updates_changelog"
     },
     {
       "label": "Automated Reporting & Content Generation",
@@ -2289,9 +2309,9 @@
       "source_file": "README.md",
       "source_location": "L98",
       "_origin": "ast",
-      "id": "readme_automated_reporting_content_generation",
       "community": 8,
-      "norm_label": "automated reporting & content generation"
+      "norm_label": "automated reporting & content generation",
+      "id": "readme_automated_reporting_content_generation"
     },
     {
       "label": "Stats, Standings & Caching Improvements",
@@ -2299,9 +2319,9 @@
       "source_file": "README.md",
       "source_location": "L102",
       "_origin": "ast",
-      "id": "readme_stats_standings_caching_improvements",
       "community": 8,
-      "norm_label": "stats, standings & caching improvements"
+      "norm_label": "stats, standings & caching improvements",
+      "id": "readme_stats_standings_caching_improvements"
     },
     {
       "label": "Wiki Integration & Robustness",
@@ -2309,9 +2329,9 @@
       "source_file": "README.md",
       "source_location": "L108",
       "_origin": "ast",
-      "id": "readme_wiki_integration_robustness",
       "community": 8,
-      "norm_label": "wiki integration & robustness"
+      "norm_label": "wiki integration & robustness",
+      "id": "readme_wiki_integration_robustness"
     },
     {
       "label": "NPM Dependabot Updates",
@@ -2393,6 +2413,16 @@
     }
   ],
   "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "claude",
+      "target": "claude_graphify",
+      "confidence_score": 1.0
+    },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
@@ -3389,9 +3419,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L133",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_getschedulewithretry",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getschedulewithretry"
     },
     {
       "relation": "contains",
@@ -3633,9 +3663,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L141",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_getschedulewithretry",
-      "target": "src_f1_api_getschedule",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getschedule"
     },
     {
       "relation": "imports",
@@ -3721,9 +3751,9 @@
       "source_file": "src/index.ts",
       "source_location": "L2",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_index",
-      "target": "src_f1_api_getschedulewithretry",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getschedulewithretry"
     },
     {
       "relation": "calls",
@@ -3732,9 +3762,9 @@
       "source_file": "src/index.ts",
       "source_location": "L1449",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_index_synclatestnewsevents",
-      "target": "src_f1_api_getschedulewithretry",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getschedulewithretry"
     },
     {
       "relation": "calls",
@@ -6774,9 +6804,9 @@
       "source_file": "README.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme",
-      "target": "readme_f1_fandom_wiki_automator",
-      "confidence_score": 1.0
+      "target": "readme_f1_fandom_wiki_automator"
     },
     {
       "relation": "conceptually_related_to",
@@ -6797,66 +6827,6 @@
       "weight": 1.0,
       "source": "_github_dependabot_pip",
       "target": "readme_f1_fandom_wiki_automator"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L5",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_features",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L86",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_getting_started",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L70",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_project_structure",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L94",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_recent_updates_changelog",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L51",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_technology_stack",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L62",
-      "weight": 1.0,
-      "source": "readme_f1_fandom_wiki_automator",
-      "target": "readme_use_cases",
-      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -6889,6 +6859,36 @@
       "target": "readme_f1_data_fetching"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_features"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L86",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_getting_started"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L70",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_project_structure"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -6899,6 +6899,16 @@
       "target": "readme_python_utilities"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L94",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_recent_updates_changelog"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -6907,6 +6917,26 @@
       "weight": 1.0,
       "source": "readme_f1_fandom_wiki_automator",
       "target": "readme_smart_caching"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_technology_stack"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L62",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_f1_fandom_wiki_automator",
+      "target": "readme_use_cases"
     },
     {
       "relation": "references",
@@ -6944,9 +6974,9 @@
       "source_file": "README.md",
       "source_location": "L17",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_automated_syncing_background_tasks_cron_workers",
-      "confidence_score": 1.0
+      "target": "readme_automated_syncing_background_tasks_cron_workers"
     },
     {
       "relation": "contains",
@@ -6954,9 +6984,9 @@
       "source_file": "README.md",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_core_functionality",
-      "confidence_score": 1.0
+      "target": "readme_core_functionality"
     },
     {
       "relation": "contains",
@@ -6964,9 +6994,9 @@
       "source_file": "README.md",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_daily_reporting",
-      "confidence_score": 1.0
+      "target": "readme_daily_reporting"
     },
     {
       "relation": "contains",
@@ -6974,9 +7004,9 @@
       "source_file": "README.md",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_data_processing",
-      "confidence_score": 1.0
+      "target": "readme_data_processing"
     },
     {
       "relation": "contains",
@@ -6984,9 +7014,9 @@
       "source_file": "README.md",
       "source_location": "L45",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_python_utilities",
-      "confidence_score": 1.0
+      "target": "readme_python_utilities"
     },
     {
       "relation": "contains",
@@ -6994,9 +7024,9 @@
       "source_file": "README.md",
       "source_location": "L30",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_web_dashboard_api_endpoints",
-      "confidence_score": 1.0
+      "target": "readme_web_dashboard_api_endpoints"
     },
     {
       "relation": "contains",
@@ -7004,9 +7034,9 @@
       "source_file": "README.md",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_features",
-      "target": "readme_wiki_career_stats_tracking",
-      "confidence_score": 1.0
+      "target": "readme_wiki_career_stats_tracking"
     },
     {
       "relation": "contains",
@@ -7014,9 +7044,9 @@
       "source_file": "README.md",
       "source_location": "L98",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_recent_updates_changelog",
-      "target": "readme_automated_reporting_content_generation",
-      "confidence_score": 1.0
+      "target": "readme_automated_reporting_content_generation"
     },
     {
       "relation": "contains",
@@ -7024,9 +7054,9 @@
       "source_file": "README.md",
       "source_location": "L102",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_recent_updates_changelog",
-      "target": "readme_stats_standings_caching_improvements",
-      "confidence_score": 1.0
+      "target": "readme_stats_standings_caching_improvements"
     },
     {
       "relation": "contains",
@@ -7034,11 +7064,11 @@
       "source_file": "README.md",
       "source_location": "L108",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "readme_recent_updates_changelog",
-      "target": "readme_wiki_integration_robustness",
-      "confidence_score": 1.0
+      "target": "readme_wiki_integration_robustness"
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b8eef2bfe6767ce3fc71c63d7c70a876a134149f"
+  "built_at_commit": "893c8981c38dd6178896a82b032084edd75912a0"
 }
