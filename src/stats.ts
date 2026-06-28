@@ -8,6 +8,7 @@ import {
   ScheduleRace,
 } from './f1-api';
 import { parsePipeParamLine } from './wikitext-parse';
+import { trackedKvPut } from './kv-ops';
 
 export const CIRCUIT_LENGTHS: Record<string, number> = {
   "albert_park": 5.278,
@@ -647,7 +648,7 @@ export async function getRoundStatsCached(
   const computed = await calculateRoundStats(year, round, trackLength, ctx);
   // Only cache if the data has confirmed race results (at least one driver with Entries > 0)
   if (env && env.F1_WIKI_STATE && Object.keys(computed).length > 0 && hasRaceResults(computed)) {
-    await env.F1_WIKI_STATE.put(kvKey, JSON.stringify(computed));
+    await trackedKvPut(env.F1_WIKI_STATE, kvKey, JSON.stringify(computed));
     console.log(`Cached stats for Round ${round} in KV (race results confirmed).`);
   } else if (Object.keys(computed).length > 0 && !hasRaceResults(computed)) {
     console.warn(`Round ${round} stats not cached: no race results yet (only qualifying/sprint data).`);
@@ -740,16 +741,12 @@ export async function get2026CumulativeStats(
       });
     });
 
-    // Save intermediate cumulative stats to avoid doing it again
-    if (env && env.F1_WIKI_STATE && r < upToRound) {
-      const intermediateKey = `2026_cumulative_stats_up_to_${r}`;
-      await env.F1_WIKI_STATE.put(intermediateKey, JSON.stringify(cumulative));
-    }
+    // Intermediate cumulative stats are kept in memory only to reduce KV writes.
   }
 
   // Save final cumulative stats to KV
   if (env && env.F1_WIKI_STATE && Object.keys(cumulative).length > 0) {
-    await env.F1_WIKI_STATE.put(targetKey, JSON.stringify(cumulative));
+    await trackedKvPut(env.F1_WIKI_STATE, targetKey, JSON.stringify(cumulative));
     console.log(`Saved cumulative stats up to Round ${upToRound} in KV.`);
   }
 

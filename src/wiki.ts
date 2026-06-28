@@ -5,6 +5,14 @@ import {
   stripWikiComments,
   stripWikiTemplates,
 } from './wikitext-parse';
+import {
+  bufferApiLog,
+  clearEditFailures,
+  EditBlockedError,
+  isEditBlocked,
+  MAX_EDIT_FAILURES,
+  recordEditFailure,
+} from './kv-ops';
 
 export interface WikiConfig {
   domain: string; // e.g. f1.fandom.com
@@ -32,7 +40,7 @@ function getApiUrl(domain: string, apiEndpoint?: string): string {
   return `${cleanDomain}/api.php`;
 }
 
-// Helper to log wiki API calls into Cloudflare KV
+// Helper to log wiki API calls into Cloudflare KV (buffered per worker invocation)
 async function logApiCall(
   kv: any,
   action: string,
@@ -44,22 +52,15 @@ async function logApiCall(
   if (!kv) return;
 
   try {
-    const logsKey = 'proxy_daily_logs';
-    const rawLogs = await kv.get(logsKey);
-    const logs = rawLogs ? JSON.parse(rawLogs) : [];
-
-    logs.push({
+    bufferApiLog({
       action,
       method,
       url,
       success,
       errorReason: errorReason || null,
-      timestamp: new Date().toISOString()
     });
-
-    await kv.put(logsKey, JSON.stringify(logs));
   } catch (e: any) {
-    console.error("Failed to log wiki API call in KV:", e.message);
+    console.error("Failed to buffer wiki API call log:", e.message);
   }
 }
 
@@ -302,6 +303,10 @@ export async function editPage(
   summary: string,
   apiEndpoint?: string
 ): Promise<void> {
+  if (session.kvState && await isEditBlocked(session.kvState, title)) {
+    throw new EditBlockedError(title, MAX_EDIT_FAILURES);
+  }
+
   const apiUrl = getApiUrl(domain, apiEndpoint);
   const editParams = new URLSearchParams();
   editParams.append('action', 'edit');
@@ -346,6 +351,11 @@ export async function editPage(
   } finally {
     if (session.kvState) {
       await logApiCall(session.kvState, `Edit Page: ${title}`, 'POST', apiUrl, success, errorReason);
+      if (success) {
+        await clearEditFailures(session.kvState, title);
+      } else {
+        await recordEditFailure(session.kvState, title);
+      }
     }
   }
 
