@@ -3,6 +3,8 @@
  * Each page/section gets its own flag so one successful sync cannot block retries for another.
  */
 
+import { trackedKvPut } from './kv-ops';
+
 export type GpPageSection =
   | 'qualifying'
   | 'grid'
@@ -103,7 +105,8 @@ export async function isKvSynced(kv: any, key: string, legacyKeys: string[] = []
 
 export async function markKvSynced(kv: any, key: string): Promise<void> {
   if (!kv) return;
-  await kv.put(key, 'true');
+  if ((await kv.get(key)) === 'true') return;
+  await trackedKvPut(kv, key, 'true');
 }
 
 export async function getGpPageSectionSyncState(

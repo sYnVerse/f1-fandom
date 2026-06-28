@@ -1,4 +1,5 @@
 import { PracticeSessionData } from './f1-api';
+import { bufferKvWarning } from './kv-ops';
 
 const SESSION_ARTICLE_KEYWORDS: Record<string, string[]> = {
   'FP1': ['fp1', 'free-practice-1', 'first-practice', 'practice-1', 'practice-one', 'free-practice-one'],
@@ -8,10 +9,7 @@ const SESSION_ARTICLE_KEYWORDS: Record<string, string[]> = {
 
 export async function appendKvWarning(kv: any, key: string, message: string): Promise<void> {
   if (!kv) return;
-  const raw = await kv.get(key);
-  const warnings: string[] = raw ? JSON.parse(raw) : [];
-  warnings.push(message);
-  await kv.put(key, JSON.stringify(warnings));
+  bufferKvWarning(key, message);
 }
 
 export async function logCrawlerFailure(kv: any, message: string): Promise<void> {

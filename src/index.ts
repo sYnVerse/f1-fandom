@@ -75,6 +75,14 @@ import {
   CareerStandingsPage,
   GpPageSection,
 } from './sync-kv';
+import {
+  beginKvInvocation,
+  endKvInvocation,
+  getDailyKvPutCount,
+  getPacificDateString,
+  KV_FREE_TIER_DAILY_WRITE_LIMIT,
+  trackedKvPut,
+} from './kv-ops';
 
 // CORS response helper
 function corsResponse(body: string | object, status = 200, headers: Record<string, string> = {}): Response {
@@ -138,6 +146,7 @@ export default {
       return corsResponse('', 204);
     }
 
+    beginKvInvocation();
     try {
       const apiCtx = createF1ApiContext();
 
@@ -568,25 +577,28 @@ export default {
 
     } catch (e: any) {
       return corsResponse({ error: e.message }, 500);
+    } finally {
+      await endKvInvocation(_env.F1_WIKI_STATE);
     }
   },
 
   async scheduled(event: any, env: any, _ctx: any): Promise<void> {
-    const cronTrigger = event?.cron || "";
-    console.log(`Scheduled sync trigger fired! Trigger: ${cronTrigger || "manual/unknown"}`);
-
-    const username = env.WIKI_BOT_USERNAME;
-    const password = env.WIKI_BOT_PASSWORD;
-    const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
-    const apiEndpoint = env.WIKI_API_ENDPOINT;
-    const proxySecret = env.PROXY_SECRET;
-
-    if (!username || !password) {
-      console.error("Sync cancelled: Bot credentials (WIKI_BOT_USERNAME or WIKI_BOT_PASSWORD) not found in secrets.");
-      return;
-    }
-
+    beginKvInvocation();
     try {
+      const cronTrigger = event?.cron || "";
+      console.log(`Scheduled sync trigger fired! Trigger: ${cronTrigger || "manual/unknown"}`);
+
+      const username = env.WIKI_BOT_USERNAME;
+      const password = env.WIKI_BOT_PASSWORD;
+      const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
+      const apiEndpoint = env.WIKI_API_ENDPOINT;
+      const proxySecret = env.PROXY_SECRET;
+
+      if (!username || !password) {
+        console.error("Sync cancelled: Bot credentials (WIKI_BOT_USERNAME or WIKI_BOT_PASSWORD) not found in secrets.");
+        return;
+      }
+
       const apiCtx = createF1ApiContext();
       console.log("Fetching 2026 schedule from Jolpi...");
       const year = 2026;
@@ -1338,6 +1350,8 @@ export default {
       console.log(`Scheduled sync completed successfully! Jolpica API calls this run: ${apiCtx.apiCallCount}`);
     } catch (e: any) {
       console.error("Scheduled sync failed:", e.message);
+    } finally {
+      await endKvInvocation(env.F1_WIKI_STATE);
     }
   }
 };
@@ -1547,22 +1561,13 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
   if (!kv || !resendApiKey) return;
 
   // Get current date/time in America/Los_Angeles timezone (Pacific Time)
+  const pacificDateStr = getPacificDateString();
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
     hour: '2-digit',
     hour12: false
   });
-
-  const parts = formatter.formatToParts(new Date());
-  const year = parts.find(p => p.type === 'year')?.value;
-  const month = parts.find(p => p.type === 'month')?.value;
-  const day = parts.find(p => p.type === 'day')?.value;
-  const hourStr = parts.find(p => p.type === 'hour')?.value || '0';
-  
-  const pacificDateStr = `${year}-${month}-${day}`; // YYYY-MM-DD
+  const hourStr = formatter.formatToParts(new Date()).find(p => p.type === 'hour')?.value || '0';
   const pacificHour = parseInt(hourStr, 10);
 
   // We want to send the summary at 6 AM Pacific Time or later, if not sent today yet
@@ -1581,6 +1586,12 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
       const succeededCalls = logs.filter((l: any) => l.success).length;
       const failedCalls = totalCalls - succeededCalls;
       const failedLogs = logs.filter((l: any) => !l.success);
+      const kvPutCount = await getDailyKvPutCount(kv, pacificDateStr);
+      const kvPutPercent = Math.min(
+        100,
+        Math.round((kvPutCount / KV_FREE_TIER_DAILY_WRITE_LIMIT) * 100)
+      );
+      const kvUsageColor = kvPutPercent >= 80 ? '#dc2626' : kvPutPercent >= 50 ? '#d97706' : '#059669';
 
       let failedSection = '';
       if (failedLogs.length > 0) {
@@ -1682,6 +1693,17 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
                   </tr>
                 </table>
 
+                <h2 style="margin: 24px 0 12px 0; color: #1f2937; font-size: 18px; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;">KV Usage</h2>
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px; width: 100%;">
+                  <tr>
+                    <td style="padding: 16px; background-color: #f3f4f6; border-radius: 8px; text-align: center; border: 1px solid #e5e7eb;">
+                      <div style="color: #4b5563; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">KV Writes Today</div>
+                      <div style="color: ${kvUsageColor}; font-size: 28px; font-weight: 700; margin-top: 4px;">${kvPutCount}</div>
+                      <div style="color: #6b7280; font-size: 12px; margin-top: 4px;">${kvPutPercent}% of ${KV_FREE_TIER_DAILY_WRITE_LIMIT} free-tier daily limit</div>
+                    </td>
+                  </tr>
+                </table>
+
                 <!-- Details Section -->
                 ${failedSection}
                 ${flagWarningSection}
@@ -1716,7 +1738,7 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
 
       if (mailRes.ok) {
         console.log("Daily summary email sent successfully!");
-        await kv.put(lastSentKey, pacificDateStr);
+        await trackedKvPut(kv, lastSentKey, pacificDateStr);
         await kv.delete(logsKey);
         await kv.delete('missing_test_driver_flags');
         await kv.delete('f1_crawler_failures');
