@@ -8,6 +8,7 @@ import {
   detectTestDriversFromFp1,
   findEntryListHeadingIndex,
   generatePracticeWikitext,
+  resolveDriverTeamTemplate,
 } from '../src/wikitext-generator';
 import { gpPageSectionRequired } from '../src/sync-kv';
 
@@ -124,5 +125,30 @@ const practiceWikitextNormal = generatePracticeWikitext(
 );
 assert(practiceWikitextNormal.includes('|FP2'), 'Normal weekend includes FP2 column');
 assert(practiceWikitextNormal.includes('|FP3'), 'Normal weekend includes FP3 column');
+
+// --- Team name fallback without quali results ---
+const norrisTeam = resolveDriverTeamTemplate('norris', {});
+assert(norrisTeam.includes('McLaren'), `Norris team should use roster fallback, got: ${norrisTeam}`);
+assert(!norrisTeam.includes('Team-Placeholder'), 'Roster fallback should not use placeholder');
+
+const qualiMap = { norris: '{{GBR}} {{McLaren-Mercedes}}' };
+assert(
+  resolveDriverTeamTemplate('norris', qualiMap) === qualiMap.norris,
+  'Quali map takes precedence over roster fallback'
+);
+
+const practiceWithoutQuali = generatePracticeWikitext(
+  mainDrivers as any,
+  null,
+  fp1WithTestDriver,
+  null,
+  null,
+  { hasSprint: true }
+);
+assert(
+  !practiceWithoutQuali.includes('{{Team-Placeholder}}'),
+  'Practice wikitext without quali should use roster team mapping'
+);
+assert(practiceWithoutQuali.includes('McLaren'), 'Practice table should show McLaren for Norris');
 
 console.log('verify-practice-sessions: all assertions passed');
