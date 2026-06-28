@@ -684,7 +684,7 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
         ? (getTeamEntryDetails(constructorId)?.constructor || getTeamTemplate(constructorId, entry.teamName))
         : `{{${entry.teamName}-CON}}`;
     } else {
-      team = driverToConstructorTemplate[entry.driverId] || '{{Team-Placeholder}}';
+      team = resolveDriverTeamTemplate(entry.driverId, driverToConstructorTemplate);
     }
 
     output += '\n|-';
@@ -805,6 +805,21 @@ const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
   "bottas": "cadillac",
   "perez": "cadillac"
 };
+
+/** Resolve a driver's team wikitext, preferring quali data then the season roster map. */
+export function resolveDriverTeamTemplate(
+  driverId: string,
+  qualiTeamMap: Record<string, string>
+): string {
+  if (qualiTeamMap[driverId]) {
+    return qualiTeamMap[driverId];
+  }
+  const constructorId = DRIVER_TO_CONSTRUCTOR_2026[driverId];
+  if (constructorId) {
+    return getTeamTemplate(constructorId, constructorId);
+  }
+  return '{{Team-Placeholder}}';
+}
 
 export interface TeamEntryDetails {
   entrant: string;
