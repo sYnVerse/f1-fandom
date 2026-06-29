@@ -836,9 +836,7 @@ export default {
         }
 
         // --- 1. Smart Check for Grand Prix Career Results template ---
-        if (gpCareerTemplateSynced) {
-          console.log(`Round ${round} GP career template (${raceName}) already synced (KV cache). Skipping.`);
-        } else if (!gpSessionCompleted) {
+        if (!gpSessionCompleted) {
           console.log(`Round ${round} GP (${raceName}) not completed yet (ends: ${raceEndTime.toISOString()}). Skipping.`);
         } else if (gpResults.length > 0) {
           console.log(`Round ${round} GP has completed. Updating career results template if needed...`);
@@ -853,15 +851,28 @@ export default {
             console.error(`  Error fetching GP template: ${e.message}`);
           }
 
-          if (gpWikitext && isPlaceholder(gpWikitext)) {
-            console.log(`  GP template is a placeholder. Auto-updating results...`);
+          const expectedWikitext = generateWikiResultsText(gpResults, false);
+          if (gpWikitext.trim() === expectedWikitext.trim()) {
+            console.log(`  GP template already matches expected results.`);
+            await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
+          } else if (isPlaceholder(gpWikitext)) {
+            console.log(
+              gpCareerTemplateSynced
+                ? `  GP template KV flag set but content is still placeholder; re-syncing...`
+                : `  GP template is a placeholder. Auto-updating results...`
+            );
             const currentSession = await getSession();
-            const wikitext = generateWikiResultsText(gpResults, false);
-            await editPage(domain, currentSession, gpTitle, wikitext, "Automated results update from Jolpi API", apiEndpoint);
+            await editPage(domain, currentSession, gpTitle, expectedWikitext, "Automated results update from Jolpi API", apiEndpoint);
             console.log(`  Updated GP template for round ${round}.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
-          } else if (gpWikitext) {
-            console.log(`  GP template already has results on Fandom.`);
+          } else if (gpCareerTemplateSynced) {
+            console.log(`  GP template KV flag set but content differs; re-syncing...`);
+            const currentSession = await getSession();
+            await editPage(domain, currentSession, gpTitle, expectedWikitext, "Automated results update from Jolpi API", apiEndpoint);
+            console.log(`  Updated GP template for round ${round}.`);
+            await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
+          } else {
+            console.log(`  GP template already has custom results on Fandom.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
           }
         } else {
@@ -872,9 +883,7 @@ export default {
         if (race.Sprint) {
           const sprintName = raceName.replace("Grand Prix", "Sprint");
 
-          if (sprintCareerTemplateSynced) {
-            console.log(`Round ${round} Sprint career template (${sprintName}) already synced (KV cache). Skipping.`);
-          } else if (!isSprintConcluded) {
+          if (!isSprintConcluded) {
             console.log(`Round ${round} Sprint (${sprintName}) not completed yet (ends: ${sprintEndTime?.toISOString()}). Skipping.`);
           } else if (sprintResults.length > 0) {
             console.log(`Round ${round} Sprint has completed. Updating sprint template if needed...`);
@@ -889,16 +898,29 @@ export default {
               console.error(`  Error fetching Sprint template: ${e.message}`);
             }
 
-            if (sprintWikitext && isPlaceholder(sprintWikitext)) {
-              console.log(`  Sprint template is a placeholder. Auto-updating results...`);
+            const expectedSprintWikitext = generateWikiResultsText(sprintResults, true);
+            if (sprintWikitext.trim() === expectedSprintWikitext.trim()) {
+              console.log(`  Sprint template already matches expected results.`);
+              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+            } else if (isPlaceholder(sprintWikitext)) {
+              console.log(
+                sprintCareerTemplateSynced
+                  ? `  Sprint template KV flag set but content is still placeholder; re-syncing...`
+                  : `  Sprint template is a placeholder. Auto-updating results...`
+              );
               const currentSession = await getSession();
-              const wikitext = generateWikiResultsText(sprintResults, true);
-              await editPage(domain, currentSession, sprintTitle, wikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
+              await editPage(domain, currentSession, sprintTitle, expectedSprintWikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
 
               await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
               console.log(`  Marked round ${round} Sprint career template as synced in KV.`);
-            } else if (sprintWikitext) {
-              console.log(`  Sprint template already has results on Fandom.`);
+            } else if (sprintCareerTemplateSynced) {
+              console.log(`  Sprint template KV flag set but content differs; re-syncing...`);
+              const currentSession = await getSession();
+              await editPage(domain, currentSession, sprintTitle, expectedSprintWikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
+              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+              console.log(`  Updated round ${round} Sprint career template.`);
+            } else {
+              console.log(`  Sprint template already has custom results on Fandom.`);
               await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
               console.log(`  Marked round ${round} Sprint career template as synced in KV (found existing results on Fandom).`);
             }
@@ -1566,12 +1588,22 @@ function formatResult(r: any): string {
   return formatted;
 }
 
-function isPlaceholder(wikitext: string): boolean {
+function isPlaceholderResultValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed === '') return true;
+  // Test-driver placeholders should not count as published race results.
+  if (trimmed === '{{TD}}') return true;
+  return false;
+}
+
+export function isPlaceholder(wikitext: string): boolean {
   const lines = wikitext.split('\n');
   for (const line of lines) {
-    const match = line.match(/^\|([^=]+)=\s*(\S+)/);
-    if (match && match[1].trim() !== '#default' && match[2].trim() !== '') {
-      return false;
+    const match = line.match(/^\|([^=]+)=\s*(.*)/);
+    if (match && match[1].trim() !== '#default') {
+      if (!isPlaceholderResultValue(match[2])) {
+        return false;
+      }
     }
   }
   return true;

@@ -113,11 +113,10 @@ export async function getGpPageSectionSyncState(
   kv: any,
   round: number
 ): Promise<Record<GpPageSection, boolean>> {
-  const legacy = [legacyGpUpdatedKey(round)];
   const entries = await Promise.all(
     GP_PAGE_SECTIONS.map(async (section) => [
       section,
-      await isKvSynced(kv, gpPageSectionKey(round, section), legacy),
+      await isKvSynced(kv, gpPageSectionKey(round, section)),
     ] as const)
   );
   return Object.fromEntries(entries) as Record<GpPageSection, boolean>;
