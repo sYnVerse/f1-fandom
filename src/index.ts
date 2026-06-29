@@ -55,7 +55,8 @@ import {
 import { 
   get2026CumulativeStats, 
   updateTemplateContent, 
-  updateCorrectionText, 
+  updateCorrectionText,
+  prepareStatsTemplateUpdate,
   driverIdToWikiName 
 } from './stats';
 import { getStatsF1Results, verifyResults } from './statsf1';
@@ -928,9 +929,7 @@ export default {
         }
 
         // --- 3. Smart Check for Stats Templates ---
-        if (statsTemplatesSynced) {
-          console.log(`Round ${round} Stats Templates already synced (KV cache). Skipping.`);
-        } else if (!isRaceConcluded) {
+        if (!isRaceConcluded) {
           console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
         } else if (gpResults.length > 0) {
           console.log(`GP results available. Running stats sync for round ${round}...`);
@@ -2055,6 +2054,67 @@ async function syncCareerStandingsTemplates(
   }
 }
 
+async function syncSingleStatsTemplate(
+  env: any,
+  domain: string,
+  apiEndpoint: string | undefined,
+  proxySecret: string | undefined,
+  getSession: () => Promise<any>,
+  round: number,
+  temp: string,
+  cumulativeStats: Record<string, any>,
+  raceName: string,
+  winnerCode: string
+): Promise<boolean> {
+  const pageTitle = `Template:Stats/${temp}`;
+  const templateKvKey = statsTemplateKey(round, temp);
+
+  const pageInfo = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE).catch(
+    () => ({ exists: false, content: '' })
+  );
+
+  if (!pageInfo.exists) {
+    console.warn(`Template ${pageTitle} does not exist. Skipping.`);
+    return false;
+  }
+
+  const prepared = prepareStatsTemplateUpdate(
+    temp,
+    pageInfo.content,
+    cumulativeStats,
+    raceName ? { year: 2026, raceName, winnerCode } : undefined
+  );
+
+  if (pageInfo.content.trim() === prepared.wikitext.trim()) {
+    console.log(`${pageTitle} already matches expected content.`);
+    await markKvSynced(env.F1_WIKI_STATE, templateKvKey);
+    return true;
+  }
+
+  if (await isKvSynced(env.F1_WIKI_STATE, templateKvKey)) {
+    console.log(`${pageTitle} KV flag set but content differs; re-syncing.`);
+  }
+
+  try {
+    console.log(`Updating ${pageTitle} on Fandom...`);
+    const session = await getSession();
+    await editPage(
+      domain,
+      session,
+      pageTitle,
+      prepared.wikitext,
+      `Automated stats update up to 2026 Round ${round} (${raceName || `Round ${round}`})`,
+      apiEndpoint
+    );
+    console.log(`Successfully updated ${pageTitle}!`);
+    await markKvSynced(env.F1_WIKI_STATE, templateKvKey);
+    return true;
+  } catch (err: any) {
+    console.error(`Failed to update ${pageTitle}: ${err.message}`);
+    return false;
+  }
+}
+
 async function syncStatsTemplates(
   env: any,
   getSession: () => Promise<any>,
@@ -2079,28 +2139,11 @@ async function syncStatsTemplates(
     const raceName = race ? race.raceName : '';
 
     let winnerCode = 'VER';
-    let hasDouble = false;
-    let hasHatTrick = false;
-    let hasGrandChelem = false;
 
     try {
       const results = prefetchedGpResults ?? await getRaceResult(2026, round, false, apiCtx);
-      if (results.length > 0) {
-        if (results[0].driver?.code) {
-          winnerCode = results[0].driver.code;
-        }
-
-        const winner = results.find(r => r.position === '1');
-        const poleSitter = results.find(r => r.grid === '1');
-        const fastestLap = results.find(r => r.FastestLap && r.FastestLap.rank === '1');
-
-        if (winner && poleSitter && winner.driver.driverId === poleSitter.driver.driverId) {
-          hasDouble = true;
-          if (fastestLap && winner.driver.driverId === fastestLap.driver.driverId) {
-            hasHatTrick = true;
-            hasGrandChelem = true; // Check Grand Chelems if Hat-trick occurred
-          }
-        }
+      if (results.length > 0 && results[0].driver?.code) {
+        winnerCode = results[0].driver.code;
       }
     } catch (e) {
       // ignore
@@ -2109,7 +2152,8 @@ async function syncStatsTemplates(
     // Base templates list (that always get checked/updated after a GP concludes)
     const templates = [
       "Distance", "DistanceLed", "Entries", "FastestLaps", "FrontRows",
-      "Laps", "LapsLed", "Podiums", "Points", "Poles", "RacesLed", "Starts", "Wins"
+      "Laps", "LapsLed", "Podiums", "Points", "Poles", "RacesLed", "Starts", "Wins",
+      "Doubles", "HatTricks", "Grand Chelems",
     ];
 
     // Sprint templates (only checked if it's a Sprint weekend)
@@ -2122,22 +2166,6 @@ async function syncStatsTemplates(
       templates.push("Championships");
     }
 
-    if (hasDouble) {
-      templates.push("Doubles");
-    } else {
-      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'Doubles'));
-    }
-    if (hasHatTrick) {
-      templates.push("HatTricks");
-    } else {
-      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'HatTricks'));
-    }
-    if (hasGrandChelem) {
-      templates.push("Grand Chelems");
-    } else {
-      await markKvSynced(env.F1_WIKI_STATE, statsTemplateKey(round, 'Grand Chelems'));
-    }
-
     let session: any = null;
     const getSessionLocal = async () => {
       if (!session) {
@@ -2147,35 +2175,18 @@ async function syncStatsTemplates(
     };
 
     for (const temp of templates) {
-      const pageTitle = `Template:Stats/${temp}`;
-      const templateKvKey = statsTemplateKey(round, temp);
-      if (await isKvSynced(env.F1_WIKI_STATE, templateKvKey)) {
-        console.log(`${pageTitle} already synced (KV cache). Skipping.`);
-        continue;
-      }
-
-      const pageInfo = await getPageContent(domain, pageTitle, undefined, apiEndpoint, proxySecret, env.F1_WIKI_STATE).catch(() => ({ exists: false, content: '' }));
-      
-      if (!pageInfo.exists) {
-        console.warn(`Template ${pageTitle} does not exist. Skipping.`);
-        continue;
-      }
-
-      const updated = updateTemplateContent(temp, pageInfo.content, cumulativeStats);
-      if (updated.changed) {
-        let finalText = updated.wikitext;
-        if (raceName) {
-          finalText = updateCorrectionText(finalText, 2026, raceName, winnerCode);
-        }
-        
-        console.log(`Updating ${pageTitle} on Fandom...`);
-        const currentSession = await getSessionLocal();
-        await editPage(domain, currentSession, pageTitle, finalText, `Automated stats update up to 2026 Round ${round} (${raceName || `Round ${round}`})`, apiEndpoint);
-        console.log(`Successfully updated ${pageTitle}!`);
-      } else {
-        console.log(`${pageTitle} is already up to date.`);
-      }
-      await markKvSynced(env.F1_WIKI_STATE, templateKvKey);
+      await syncSingleStatsTemplate(
+        env,
+        domain,
+        apiEndpoint,
+        proxySecret,
+        getSessionLocal,
+        round,
+        temp,
+        cumulativeStats,
+        raceName,
+        winnerCode
+      );
     }
   } catch (e: any) {
     console.error(`Scheduled stats templates sync failed: ${e.message}`);
