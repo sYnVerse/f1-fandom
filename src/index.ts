@@ -13,7 +13,7 @@ import {
   fetchOfficialRaceName,
   getF1RacingKey,
   buildPracticeSessionUrl,
-  createF1ApiContext,
+  createF1ApiContextFromEnv,
   fetchRoundJolpicaData,
   F1ApiContext,
   ScheduleRace,
@@ -149,7 +149,7 @@ export default {
 
     beginKvInvocation();
     try {
-      const apiCtx = createF1ApiContext();
+      const apiCtx = createF1ApiContextFromEnv(_env);
 
       // 1. Serve SPA Frontend
       if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -600,7 +600,7 @@ export default {
         return;
       }
 
-      const apiCtx = createF1ApiContext();
+      const apiCtx = createF1ApiContextFromEnv(env);
       console.log("Fetching 2026 schedule from Jolpi...");
       const year = 2026;
       const schedule = await getSchedule(year, apiCtx);
