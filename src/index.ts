@@ -1267,7 +1267,16 @@ export default {
                     }
                   }
                 }
-                await markGpPageSectionSynced('infobox');
+
+                const hasQualiData = !!(qualiResults && qualiResults.length > 0);
+                const hasSprintData = !!(race.Sprint && sprintResults && sprintResults.length > 0);
+                const hasRaceData = !!(raceResults && raceResults.length > 0);
+
+                if (isInfoboxSyncComplete(updatedContent, { hasQualiData, hasSprintData, hasRaceData })) {
+                  await markGpPageSectionSynced('infobox');
+                } else {
+                  console.log('  Infobox incomplete for available session data — will retry on next cron run.');
+                }
               }
 
               const reportSections: Array<{
@@ -1421,6 +1430,39 @@ export function getInfoboxParameterValue(infobox: string, key: string): string |
 export function isInfoboxParameterEmpty(value: string | null): boolean {
   if (value === null) return true;
   return value.trim().length === 0;
+}
+
+/** True when required infobox fields are populated for the data currently available. */
+export function isInfoboxSyncComplete(
+  wikitext: string,
+  options: {
+    hasQualiData: boolean;
+    hasSprintData: boolean;
+    hasRaceData: boolean;
+  }
+): boolean {
+  if (!options.hasRaceData) {
+    return false;
+  }
+
+  const range = findInfoboxRange(wikitext);
+  if (!range) {
+    return false;
+  }
+
+  const infobox = range.content;
+  const requiredKeys: string[] = ['winner'];
+
+  if (options.hasQualiData) {
+    requiredKeys.push('pole');
+  }
+  if (options.hasSprintData) {
+    requiredKeys.push('sprintwinner');
+  }
+
+  return requiredKeys.every(
+    (key) => !isInfoboxParameterEmpty(getInfoboxParameterValue(infobox, key))
+  );
 }
 
 export function updateParameterInInfobox(infobox: string, key: string, value: string): string {

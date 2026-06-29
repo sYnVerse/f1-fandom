@@ -6,6 +6,7 @@ import {
   updateParameterInInfobox,
   getInfoboxParameterValue,
   isInfoboxParameterEmpty,
+  isInfoboxSyncComplete,
 } from '../src/index';
 
 const sampleInfobox = `{{Infobox_Race
@@ -52,6 +53,30 @@ assert(
 assert(
   !afterBadReplace.includes('{{Mercedes-CON}}}}'),
   'Must not leave orphan braces from partial match'
+);
+
+// 5. Sync flag should not be set when race winner is still empty
+const poleOnlyInfobox = `{{Infobox_Race
+| pole = George Russell
+| polenation = GBR
+| poleteam = {{GER}} {{Mercedes-CON}}
+| winner =
+| second =
+| third =
+}}`;
+assert(
+  !isInfoboxSyncComplete(poleOnlyInfobox, { hasQualiData: true, hasSprintData: false, hasRaceData: true }),
+  'Infobox with pole but no winner must not be considered sync-complete when race data exists'
+);
+assert(
+  !isInfoboxSyncComplete(poleOnlyInfobox, { hasQualiData: true, hasSprintData: false, hasRaceData: false }),
+  'Infobox must not be sync-complete when race results are not yet available'
+);
+
+const completeInfobox = updateParameterInInfobox(poleOnlyInfobox, 'winner', 'Max Verstappen');
+assert(
+  isInfoboxSyncComplete(completeInfobox, { hasQualiData: true, hasSprintData: false, hasRaceData: true }),
+  'Infobox with pole and winner should be sync-complete when race data exists'
 );
 
 console.log('PASS: infobox parameter read/update with template values');
