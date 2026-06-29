@@ -1,6 +1,11 @@
-import { cachedJolpicaJson, createF1ApiContext, F1ApiContext } from './f1-api-cache';
+import {
+  cachedJolpicaJson,
+  createF1ApiContext,
+  createF1ApiContextFromEnv,
+  F1ApiContext,
+} from './f1-api-cache';
 
-export { createF1ApiContext, F1ApiContext };
+export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext };
 
 export interface Driver {
   driverId: string;
@@ -145,16 +150,33 @@ function scheduleCacheKey(year: number): string {
   return `${BASE_URL}/${year}.json?limit=1000`;
 }
 
+/** Highest round whose race has ended (start + 2 hours). */
+export function getLatestConcludedRound(schedule: ScheduleRace[], now = new Date()): number {
+  let latest = 0;
+  for (const race of schedule) {
+    const start = new Date(`${race.date}T${race.time || '12:00:00Z'}`);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    if (now >= end) {
+      latest = Math.max(latest, parseInt(race.round, 10));
+    }
+  }
+  return latest;
+}
+
 // Fetch season schedule
 export async function getSchedule(year: number, ctx?: F1ApiContext): Promise<ScheduleRace[]> {
   const url = scheduleCacheKey(year);
-  return cachedJolpicaJson(url, ctx, (data: any) => {
+  const races = await cachedJolpicaJson(url, ctx, (data: any) => {
     const list = data.MRData.RaceTable.Races as ScheduleRace[];
     if (!list || list.length === 0) {
-      throw new Error(`Ergast API returned no races for ${year}`);
+      throw new Error(`Jolpica API returned no races for ${year}`);
     }
     return normalizeScheduleRaces(list, year);
   });
+  if (ctx) {
+    ctx.latestConcludedRound = getLatestConcludedRound(races);
+  }
+  return races;
 }
 
 export async function getScheduleWithRetry(

@@ -561,7 +561,7 @@ export async function calculateRoundStats(
     const pts = parseFloat(r.points) || 0;
 
     roundStats[driverId].Entries = 1;
-    if (posText !== 'W') { // DNS is 'W' in Ergast
+    if (posText !== 'W') { // DNS is 'W' in Jolpica
       roundStats[driverId].Starts = 1;
     }
 
