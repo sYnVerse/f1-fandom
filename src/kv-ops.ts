@@ -38,9 +38,14 @@ export function isKvInvocationActive(): boolean {
   return invocationActive;
 }
 
-export async function trackedKvPut(kv: any, key: string, value: string): Promise<void> {
+export async function trackedKvPut(
+  kv: any,
+  key: string,
+  value: string,
+  options?: { expirationTtl?: number }
+): Promise<void> {
   if (!kv) return;
-  await kv.put(key, value);
+  await kv.put(key, value, options);
   invocationPutCount++;
 }
 

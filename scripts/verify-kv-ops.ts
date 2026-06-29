@@ -22,15 +22,24 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
-function createMockKv(): { store: Map<string, string>; get: (k: string) => Promise<string | null>; put: (k: string, v: string) => Promise<void>; delete: (k: string) => Promise<void> } {
+function createMockKv(): {
+  store: Map<string, string>;
+  putOptions: Map<string, { expirationTtl?: number } | undefined>;
+  get: (k: string) => Promise<string | null>;
+  put: (k: string, v: string, options?: { expirationTtl?: number }) => Promise<void>;
+  delete: (k: string) => Promise<void>;
+} {
   const store = new Map<string, string>();
+  const putOptions = new Map<string, { expirationTtl?: number } | undefined>();
   return {
     store,
+    putOptions,
     async get(key: string) {
       return store.has(key) ? store.get(key)! : null;
     },
-    async put(key: string, value: string) {
+    async put(key: string, value: string, options?: { expirationTtl?: number }) {
       store.set(key, value);
+      putOptions.set(key, options);
     },
     async delete(key: string) {
       store.delete(key);
@@ -94,6 +103,12 @@ async function testBufferedWarnings(): Promise<void> {
   assert(crawlers.length === 1, 'Should batch crawler warnings');
 }
 
+async function testExpirationTtlPassthrough(): Promise<void> {
+  const kv = createMockKv();
+  await trackedKvPut(kv, 'ttl_key', 'val', { expirationTtl: 3600 });
+  assert(kv.putOptions.get('ttl_key')?.expirationTtl === 3600, 'Should pass expirationTtl to kv.put');
+}
+
 async function main(): Promise<void> {
   await testBufferedApiLogs();
   console.log('PASS: buffered API logs');
@@ -103,6 +118,8 @@ async function main(): Promise<void> {
   console.log('PASS: edit failure limit');
   await testBufferedWarnings();
   console.log('PASS: buffered KV warnings');
+  await testExpirationTtlPassthrough();
+  console.log('PASS: expirationTtl passthrough');
   console.log('verify-kv-ops: all assertions passed');
 }
 
