@@ -1026,6 +1026,24 @@ export function updateTemplateContent(
   return { wikitext: finalWikitext, changed, updates };
 }
 
+/** Build the wikitext a stats template should have after applying cumulative stats and correction line. */
+export function prepareStatsTemplateUpdate(
+  templateName: string,
+  currentWikitext: string,
+  cumulative2026Stats: Record<string, DriverStats>,
+  correction?: { year: number; raceName: string; winnerCode: string }
+): { wikitext: string; changed: boolean } {
+  const updated = updateTemplateContent(templateName, currentWikitext, cumulative2026Stats);
+  let wikitext = updated.wikitext;
+  if (correction?.raceName) {
+    wikitext = updateCorrectionText(wikitext, correction.year, correction.raceName, correction.winnerCode);
+  }
+  return {
+    wikitext,
+    changed: currentWikitext.trim() !== wikitext.trim(),
+  };
+}
+
 // Helper to update the correction text in noinclude
 export function updateCorrectionText(
   wikitext: string,
