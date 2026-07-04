@@ -151,6 +151,30 @@ export async function clearEditFailures(kv: any, pageTitle: string): Promise<voi
   await kv.delete(editFailureKey(pageTitle));
 }
 
+const CRON_SYNC_LOCK_KEY = 'cron_sync_lock';
+const CRON_SYNC_LOCK_TTL_SECONDS = 120;
+
+/** Best-effort mutex so hourly and high-frequency crons do not overlap. */
+export async function acquireCronSyncLock(kv: any, ownerId: string): Promise<boolean> {
+  if (!kv) return true;
+  const existing = await kv.get(CRON_SYNC_LOCK_KEY);
+  if (existing && existing !== ownerId) {
+    console.log(`Cron sync skipped: lock held by ${existing}`);
+    return false;
+  }
+  await trackedKvPut(kv, CRON_SYNC_LOCK_KEY, ownerId, { expirationTtl: CRON_SYNC_LOCK_TTL_SECONDS });
+  const check = await kv.get(CRON_SYNC_LOCK_KEY);
+  return check === ownerId;
+}
+
+export async function releaseCronSyncLock(kv: any, ownerId: string): Promise<void> {
+  if (!kv) return;
+  const existing = await kv.get(CRON_SYNC_LOCK_KEY);
+  if (existing === ownerId) {
+    await kv.delete(CRON_SYNC_LOCK_KEY);
+  }
+}
+
 export async function getDailyKvPutCount(kv: any, dateStr?: string): Promise<number> {
   if (!kv) return 0;
   const key = `${KV_DAILY_PUTS_PREFIX}${dateStr || getPacificDateString()}`;

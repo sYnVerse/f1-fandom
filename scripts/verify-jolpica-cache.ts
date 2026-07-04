@@ -21,7 +21,7 @@ let fetchTimestamps: number[] = [];
 let lastFetchInit: RequestInit | undefined;
 const originalFetch = globalThis.fetch;
 
-function scheduleResponse() {
+function scheduleResponse2026() {
   return new Response(JSON.stringify({
     MRData: {
       RaceTable: {
@@ -31,6 +31,32 @@ function scheduleResponse() {
           raceName: 'Test GP',
           Circuit: { circuitId: 'test', circuitName: 'Test', Location: { locality: 'X', country: 'Y' } },
           date: '2020-01-01',
+          time: '12:00:00Z',
+        }, {
+          season: '2026',
+          round: '9',
+          raceName: 'British Grand Prix',
+          Circuit: { circuitId: 'silverstone', circuitName: 'Silverstone', Location: { locality: 'X', country: 'Y' } },
+          date: '2026-07-05',
+          time: '15:00:00Z',
+          Sprint: { date: '2026-07-04', time: '11:00:00Z' },
+          SprintQualifying: { date: '2026-07-03', time: '15:30:00Z' },
+        }],
+      },
+    },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+function scheduleResponse2025() {
+  return new Response(JSON.stringify({
+    MRData: {
+      RaceTable: {
+        Races: [{
+          season: '2025',
+          round: '9',
+          raceName: 'Spanish Grand Prix',
+          Circuit: { circuitId: 'catalunya', circuitName: 'Catalunya', Location: { locality: 'X', country: 'Y' } },
+          date: '2025-06-01',
           time: '12:00:00Z',
         }],
       },
@@ -64,8 +90,12 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     return new Response('throttled', { status: 429, headers: { 'Retry-After': '1' } });
   }
 
-  if (url.includes('/2026.json') || url.includes('/2025.json')) {
-    return scheduleResponse();
+  if (url.includes('/2026.json')) {
+    return scheduleResponse2026();
+  }
+
+  if (url.includes('/2025.json')) {
+    return scheduleResponse2025();
   }
 
   if (url.includes('/results.json')) {
@@ -127,7 +157,7 @@ async function test429Backoff() {
     if (calls === 1) {
       return new Response('throttled', { status: 429, headers: { 'Retry-After': '1' } });
     }
-    return scheduleResponse();
+    return scheduleResponse2026();
   };
 
   try {
@@ -340,6 +370,19 @@ async function testStandingsTtlOnFetch() {
   console.log('PASS: standings TTL on KV write (stale permanent, fresh 24h)');
 }
 
+async function testActiveScheduleNotOverwrittenByOtherYears() {
+  fetchCount = 0;
+  const ctx = createF1ApiContext();
+  const schedule2026 = await getSchedule(2026, ctx);
+  const british = schedule2026.find(r => r.round === '9');
+  assert(british?.raceName === 'British Grand Prix', '2026 round 9 should be British GP');
+
+  await getSchedule(2025, ctx);
+  const activeRound9 = ctx.schedule?.find(r => r.round === '9');
+  assert(activeRound9?.raceName === 'British Grand Prix', 'ctx.schedule round 9 should stay British after 2025 fetch');
+  console.log('PASS: active season schedule not overwritten by other-year fetch');
+}
+
 async function main() {
   testClassifyJolpicaUrl();
   testIsResponseEmpty();
@@ -353,6 +396,7 @@ async function main() {
   await testRateLimitSpacing();
   await testApiKeyHeader();
   await testStandingsTtlOnFetch();
+  await testActiveScheduleNotOverwrittenByOtherYears();
   console.log('All Jolpica cache verification tests passed.');
 }
 

@@ -5,10 +5,11 @@ import {
   F1ApiContext,
   isJolpicaUrlCached,
   CachedScheduleRace,
+  ACTIVE_F1_SEASON,
 } from './f1-api-cache';
 import { trackedKvPut } from './kv-ops';
 
-export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext };
+export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext, ACTIVE_F1_SEASON };
 
 export interface Driver {
   driverId: string;
@@ -185,10 +186,19 @@ export async function getSchedule(year: number, ctx?: F1ApiContext): Promise<Sch
     return normalizeScheduleRaces(list, year);
   });
   if (ctx) {
-    ctx.latestConcludedRound = getLatestConcludedRound(races);
-    ctx.schedule = races;
+    const activeYear = ctx.activeSeasonYear ?? ACTIVE_F1_SEASON;
+    if (year === activeYear) {
+      ctx.latestConcludedRound = getLatestConcludedRound(races);
+      ctx.schedule = races;
+    }
   }
   return races;
+}
+
+/** Restore the active-season schedule on ctx after auxiliary schedule fetches. */
+export function setActiveSeasonSchedule(ctx: F1ApiContext, races: ScheduleRace[]): void {
+  ctx.schedule = races;
+  ctx.latestConcludedRound = getLatestConcludedRound(races);
 }
 
 export async function getScheduleWithRetry(
@@ -605,6 +615,7 @@ export async function fetchRoundJolpicaData(
     needDrivers: boolean;
     hasSprint: boolean;
     needSprintQuali: boolean;
+    race?: CachedScheduleRace;
   },
   ctx?: F1ApiContext
 ): Promise<{
@@ -626,6 +637,7 @@ export async function fetchRoundJolpicaData(
     needDrivers,
     hasSprint,
     needSprintQuali,
+    race: raceForRound,
   } = options;
 
   const [
@@ -650,7 +662,7 @@ export async function fetchRoundJolpicaData(
 
   let sprintQualiResults: QualifyingResult[] = [];
   if (needSprintQuali && hasSprint) {
-    const race = ctx?.schedule?.find(r => parseInt(r.round, 10) === round);
+    const race = raceForRound ?? ctx?.schedule?.find(r => parseInt(r.round, 10) === round);
     if (race) {
       sprintQualiResults = await getOpenF1SprintQualifyingResult(
         year,
@@ -1220,6 +1232,16 @@ async function resolveConstructorsForDrivers(
   const lookup = buildConstructorLookup(currentDrivers, prevDrivers);
   const missingIds = [...new Set(driverIds)].filter(id => !lookup.has(id));
   if (missingIds.length === 0) return lookup;
+
+  const hasStandings =
+    (currentDrivers && currentDrivers.length > 0) ||
+    (prevDrivers && prevDrivers.length > 0);
+  if (!hasStandings) {
+    console.warn(
+      `Standings unavailable; skipping ${missingIds.length} per-driver constructor lookups to avoid rate limits`
+    );
+    return lookup;
+  }
 
   await Promise.all(
     missingIds.map(async driverId => {

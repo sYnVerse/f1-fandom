@@ -15,6 +15,9 @@ const TTL_STANDINGS_FRESH = 86_400;
 const TTL_ROUND_DATA = 86_400;
 const TTL_DEFAULT = 1_200;
 
+/** Season the cron worker treats as the active championship year. */
+export const ACTIVE_F1_SEASON = 2026;
+
 /** `undefined` means no expiration (permanent KV entry). */
 export type CacheTtl = number | undefined;
 
@@ -38,21 +41,24 @@ export interface F1ApiContext {
   /** Optional secret: wrangler secret put JOLPICA_API_KEY */
   apiKey?: string;
   latestConcludedRound?: number;
-  /** Populated by getSchedule(); used for session/settled TTL decisions. */
+  /** Active season schedule; only updated by getSchedule(ACTIVE_F1_SEASON). */
   schedule?: CachedScheduleRace[];
+  /** Championship year used for ctx.schedule updates (default ACTIVE_F1_SEASON). */
+  activeSeasonYear?: number;
   lastFetchTime?: number;
   fetchQueuePromise?: Promise<void>;
   /** Test override for 429 backoff delay (ms). */
   testBackoffMs?: number;
 }
 
-export function createF1ApiContext(kv?: any, apiKey?: string): F1ApiContext {
+export function createF1ApiContext(kv?: any, apiKey?: string, activeSeasonYear = ACTIVE_F1_SEASON): F1ApiContext {
   return {
     cache: new Map(),
     inFlight: new Map(),
     apiCallCount: 0,
     kv,
     apiKey,
+    activeSeasonYear,
   };
 }
 

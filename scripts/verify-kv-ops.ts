@@ -9,6 +9,8 @@ import {
   clearEditFailures,
   editFailureKey,
   endKvInvocation,
+  acquireCronSyncLock,
+  releaseCronSyncLock,
   getDailyKvPutCount,
   getEditFailureCount,
   isEditBlocked,
@@ -109,6 +111,18 @@ async function testExpirationTtlPassthrough(): Promise<void> {
   assert(kv.putOptions.get('ttl_key')?.expirationTtl === 3600, 'Should pass expirationTtl to kv.put');
 }
 
+async function testCronSyncLock(): Promise<void> {
+  const kv = createMockKv();
+  const ownerA = 'worker-a';
+  const ownerB = 'worker-b';
+
+  assert(await acquireCronSyncLock(kv, ownerA), 'First worker should acquire lock');
+  assert(!await acquireCronSyncLock(kv, ownerB), 'Second worker should be blocked');
+  await releaseCronSyncLock(kv, ownerA);
+  assert(await acquireCronSyncLock(kv, ownerB), 'Lock should be available after release');
+  await releaseCronSyncLock(kv, ownerB);
+}
+
 async function main(): Promise<void> {
   await testBufferedApiLogs();
   console.log('PASS: buffered API logs');
@@ -120,6 +134,8 @@ async function main(): Promise<void> {
   console.log('PASS: buffered KV warnings');
   await testExpirationTtlPassthrough();
   console.log('PASS: expirationTtl passthrough');
+  await testCronSyncLock();
+  console.log('PASS: cron sync lock');
   console.log('verify-kv-ops: all assertions passed');
 }
 
