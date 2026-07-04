@@ -107,7 +107,7 @@ const updateResult = updateEntryListTableIfNeeded(existingWikiPage, mainDrivers,
 assert(updateResult.changed === true, 'Entry list table should have been updated because Norris team name differed');
 assert(updateResult.updatedWikitext.includes('McLaren Mastercard F1 Team'), 'Should have corrected Lando Norris entrant');
 assert(updateResult.updatedWikitext.includes('[[Felipe Drugovich]]'), 'Should have added Felipe Drugovich');
-assert(updateResult.updatedWikitext.includes('!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]'), 'Should have inserted test driver section header with ! prefix');
+assert(updateResult.updatedWikitext.includes('!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]'), 'Should have inserted test driver section header with ! prefix');
 assert(updateResult.updatedWikitext.includes('Source: [https://fia.com source.pdf]'), 'Should have preserved original source row');
 
 // Verify we don't change it if we run it again
@@ -146,7 +146,7 @@ const wikiPageWithTestDrivers = `
 |[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]
 |{{Pirelli}}
 |-
-!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]
+!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]
 |-
 !98
 |{{MEX}} [[Patricio O'Ward]]

@@ -1248,7 +1248,7 @@ export function addTestDriversToEntryList(wikitext: string, testDrivers: TestDri
     insertIndex = headingIndex + closeIdx;
   }
 
-  let rows = '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+  let rows = '\n|-\n!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
   for (const td of newDrivers) {
     const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
     const entrant = team ? team.entrant : '';
@@ -1501,7 +1501,7 @@ export function updateEntryListTableIfNeeded(
   }
 
   if (combinedTestDrivers.length > 0) {
-    entryListRows += '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+    entryListRows += '\n|-\n!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
     for (const td of combinedTestDrivers) {
       const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
       const entrant = team ? team.entrant : '';
