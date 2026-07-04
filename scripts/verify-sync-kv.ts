@@ -11,6 +11,7 @@ import {
   gpPageSectionRequired,
   allRequiredGpPageSectionsSynced,
   allStatsTemplatesSynced,
+  isStatsSyncEnabled,
   requiredStatsTemplateNames,
 } from '../src/sync-kv';
 
@@ -105,5 +106,10 @@ assert(allSynced, 'All GP page sections synced when every flag is true');
 
 const baseStats = requiredStatsTemplateNames({ isSprintWeekend: false, isFinalRound: false });
 assert(baseStats.length === 13, 'Base stats template count');
+
+assert(isStatsSyncEnabled({ STATS_SYNC: 'TRUE' }), 'STATS_SYNC=TRUE enables stats sync');
+assert(!isStatsSyncEnabled({}), 'Missing STATS_SYNC disables stats sync');
+assert(!isStatsSyncEnabled({ STATS_SYNC: 'true' }), 'Lowercase true does not enable stats sync');
+assert(!isStatsSyncEnabled({ STATS_SYNC: 'FALSE' }), 'STATS_SYNC=FALSE disables stats sync');
 
 console.log('verify-sync-kv: all assertions passed');

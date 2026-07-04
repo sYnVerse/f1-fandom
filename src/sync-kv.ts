@@ -244,3 +244,8 @@ export async function allStatsTemplatesSynced(
     (await allConditionalStatsTemplatesSynced(kv, round))
   );
 }
+
+/** Stats template cron tasks run only when STATS_SYNC is exactly "TRUE". */
+export function isStatsSyncEnabled(env: { STATS_SYNC?: string }): boolean {
+  return env.STATS_SYNC === 'TRUE';
+}

@@ -75,6 +75,7 @@ import {
   getGpPageSectionSyncState,
   allRequiredGpPageSectionsSynced,
   allStatsTemplatesSynced,
+  isStatsSyncEnabled,
   CareerStandingsPage,
   GpPageSection,
 } from './sync-kv';
@@ -621,6 +622,10 @@ export default {
       }
 
       const isHighFrequency = cronTrigger === "*/10 * * * *";
+      const statsSyncEnabled = isStatsSyncEnabled(env);
+      if (!statsSyncEnabled) {
+        console.log("STATS_SYNC is not set to TRUE — skipping all Stats template cron tasks.");
+      }
       
       if (isHighFrequency && !activeWeekendRace) {
         console.log("High-frequency sync skipped: No F1 race weekend is currently active.");
@@ -761,13 +766,15 @@ export default {
           ? await Promise.all([
               isKvSynced(env.F1_WIKI_STATE, gpCareerKey),
               isKvSynced(env.F1_WIKI_STATE, sprintCareerKey, [legacySprintUpdatedKey(round)]),
-              allStatsTemplatesSynced(env.F1_WIKI_STATE, round, {
-                isSprintWeekend: !!race.Sprint,
-                isFinalRound,
-              }),
+              statsSyncEnabled
+                ? allStatsTemplatesSynced(env.F1_WIKI_STATE, round, {
+                    isSprintWeekend: !!race.Sprint,
+                    isFinalRound,
+                  })
+                : Promise.resolve(true),
               getGpPageSectionSyncState(env.F1_WIKI_STATE, round),
             ])
-          : [false, false, false, {} as Record<GpPageSection, boolean>];
+          : [false, false, !statsSyncEnabled, {} as Record<GpPageSection, boolean>];
 
         const gpPageFullySynced = allRequiredGpPageSectionsSynced(gpPageSectionState, pageTiming);
 
@@ -785,7 +792,7 @@ export default {
 
         const needGpCareerTemplate = gpSessionCompleted && !gpCareerTemplateSynced;
         const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
-        const needStats = isRaceConcluded && !statsTemplatesSynced;
+        const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
         const needGpPage = !gpPageFullySynced;
 
         const markGpPageSectionSynced = async (section: GpPageSection) => {
@@ -936,9 +943,7 @@ export default {
         }
 
         // --- 3. Smart Check for Stats Templates ---
-        if (!isRaceConcluded) {
-          console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
-        } else if (gpResults.length > 0) {
+        if (statsSyncEnabled && isRaceConcluded && gpResults.length > 0) {
           console.log(`GP results available. Running stats sync for round ${round}...`);
           await syncStatsTemplates(
             env,
@@ -950,6 +955,8 @@ export default {
             schedule,
             gpResults
           );
+        } else if (statsSyncEnabled && !isRaceConcluded) {
+          console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
         }
 
         // --- 4. Smart Check for GP Page Sections ---
@@ -2271,6 +2278,10 @@ async function syncStatsTemplates(
   schedule?: ScheduleRace[],
   prefetchedGpResults?: any[]
 ): Promise<void> {
+  if (!isStatsSyncEnabled(env)) {
+    return;
+  }
+
   const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
   const apiEndpoint = env.WIKI_API_ENDPOINT;
   const proxySecret = env.PROXY_SECRET;
