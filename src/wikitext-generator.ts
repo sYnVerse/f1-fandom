@@ -844,23 +844,23 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
     constructor: "[[Audi]]",
     chassis: "[[Sauber R26|R26]]",
     engine: "{{Audi-ENG}}",
-    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Audi AFR 26|AFR 26]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "audi": {
-    entrant: "{{SUI}} [[Audi|Revolut Audi F1 Team]]",
+    entrant: "{{SUI}} [[Audi|Audi Revolut F1 Team]]",
     constructor: "[[Audi]]",
     chassis: "[[Audi R26|R26]]",
     engine: "{{Audi-ENG}}",
-    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Audi AFR 26|AFR 26]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "red_bull": {
     entrant: "{{AUT}} [[Red Bull Racing|Oracle Red Bull Racing]]",
     constructor: "{{Red Bull-CON}}",
     chassis: "[[Red Bull RB22|RB22]]",
-    engine: "{{RBPT-ENG}}",
-    model: "[[Red Bull Powertrains]]-[[Ford]] TBA 1.6 [[V6]][[Turbocharger|t]]",
+    engine: "{{RBPT-ENG}}-{{Ford-ENG}}",
+    model: "[[Red Bull Ford DM01|DM01]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "alpine": {
@@ -874,13 +874,13 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
   "cadillac": {
     entrant: "{{USA}} [[Cadillac|Cadillac Formula 1 Team]]",
     constructor: "{{Cadillac-CON}}",
-    chassis: "TBA",
+    chassis: "[[Cadillac MAC-26|MAC-26]]",
     engine: "{{Ferrari-ENG}}",
-    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Ferrari 067/6|067/6]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "mercedes": {
-    entrant: "{{GER}} [[Mercedes Grand Prix|Mercedes-AMG Petronas F1 Team]]",
+    entrant: "{{GER}} [[Mercedes Grand Prix|Mercedes-AMG PETRONAS F1 Team]]",
     constructor: "{{Mercedes-CON}}",
     chassis: "[[Mercedes W17|F1 W17]]",
     engine: "{{Mercedes-ENG}}",
@@ -892,7 +892,7 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
     constructor: "{{Aston Martin-CON}}",
     chassis: "[[Aston Martin AMR26|AMR26]]",
     engine: "{{Honda-ENG}}",
-    model: "TBA 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Honda RA626H|RA626H]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "ferrari": {
@@ -900,11 +900,11 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
     constructor: "{{Ferrari-CON}}",
     chassis: "[[Ferrari SF-26|SF-26]]",
     engine: "{{Ferrari-ENG}}",
-    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Ferrari 067/6|067/6]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "williams": {
-    entrant: "{{GBR}} [[Williams|Atlassian Williams Racing]]",
+    entrant: "{{GBR}} [[Williams|Atlassian Williams F1 Team]]",
     constructor: "{{Williams-CON}}",
     chassis: "[[Williams FW48|FW48]]",
     engine: "{{Mercedes-ENG}}",
@@ -915,16 +915,16 @@ const TEAM_DETAILS_2026: Record<string, TeamEntryDetails> = {
     entrant: "{{ITA}} [[Racing Bulls|Visa Cash App Racing Bulls F1 Team]]",
     constructor: "{{Racing Bulls-CON}}",
     chassis: "[[Racing Bulls VCARB 03|VCARB 03]]",
-    engine: "{{RBPT-ENG}}",
-    model: "[[Red Bull Powertrains]]-[[Ford]] TBA 1.6 [[V6]][[Turbocharger|t]]",
+    engine: "{{RBPT-ENG}}-{{Ford-ENG}}",
+    model: "[[Red Bull Ford DM01|DM01]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   },
   "haas": {
-    entrant: "{{USA}} [[Haas|Toyota Gazoo Racing Haas F1 Team]]",
+    entrant: "{{USA}} [[Haas|TGR Haas F1 Team]]",
     constructor: "{{Haas-CON}}",
     chassis: "[[Haas VF-26|VF-26]]",
     engine: "{{Ferrari-ENG}}",
-    model: "[[Ferrari 067|067]] 1.6 [[V6]][[Turbocharger|t]]",
+    model: "[[Ferrari 067/6|067/6]] 1.6 [[V6]][[Turbocharger|t]]",
     tyre: "{{Pirelli}}"
   }
 };
