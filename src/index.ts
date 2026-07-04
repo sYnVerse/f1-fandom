@@ -36,9 +36,10 @@ import {
   generateCareerTeamPositionWikitext,
   getNationalityCode,
   getTeamTemplate,
-  addTestDriversToEntryList,
   detectTestDriversFromFp1,
   lookupTestDriverNationality,
+  detectTestDriversFromPdf,
+  updateEntryListTableIfNeeded,
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -985,11 +986,46 @@ export default {
             const needFp2 = needGpPage && !race.Sprint && isFp2Concluded;
             const needFp3 = needGpPage && !race.Sprint && isFp3Concluded;
             const needPracticeScrape = needFp1 || needFp2 || needFp3;
+            const needEntryList = needDrivers && !isGpPageSectionSynced('entry_list');
 
             let fp1Results: Record<string, PracticeSessionData> | null = null;
             let fp2Results: Record<string, PracticeSessionData> | null = null;
             let fp3Results: Record<string, PracticeSessionData> | null = null;
 
+            // Fetch and parse the FIA entry list PDF if available (shared between entry list sync and practice filtering)
+            let pdfText: string | null = null;
+            if (needPracticeScrape || needEntryList) {
+              try {
+                console.log(`Fetching FIA entry list PDF for ${year} ${raceName}...`);
+                pdfText = await fetchFiaEntryListText(year, raceName);
+                if (pdfText) {
+                  console.log(`Successfully fetched and parsed FIA entry list PDF (${pdfText.length} chars).`);
+                } else {
+                  console.log(`FIA entry list PDF not found or could not be parsed.`);
+                }
+              } catch (e: any) {
+                console.error(`Error parsing FIA entry list PDF: ${e.message}`);
+              }
+            }
+
+            // --- 1. Verify and Sync Entry List ---
+            if (needEntryList && !isNewPage) {
+              if (drivers.length === 0) {
+                drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
+              }
+              const pdfTestDrivers = pdfText ? detectTestDriversFromPdf(pdfText, drivers) : [];
+              console.log(`Verifying/updating Entry List table for ${gpPageTitle}...`);
+              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, pdfTestDrivers);
+              if (entryListUpdate.changed) {
+                updatedContent = entryListUpdate.updatedWikitext;
+                changes.push("Entry List");
+              }
+              await markGpPageSectionSynced('entry_list');
+            } else if (isNewPage) {
+              await markGpPageSectionSynced('entry_list');
+            }
+
+            // --- 2. Practice Scrapes & Practice Results Section ---
             if (needPracticeScrape) {
               if (drivers.length === 0) {
                 drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
@@ -1010,20 +1046,6 @@ export default {
               fp1Results = fp1;
               fp2Results = fp2;
               fp3Results = fp3;
-
-              // Fetch and parse the FIA entry list PDF if available to filter out test drivers not participating
-              let pdfText: string | null = null;
-              try {
-                console.log(`Fetching FIA entry list PDF for ${year} ${raceName}...`);
-                pdfText = await fetchFiaEntryListText(year, raceName);
-                if (pdfText) {
-                  console.log(`Successfully fetched and parsed FIA entry list PDF (${pdfText.length} chars).`);
-                } else {
-                  console.log(`FIA entry list PDF not found or could not be parsed.`);
-                }
-              } catch (e: any) {
-                console.error(`Error parsing FIA entry list PDF: ${e.message}`);
-              }
 
               if (pdfText) {
                 const mainDriverKeys = new Set<string>();
@@ -1136,9 +1158,10 @@ export default {
                       );
                     }
                   }
-                  const withTestDrivers = addTestDriversToEntryList(updatedContent, testDrivers);
-                  if (withTestDrivers !== updatedContent) {
-                    updatedContent = withTestDrivers;
+                  console.log(`Safely merging FP1 test drivers into Entry List table for ${gpPageTitle}...`);
+                  const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, testDrivers);
+                  if (entryListUpdate.changed) {
+                    updatedContent = entryListUpdate.updatedWikitext;
                     changes.push("Entry List (Test Drivers)");
                   }
                 }
@@ -1159,6 +1182,7 @@ export default {
 
               let practicePromptContext: string | null = null;
 
+              const fpReportSectionsToGenerate = [];
               for (const sec of fpReportSections) {
                 if (!sec.required || isGpPageSectionSynced(sec.section)) continue;
                 if (!sec.results || Object.keys(sec.results).length === 0) continue;
@@ -1168,7 +1192,10 @@ export default {
                   await markGpPageSectionSynced(sec.section);
                   continue;
                 }
+                fpReportSectionsToGenerate.push(sec);
+              }
 
+              if (fpReportSectionsToGenerate.length > 0) {
                 if (!practicePromptContext) {
                   practicePromptContext = generatePromptContext(
                     race,
@@ -1181,22 +1208,32 @@ export default {
                   );
                 }
 
-                try {
-                  const reportText = await generateReportForSection(env, sec.title, practicePromptContext, {
-                    year,
-                    racingKey,
-                    sessionName: sec.sessionName,
-                  });
-                  if (reportText && reportText.length > 10) {
-                    const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
+                console.log(`Generating ${fpReportSectionsToGenerate.length} FP reports in parallel...`);
+                const reports = await Promise.all(
+                  fpReportSectionsToGenerate.map(async (sec) => {
+                    try {
+                      const text = await generateReportForSection(env, sec.title, practicePromptContext!, {
+                        year,
+                        racingKey,
+                        sessionName: sec.sessionName,
+                      });
+                      return { sec, text };
+                    } catch (err: any) {
+                      console.error(`Failed to generate report for ${sec.title}:`, err.message);
+                      return { sec, text: null };
+                    }
+                  })
+                );
+
+                for (const { sec, text } of reports) {
+                  if (text && text.length > 10) {
+                    const replaced = replaceSectionWikitext(updatedContent, sec.header, text);
                     if (replaced !== updatedContent) {
                       updatedContent = replaced;
                       changes.push(`${sec.title} Report`);
                     }
                     await markGpPageSectionSynced(sec.section);
                   }
-                } catch (err: any) {
-                  console.error(`Failed to generate report for ${sec.title}:`, err.message);
                 }
               }
             }
@@ -1393,6 +1430,7 @@ export default {
 
               let promptContext: string | null = null;
 
+              const reportSectionsToGenerate: typeof reportSections = [];
               for (const sec of reportSections) {
                 if (!sec.check() || isGpPageSectionSynced(sec.section)) {
                   continue;
@@ -1400,39 +1438,53 @@ export default {
 
                 const sectionContent = getSectionContent(updatedContent, sec.header);
                 if (isSectionEmptyOrPlaceholder(sectionContent)) {
-                  console.log(`Section ${sec.title} is empty/placeholder. Triggering LLM writer...`);
-
-                  if (!promptContext) {
-                    const standingsData = {
-                      driverStandings: prevDrivers || [],
-                      constructorStandings: prevConstructors || []
-                    };
-                    promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
-                  }
-
-                  try {
-                    let reportText = await generateReportForSection(env, sec.title, promptContext);
-                    if (reportText && reportText.length > 10) {
-                      if (sec.title === "Background") {
-                        const { weatherTemplate, tyresTemplate } = extractBackgroundTemplates(sectionContent);
-                        const weatherPart = weatherTemplate || (race.Sprint ? `{{WeatherSprint/2023\n| fp1 = \n| quali = \n| Sprint_shootout = \n| sprint = \n| race = \n}}` : `{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}`);
-                        const tyresPart = tyresTemplate || `{{AvailableTyres/2023|H=|M=|S=}}`;
-                        reportText = `${weatherPart}${tyresPart}\n{{Clear}}\n${reportText}`;
-                      }
-
-                      const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
-                      if (replaced !== updatedContent) {
-                        updatedContent = replaced;
-                        changes.push(`${sec.title} Report`);
-                      }
-                      await markGpPageSectionSynced(sec.section);
-                    }
-                  } catch (err: any) {
-                    console.error(`Failed to generate report for ${sec.title}:`, err.message);
-                  }
+                  reportSectionsToGenerate.push(sec);
                 } else {
                   console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
                   await markGpPageSectionSynced(sec.section);
+                }
+              }
+
+              if (reportSectionsToGenerate.length > 0) {
+                if (!promptContext) {
+                  const standingsData = {
+                    driverStandings: prevDrivers || [],
+                    constructorStandings: prevConstructors || []
+                  };
+                  promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
+                }
+
+                console.log(`Generating ${reportSectionsToGenerate.length} session reports in parallel...`);
+                const reports = await Promise.all(
+                  reportSectionsToGenerate.map(async (sec) => {
+                    try {
+                      const text = await generateReportForSection(env, sec.title, promptContext!);
+                      return { sec, text };
+                    } catch (err: any) {
+                      console.error(`Failed to generate report for ${sec.title}:`, err.message);
+                      return { sec, text: null };
+                    }
+                  })
+                );
+
+                for (const { sec, text } of reports) {
+                  if (text && text.length > 10) {
+                    let reportText = text;
+                    if (sec.title === "Background") {
+                      const sectionContent = getSectionContent(updatedContent, sec.header);
+                      const { weatherTemplate, tyresTemplate } = extractBackgroundTemplates(sectionContent);
+                      const weatherPart = weatherTemplate || (race.Sprint ? `{{WeatherSprint/2023\n| fp1 = \n| quali = \n| Sprint_shootout = \n| sprint = \n| race = \n}}` : `{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}`);
+                      const tyresPart = tyresTemplate || `{{AvailableTyres/2023|H=|M=|S=}}`;
+                      reportText = `${weatherPart}${tyresPart}\n{{Clear}}\n${reportText}`;
+                    }
+
+                    const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
+                    if (replaced !== updatedContent) {
+                      updatedContent = replaced;
+                      changes.push(`${sec.title} Report`);
+                    }
+                    await markGpPageSectionSynced(sec.section);
+                  }
                 }
               }
             }
@@ -2103,35 +2155,45 @@ async function syncCareerStandingsTemplates(
       console.log(`Successfully updated ${pageTitle}!`);
     };
 
+    const standingsPromises: Promise<void>[] = [];
+
     // 1. Points template
     if (driverStandings.length > 0) {
-      await syncStandingsPage(
-        "Template:Career_Results/Points/2026",
-        'points',
-        generateCareerPointsWikitext(driverStandings),
-        "Automated update of driver career points template"
+      standingsPromises.push(
+        syncStandingsPage(
+          "Template:Career_Results/Points/2026",
+          'points',
+          generateCareerPointsWikitext(driverStandings),
+          "Automated update of driver career points template"
+        )
       );
     }
 
     // 2. Position template
     if (driverStandings.length > 0) {
-      await syncStandingsPage(
-        "Template:Career_Results/Position/2026",
-        'position',
-        generateCareerPositionWikitext(driverStandings),
-        "Automated update of driver career positions template"
+      standingsPromises.push(
+        syncStandingsPage(
+          "Template:Career_Results/Position/2026",
+          'position',
+          generateCareerPositionWikitext(driverStandings),
+          "Automated update of driver career positions template"
+        )
       );
     }
 
     // 3. Team Position template
     if (constructorStandings.length > 0) {
-      await syncStandingsPage(
-        "Template:Career_Results/Team_Position/2026",
-        'team_position',
-        generateCareerTeamPositionWikitext(constructorStandings),
-        "Automated update of constructor career positions template"
+      standingsPromises.push(
+        syncStandingsPage(
+          "Template:Career_Results/Team_Position/2026",
+          'team_position',
+          generateCareerTeamPositionWikitext(constructorStandings),
+          "Automated update of constructor career positions template"
+        )
       );
     }
+
+    await Promise.all(standingsPromises);
 
   } catch (e: any) {
     console.error("Failed to sync Career Results standings templates:", e.message);
@@ -2258,8 +2320,8 @@ async function syncStatsTemplates(
       return session;
     };
 
-    for (const temp of templates) {
-      await syncSingleStatsTemplate(
+    const tasks = templates.map((temp) => () =>
+      syncSingleStatsTemplate(
         env,
         domain,
         apiEndpoint,
@@ -2270,10 +2332,31 @@ async function syncStatsTemplates(
         cumulativeStats,
         raceName,
         winnerCode
-      );
-    }
+      )
+    );
+
+    await runInPool(tasks, 7);
   } catch (e: any) {
     console.error(`Scheduled stats templates sync failed: ${e.message}`);
   }
+}
+
+async function runInPool<T>(
+  tasks: (() => Promise<T>)[],
+  concurrencyLimit: number
+): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
+  async function worker(): Promise<void> {
+    while (index < tasks.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await tasks[currentIndex]();
+    }
+  }
+  const workers = Array(Math.min(concurrencyLimit, tasks.length))
+    .fill(null)
+    .map(() => worker());
+  await Promise.all(workers);
+  return results;
 }
 

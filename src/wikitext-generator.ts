@@ -953,6 +953,7 @@ const TEAM_NAME_TO_CONSTRUCTOR: Record<string, string> = {
 
 export function teamNameToConstructorId(teamName: string): string | null {
   const key = teamName.toLowerCase().trim();
+  if (!key) return null;
   if (TEAM_NAME_TO_CONSTRUCTOR[key]) {
     return TEAM_NAME_TO_CONSTRUCTOR[key];
   }
@@ -1105,6 +1106,278 @@ export function addTestDriversToEntryList(wikitext: string, testDrivers: TestDri
   }
 
   return wikitext.slice(0, insertIndex) + rows + '\n' + wikitext.slice(insertIndex);
+}
+
+export function extractEntryListTable(wikitext: string): { start: number; end: number; content: string } | null {
+  const headingIndex = findEntryListHeadingIndex(wikitext);
+  if (headingIndex === -1) return null;
+
+  const afterHeading = wikitext.slice(headingIndex);
+  const tableStartRelative = afterHeading.indexOf('{|');
+  if (tableStartRelative === -1) return null;
+
+  const tableEndRelative = afterHeading.indexOf('|}', tableStartRelative);
+  if (tableEndRelative === -1) return null;
+
+  const start = headingIndex + tableStartRelative;
+  const end = headingIndex + tableEndRelative + 2; // include '|}'
+  return {
+    start,
+    end,
+    content: wikitext.slice(start, end)
+  };
+}
+
+const TEST_DRIVER_FALLBACKS: Record<string, { number: string; constructorId: string }> = {
+  'patricio o\'ward': { number: '98', constructorId: 'mclaren' },
+  'patricio oward': { number: '98', constructorId: 'mclaren' },
+  'felipe drugovich': { number: '34', constructorId: 'aston_martin' },
+  'isack hadjar': { number: '37', constructorId: 'red_bull' },
+  'arvid lindblad': { number: '40', constructorId: 'rb' },
+  'gabriel bortoleto': { number: '95', constructorId: 'sauber' },
+  'franco colapinto': { number: '43', constructorId: 'alpine' },
+  'andrea kimi antonelli': { number: '12', constructorId: 'mercedes' },
+  'liam lawson': { number: '40', constructorId: 'rb' },
+  'robert shwartzman': { number: '97', constructorId: 'sauber' },
+  'jack doohan': { number: '61', constructorId: 'alpine' },
+  'oliver bearman': { number: '87', constructorId: 'haas' },
+  'kush maini': { number: '61', constructorId: 'alpine' },
+};
+
+export function detectTestDriversFromPdf(
+  pdfText: string,
+  mainDrivers: Driver[]
+): TestDriverEntry[] {
+  const mainDriverKeys = new Set<string>();
+  for (const driver of mainDrivers) {
+    mainDriverKeys.add(driver.driverId.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
+    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
+  }
+
+  const testDrivers: TestDriverEntry[] = [];
+  const normalizedPdf = pdfText.toLowerCase();
+  const lines = pdfText.split('\n');
+
+  for (const [driverName, fallback] of Object.entries(TEST_DRIVER_FALLBACKS)) {
+    const cleanName = driverName.toLowerCase().replace(/[\s'-]/g, ' ').trim();
+    const parts = cleanName.split(/\s+/);
+    const lastName = parts[parts.length - 1];
+
+    const isMain = mainDrivers.some(d => {
+      const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
+      return mainName.includes(cleanName) || cleanName.includes(mainName);
+    });
+    if (isMain) continue;
+
+    let namePresent = false;
+    if (normalizedPdf.includes(cleanName)) {
+      namePresent = true;
+    } else if (lastName.length > 2 && normalizedPdf.includes(lastName)) {
+      namePresent = true;
+    }
+
+    if (!namePresent) continue;
+
+    let detectedNumber = fallback.number;
+    let detectedConstructorId = fallback.constructorId;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const lineLower = lines[i].toLowerCase();
+      if (lineLower.includes(cleanName) || (lastName.length > 2 && lineLower.includes(lastName))) {
+        const searchIndices = [i, i - 1, i + 1].filter(idx => idx >= 0 && idx < lines.length);
+
+        let foundNum = '';
+        for (const idx of searchIndices) {
+          const adjLine = lines[idx].toLowerCase();
+          const numMatch = adjLine.match(/\b\d{1,2}\b/);
+          if (numMatch) {
+            foundNum = numMatch[0];
+            break;
+          }
+        }
+        if (foundNum) {
+          detectedNumber = foundNum;
+        }
+
+        let foundConstId = '';
+        for (const idx of searchIndices) {
+          const adjLine = lines[idx].toLowerCase();
+          const matchedId = teamNameToConstructorId(adjLine);
+          if (matchedId) {
+            foundConstId = matchedId;
+            break;
+          }
+        }
+        if (foundConstId) {
+          detectedConstructorId = foundConstId;
+        }
+        break;
+      }
+    }
+
+    const nationality = lookupTestDriverNationality(driverName);
+    const flag = nationality ? getFlag(nationality) : '{{FIA}}';
+
+    testDrivers.push({
+      number: detectedNumber,
+      name: driverName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      flag,
+      constructorId: detectedConstructorId,
+    });
+  }
+
+  const seen = new Set<string>();
+  const uniqueTestDrivers: TestDriverEntry[] = [];
+  for (const td of testDrivers) {
+    const cleanName = td.name.toLowerCase().replace(/[\s'-]/g, '');
+    if (!seen.has(cleanName)) {
+      seen.add(cleanName);
+      uniqueTestDrivers.push(td);
+    }
+  }
+
+  return uniqueTestDrivers.sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+}
+
+export function updateEntryListTableIfNeeded(
+  currentWikitext: string,
+  expectedDrivers: Driver[],
+  testDrivers: TestDriverEntry[] = []
+): { updatedWikitext: string; changed: boolean } {
+  const tableInfo = extractEntryListTable(currentWikitext);
+  if (!tableInfo) {
+    return { updatedWikitext: currentWikitext, changed: false };
+  }
+
+  const parsedTestDrivers: TestDriverEntry[] = [];
+  const cleanContent = tableInfo.content.replace(/\|\}/g, '').trim();
+  const rows = cleanContent.split(/\r?\n\|-\r?\n/);
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    
+    if (row.includes('colspan') || row.includes('Source') || row.includes('No.') || row.includes('Driver')) {
+      continue;
+    }
+
+    const lines = row.split('\n');
+    let number = '';
+    let name = '';
+
+    for (const line of lines) {
+      if (line.startsWith('!')) {
+        number = line.slice(1).trim();
+      } else if (line.startsWith('|')) {
+        if (!name) {
+          const linkMatch = line.match(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
+          if (linkMatch) {
+            name = linkMatch[1].trim();
+          }
+        }
+      }
+    }
+
+    if (number && name) {
+      const isMain = expectedDrivers.some(d => {
+        const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
+        return mainName === name.toLowerCase();
+      });
+      if (!isMain) {
+        let constructorId = '';
+        for (const line of lines) {
+          const matchedId = teamNameToConstructorId(line.toLowerCase());
+          if (matchedId) {
+            constructorId = matchedId;
+            break;
+          }
+        }
+        const nationality = lookupTestDriverNationality(name);
+        const flag = nationality ? getFlag(nationality) : '{{FIA}}';
+        parsedTestDrivers.push({
+          number,
+          name,
+          flag,
+          constructorId,
+        });
+      }
+    }
+  }
+
+  const combinedTestDriversMap = new Map<string, TestDriverEntry>();
+  parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  const combinedTestDrivers = Array.from(combinedTestDriversMap.values())
+    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+
+  let entryListRows = "";
+  const sortedDrivers = [...expectedDrivers].sort((a, b) => {
+    const numA = parseInt(a.permanentNumber || '0', 10);
+    const numB = parseInt(b.permanentNumber || '0', 10);
+    return numA - numB;
+  });
+
+  for (const driver of sortedDrivers) {
+    const num = driver.permanentNumber || '';
+    const flag = getFlag(driver.nationality);
+    const name = `${driver.givenName} ${driver.familyName}`;
+    
+    const constId = DRIVER_TO_CONSTRUCTOR_2026[driver.driverId] || '';
+    const team = TEAM_DETAILS_2026[constId];
+    
+    const entrant = team ? team.entrant : '';
+    const constructor = team ? team.constructor : '';
+    const chassis = team ? team.chassis : '';
+    const engine = team ? team.engine : '';
+    const model = team ? team.model : '';
+    const tyre = team ? team.tyre : '{{Pirelli}}';
+
+    entryListRows += `\n|-\n!${num}\n|${flag} [[${name}]]\n|${entrant}\n|${constructor}\n|${chassis}\n|${engine}\n|${model}\n|${tyre}`;
+  }
+
+  if (combinedTestDrivers.length > 0) {
+    entryListRows += '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+    for (const td of combinedTestDrivers) {
+      const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
+      const entrant = team ? team.entrant : '';
+      const constructor = team ? team.constructor : '';
+      const chassis = team ? team.chassis : '';
+      const engine = team ? team.engine : '';
+      const model = team ? team.model : '';
+      const tyre = team ? team.tyre : '{{Pirelli}}';
+
+      entryListRows += `\n|-\n!${td.number}\n|${td.flag} [[${td.name}]]\n|${entrant}\n|${constructor}\n|${chassis}\n|${engine}\n|${model}\n|${tyre}`;
+    }
+  }
+
+  let sourceRow = `\n|-\n! colspan="8" align="center" |'''Source''': <ref name="EL">[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_entry_list.pdf {{PAGENAME}} - Entry List] (PDF). Fédération Internationale de l'Automobile.</ref>`;
+  for (const segment of rows) {
+    if (segment.includes('Source') || segment.includes('Source:')) {
+      sourceRow = '\n|-\n' + segment.trim();
+      break;
+    }
+  }
+
+  const newTableWikitext = `{| class="wikitable"
+!<span title="Car number">No.</span>
+!Driver
+!Entrant
+!Constructor
+!Chassis
+!Engine
+!Model
+!Tyre${entryListRows}${sourceRow}
+|}`;
+
+  if (tableInfo.content.trim() === newTableWikitext.trim()) {
+    return { updatedWikitext: currentWikitext, changed: false };
+  }
+
+  const beforeTable = currentWikitext.slice(0, tableInfo.start);
+  const afterTable = currentWikitext.slice(tableInfo.end);
+  const updatedWikitext = beforeTable + newTableWikitext + afterTable;
+
+  return { updatedWikitext, changed: true };
 }
 
 const MONTH_NAMES = [
