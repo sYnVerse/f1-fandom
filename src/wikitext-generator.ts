@@ -7,6 +7,12 @@ import {
   PracticeSessionData,
   ScheduleRace
 } from './f1-api';
+import {
+  buildDriverNameLookup,
+  FiaDriverRow,
+  getFlagFromNatCode,
+  parseFiaEntryListPdf,
+} from './fia-pdf-parser';
 
 const FLAGS: Record<string, string> = {
   "British": "{{GBR}}",
@@ -711,9 +717,12 @@ export function generatePracticeWikitext(
   fp1: Record<string, PracticeSessionData> | null,
   fp2: Record<string, PracticeSessionData> | null,
   fp3: Record<string, PracticeSessionData> | null,
-  options?: { hasSprint?: boolean }
+  options?: { hasSprint?: boolean; pdfText?: string | null }
 ): string {
   const hasSprint = options?.hasSprint ?? false;
+  const pdfTestDriverLookup = options?.pdfText
+    ? buildDriverNameLookup(parseFiaEntryListPdf(options.pdfText, drivers).fp1TestDrivers)
+    : null;
 
   const mainDriverKeys = new Set<string>();
   for (const driver of drivers) {
@@ -728,6 +737,25 @@ export function generatePracticeWikitext(
     return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
   };
 
+  const enrichTestDriverData = (data: PracticeSessionData): PracticeSessionData => {
+    if (!pdfTestDriverLookup) return data;
+    const keys = [
+      data.driverName.toLowerCase(),
+      data.driverName.toLowerCase().replace(/[\s'-]/g, ''),
+    ];
+    let pdfRow: FiaDriverRow | undefined;
+    for (const key of keys) {
+      pdfRow = pdfTestDriverLookup.get(key);
+      if (pdfRow) break;
+    }
+    if (!pdfRow) return data;
+    return {
+      ...data,
+      number: pdfRow.number || data.number,
+      teamName: pdfRow.team || data.teamName,
+    };
+  };
+
   const collectTestDrivers = (
     sessionData: Record<string, PracticeSessionData> | null
   ): PracticeSessionData[] => {
@@ -736,13 +764,14 @@ export function generatePracticeWikitext(
     const testDrivers: PracticeSessionData[] = [];
     for (const data of Object.values(sessionData)) {
       if (isMainDriver(data.driverName)) continue;
-      const pos = data.position?.trim() ?? '';
-      const time = data.time?.trim() ?? '';
+      const enriched = enrichTestDriverData(data);
+      const pos = enriched.position?.trim() ?? '';
+      const time = enriched.time?.trim() ?? '';
       if (!/^\d+$/.test(pos) || !time || time === 'No Time') continue;
-      const key = data.driverName.toLowerCase().replace(/[\s'-]/g, '');
+      const key = enriched.driverName.toLowerCase().replace(/[\s'-]/g, '');
       if (seen.has(key)) continue;
       seen.add(key);
-      testDrivers.push(data);
+      testDrivers.push(enriched);
     }
     return testDrivers.sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
   };
@@ -827,10 +856,16 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
 
   for (const entry of sortedDrivers) {
     const isTestDriver = 'driverName' in entry;
-    const num = isTestDriver ? entry.number : (entry.permanentNumber || '0');
+    const pdfRow = isTestDriver && pdfTestDriverLookup
+      ? pdfTestDriverLookup.get(entry.driverName.toLowerCase())
+        ?? pdfTestDriverLookup.get(entry.driverName.toLowerCase().replace(/[\s'-]/g, ''))
+      : undefined;
+    const num = isTestDriver
+      ? (pdfRow?.number || entry.number || '0')
+      : (entry.permanentNumber || '0');
     const name = isTestDriver ? entry.driverName : `${entry.givenName} ${entry.familyName}`;
     const flag = isTestDriver
-      ? (lookupTestDriverNationality(name) ? getFlag(lookupTestDriverNationality(name)!) : '{{FIA}}')
+      ? (pdfRow ? getFlagFromNatCode(pdfRow.natCode) : (lookupTestDriverNationality(name) ? getFlag(lookupTestDriverNationality(name)!) : '{{FIA}}'))
       : getFlag(entry.nationality);
 
     let team: string;
@@ -1156,9 +1191,14 @@ export interface TestDriverEntry {
 
 export function detectTestDriversFromFp1(
   mainDrivers: Driver[],
-  fp1: Record<string, PracticeSessionData> | null
+  fp1: Record<string, PracticeSessionData> | null,
+  pdfText?: string | null
 ): TestDriverEntry[] {
   if (!fp1 || Object.keys(fp1).length === 0) return [];
+
+  const pdfLookup = pdfText
+    ? buildDriverNameLookup(parseFiaEntryListPdf(pdfText, mainDrivers).fp1TestDrivers)
+    : null;
 
   const mainDriverKeys = new Set<string>();
   for (const driver of mainDrivers) {
@@ -1179,12 +1219,16 @@ export function detectTestDriversFromFp1(
     if (seen.has(cleanName)) continue;
     seen.add(cleanName);
 
-    const constructorId = teamNameToConstructorId(data.teamName) || '';
-    const nationality = lookupTestDriverNationality(name);
-    const flag = nationality ? getFlag(nationality) : '{{FIA}}';
+    const pdfRow = pdfLookup?.get(name.toLowerCase()) ?? pdfLookup?.get(cleanName);
+    const constructorId = pdfRow
+      ? (teamNameToConstructorId(pdfRow.team) || teamNameToConstructorId(pdfRow.constructor) || '')
+      : (teamNameToConstructorId(data.teamName) || '');
+    const flag = pdfRow
+      ? getFlagFromNatCode(pdfRow.natCode)
+      : (lookupTestDriverNationality(name) ? getFlag(lookupTestDriverNationality(name)!) : '{{FIA}}');
 
     testDrivers.push({
-      number: data.number,
+      number: pdfRow?.number || data.number,
       name,
       flag,
       constructorId,
@@ -1284,125 +1328,23 @@ export function extractEntryListTable(wikitext: string): { start: number; end: n
   };
 }
 
-const TEST_DRIVER_FALLBACKS: Record<string, { number: string; constructorId: string }> = {
-  'patricio o\'ward': { number: '98', constructorId: 'mclaren' },
-  'patricio oward': { number: '98', constructorId: 'mclaren' },
-  'felipe drugovich': { number: '34', constructorId: 'aston_martin' },
-  'isack hadjar': { number: '37', constructorId: 'red_bull' },
-  'arvid lindblad': { number: '40', constructorId: 'rb' },
-  'gabriel bortoleto': { number: '95', constructorId: 'sauber' },
-  'franco colapinto': { number: '43', constructorId: 'alpine' },
-  'andrea kimi antonelli': { number: '12', constructorId: 'mercedes' },
-  'liam lawson': { number: '40', constructorId: 'rb' },
-  'robert shwartzman': { number: '97', constructorId: 'sauber' },
-  'jack doohan': { number: '61', constructorId: 'alpine' },
-  'oliver bearman': { number: '87', constructorId: 'haas' },
-  'kush maini': { number: '61', constructorId: 'alpine' },
-};
+function fiaRowsToTestDriverEntries(rows: FiaDriverRow[]): TestDriverEntry[] {
+  return rows
+    .map(row => ({
+      number: row.number,
+      name: row.name,
+      flag: getFlagFromNatCode(row.natCode),
+      constructorId: teamNameToConstructorId(row.team) || teamNameToConstructorId(row.constructor) || '',
+    }))
+    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+}
 
 export function detectTestDriversFromPdf(
   pdfText: string,
   mainDrivers: Driver[]
 ): TestDriverEntry[] {
-  const mainDriverKeys = new Set<string>();
-  for (const driver of mainDrivers) {
-    mainDriverKeys.add(driver.driverId.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
-  }
-
-  const testDrivers: TestDriverEntry[] = [];
-  const normalizedPdf = pdfText.toLowerCase();
-  const lines = pdfText.split('\n');
-
-  for (const [driverName, fallback] of Object.entries(TEST_DRIVER_FALLBACKS)) {
-    const cleanName = driverName.toLowerCase().replace(/[\s'-]/g, ' ').trim();
-    const parts = cleanName.split(/\s+/);
-    const lastName = parts[parts.length - 1];
-
-    const isMain = mainDrivers.some(d => {
-      const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
-      return mainName.includes(cleanName) || cleanName.includes(mainName);
-    });
-    if (isMain) continue;
-
-    if (!normalizedPdf.includes(cleanName)) continue;
-
-    // Require the driver to appear on an entry-list row (name + car number on same/adjacent line)
-    let hasEntryRow = false;
-    for (let i = 0; i < lines.length; i++) {
-      const lineLower = lines[i].toLowerCase();
-      if (!lineLower.includes(cleanName)) continue;
-      const searchIndices = [i, i - 1, i + 1].filter(idx => idx >= 0 && idx < lines.length);
-      for (const idx of searchIndices) {
-        if (/\b\d{1,2}\b/.test(lines[idx])) {
-          hasEntryRow = true;
-          break;
-        }
-      }
-      if (hasEntryRow) break;
-    }
-    if (!hasEntryRow) continue;
-
-    let detectedNumber = fallback.number;
-    let detectedConstructorId = fallback.constructorId;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const lineLower = lines[i].toLowerCase();
-      if (lineLower.includes(cleanName) || (lastName.length > 2 && lineLower.includes(lastName))) {
-        const searchIndices = [i, i - 1, i + 1].filter(idx => idx >= 0 && idx < lines.length);
-
-        let foundNum = '';
-        for (const idx of searchIndices) {
-          const adjLine = lines[idx].toLowerCase();
-          const numMatch = adjLine.match(/\b\d{1,2}\b/);
-          if (numMatch) {
-            foundNum = numMatch[0];
-            break;
-          }
-        }
-        if (foundNum) {
-          detectedNumber = foundNum;
-        }
-
-        let foundConstId = '';
-        for (const idx of searchIndices) {
-          const adjLine = lines[idx].toLowerCase();
-          const matchedId = teamNameToConstructorId(adjLine);
-          if (matchedId) {
-            foundConstId = matchedId;
-            break;
-          }
-        }
-        if (foundConstId) {
-          detectedConstructorId = foundConstId;
-        }
-        break;
-      }
-    }
-
-    const nationality = lookupTestDriverNationality(driverName);
-    const flag = nationality ? getFlag(nationality) : '{{FIA}}';
-
-    testDrivers.push({
-      number: detectedNumber,
-      name: driverName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-      flag,
-      constructorId: detectedConstructorId,
-    });
-  }
-
-  const seen = new Set<string>();
-  const uniqueTestDrivers: TestDriverEntry[] = [];
-  for (const td of testDrivers) {
-    const cleanName = td.name.toLowerCase().replace(/[\s'-]/g, '');
-    if (!seen.has(cleanName)) {
-      seen.add(cleanName);
-      uniqueTestDrivers.push(td);
-    }
-  }
-
-  return uniqueTestDrivers.sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+  const { fp1TestDrivers } = parseFiaEntryListPdf(pdfText, mainDrivers);
+  return fiaRowsToTestDriverEntries(fp1TestDrivers);
 }
 
 export function updateEntryListTableIfNeeded(
