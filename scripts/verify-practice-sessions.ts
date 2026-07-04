@@ -95,9 +95,9 @@ assert(findEntryListHeadingIndex(entryListPage) === 0, 'Should find ==Entry List
 assert(findEntryListHeadingIndex('== Entry List ==\ncontent') === 0, 'Should find spaced variant');
 
 const withTestDriverRows = addTestDriversToEntryList(entryListPage, testDrivers);
-assert(withTestDriverRows.includes('[[Test Driver]]s for [[#FP1|Practice 1]]'), 'Test driver header row');
+assert(withTestDriverRows.includes('!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]'), 'Test driver header row with ! prefix');
 assert(withTestDriverRows.includes('[[Patricio O Ward]]'), 'Test driver name in entry list');
-assert(withTestDriverRows.indexOf('[[Test Driver]]') < withTestDriverRows.indexOf("'''Source'''"), 'Inserted before source row');
+assert(withTestDriverRows.indexOf('!|colspan="8"') < withTestDriverRows.indexOf("'''Source'''"), 'Inserted before source row');
 
 const unchanged = addTestDriversToEntryList(withTestDriverRows, testDrivers);
 assert(unchanged === withTestDriverRows, 'Should not duplicate existing test drivers');

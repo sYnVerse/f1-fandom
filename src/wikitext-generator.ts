@@ -1092,7 +1092,7 @@ export function addTestDriversToEntryList(wikitext: string, testDrivers: TestDri
     insertIndex = headingIndex + closeIdx;
   }
 
-  let rows = '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+  let rows = '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
   for (const td of newDrivers) {
     const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
     const entrant = team ? team.entrant : '';
@@ -1170,14 +1170,23 @@ export function detectTestDriversFromPdf(
     });
     if (isMain) continue;
 
-    let namePresent = false;
-    if (normalizedPdf.includes(cleanName)) {
-      namePresent = true;
-    } else if (lastName.length > 2 && normalizedPdf.includes(lastName)) {
-      namePresent = true;
-    }
+    if (!normalizedPdf.includes(cleanName)) continue;
 
-    if (!namePresent) continue;
+    // Require the driver to appear on an entry-list row (name + car number on same/adjacent line)
+    let hasEntryRow = false;
+    for (let i = 0; i < lines.length; i++) {
+      const lineLower = lines[i].toLowerCase();
+      if (!lineLower.includes(cleanName)) continue;
+      const searchIndices = [i, i - 1, i + 1].filter(idx => idx >= 0 && idx < lines.length);
+      for (const idx of searchIndices) {
+        if (/\b\d{1,2}\b/.test(lines[idx])) {
+          hasEntryRow = true;
+          break;
+        }
+      }
+      if (hasEntryRow) break;
+    }
+    if (!hasEntryRow) continue;
 
     let detectedNumber = fallback.number;
     let detectedConstructorId = fallback.constructorId;
@@ -1250,65 +1259,13 @@ export function updateEntryListTableIfNeeded(
     return { updatedWikitext: currentWikitext, changed: false };
   }
 
-  const parsedTestDrivers: TestDriverEntry[] = [];
+  // Test drivers are authoritative from FP1 participation only — do not preserve
+  // stale wiki rows that may have been added by overly broad PDF name matching.
+  const combinedTestDrivers = [...testDrivers]
+    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+
   const cleanContent = tableInfo.content.replace(/\|\}/g, '').trim();
   const rows = cleanContent.split(/\r?\n\|-\r?\n/);
-  
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    
-    if (row.includes('colspan') || row.includes('Source') || row.includes('No.') || row.includes('Driver')) {
-      continue;
-    }
-
-    const lines = row.split('\n');
-    let number = '';
-    let name = '';
-
-    for (const line of lines) {
-      if (line.startsWith('!')) {
-        number = line.slice(1).trim();
-      } else if (line.startsWith('|')) {
-        if (!name) {
-          const linkMatch = line.match(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
-          if (linkMatch) {
-            name = linkMatch[1].trim();
-          }
-        }
-      }
-    }
-
-    if (number && name) {
-      const isMain = expectedDrivers.some(d => {
-        const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
-        return mainName === name.toLowerCase();
-      });
-      if (!isMain) {
-        let constructorId = '';
-        for (const line of lines) {
-          const matchedId = teamNameToConstructorId(line.toLowerCase());
-          if (matchedId) {
-            constructorId = matchedId;
-            break;
-          }
-        }
-        const nationality = lookupTestDriverNationality(name);
-        const flag = nationality ? getFlag(nationality) : '{{FIA}}';
-        parsedTestDrivers.push({
-          number,
-          name,
-          flag,
-          constructorId,
-        });
-      }
-    }
-  }
-
-  const combinedTestDriversMap = new Map<string, TestDriverEntry>();
-  parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
-  testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
-  const combinedTestDrivers = Array.from(combinedTestDriversMap.values())
-    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
 
   let entryListRows = "";
   const sortedDrivers = [...expectedDrivers].sort((a, b) => {
@@ -1336,7 +1293,7 @@ export function updateEntryListTableIfNeeded(
   }
 
   if (combinedTestDrivers.length > 0) {
-    entryListRows += '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+    entryListRows += '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
     for (const td of combinedTestDrivers) {
       const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
       const entrant = team ? team.entrant : '';
