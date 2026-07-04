@@ -174,4 +174,37 @@ const practiceNoPhantoms = generatePracticeWikitext(
 assert(!practiceNoPhantoms.includes('[[Paul Aron]]'), 'Should exclude test drivers without a classified session time');
 assert(practiceNoPhantoms.includes('[[Patricio O Ward]]'), 'Should still include participating test drivers');
 
+// Jolpica lists FP1 test drivers in the round driver entry; they must still appear in practice results
+const fp1TestDriverOnJolpicaList = {
+  driverId: 'ayumu_iwasa',
+  givenName: 'Ayumu',
+  familyName: 'Iwasa',
+  permanentNumber: '90',
+  nationality: 'Japanese',
+  code: 'IWA',
+  url: '',
+  dateOfBirth: '',
+};
+const driversWithJolpicaTestDriver = [...(mainDrivers as any[]), fp1TestDriverOnJolpicaList];
+const fp1WithIwasa = {
+  ...fp1WithTestDriver,
+  'Ayumu Iwasa': {
+    position: '15',
+    number: '90',
+    driverName: 'Ayumu Iwasa',
+    teamName: 'Racing Bulls',
+    time: '1:09.637',
+  },
+};
+const practiceWithJolpicaTestDriver = generatePracticeWikitext(
+  driversWithJolpicaTestDriver,
+  null,
+  fp1WithIwasa,
+  null,
+  null,
+  { hasSprint: true }
+);
+assert(practiceWithJolpicaTestDriver.includes('[[Ayumu Iwasa]]'), 'FP1 test driver should appear even when listed in Jolpica drivers');
+assert(practiceWithJolpicaTestDriver.includes('1:09.637'), 'FP1 test driver should keep classified session time');
+
 console.log('verify-practice-sessions: all assertions passed');
