@@ -5,6 +5,7 @@ const SESSION_ARTICLE_KEYWORDS: Record<string, string[]> = {
   'FP1': ['fp1', 'free-practice-1', 'first-practice', 'practice-1', 'practice-one', 'free-practice-one'],
   'FP2': ['fp2', 'free-practice-2', 'second-practice', 'practice-2', 'practice-two', 'free-practice-two'],
   'FP3': ['fp3', 'free-practice-3', 'third-practice', 'practice-3', 'practice-three', 'free-practice-three'],
+  'Sprint Qualifying': ['sprint-qualifying', 'sprint-shootout', 'sprint-quali', 'sprint-qualifying-1', 'sq1'],
 };
 
 export async function appendKvWarning(kv: any, key: string, message: string): Promise<void> {
@@ -45,7 +46,8 @@ export function generatePromptContext(
     fp1?: Record<string, PracticeSessionData> | null;
     fp2?: Record<string, PracticeSessionData> | null;
     fp3?: Record<string, PracticeSessionData> | null;
-  }
+  },
+  sprintQualiResults?: any[]
 ): string {
   let context = `Race: ${race.season} Round ${race.round} - ${race.raceName}\n`;
   context += `Circuit: ${race.Circuit.circuitName} in ${race.Circuit.Location.locality}, ${race.Circuit.Location.country}\n\n`;
@@ -77,6 +79,23 @@ export function generatePromptContext(
     qualiResults.forEach((q, idx) => {
       const time = q.Q3 || q.Q2 || q.Q1 || 'No Time';
       context += `Pos ${idx + 1}: No. ${q.number} ${q.driver.givenName} ${q.driver.familyName} (${q.constructor.name}) - Time: ${time}\n`;
+    });
+    context += `\n`;
+  }
+
+  if (sprintQualiResults && sprintQualiResults.length > 0) {
+    context += `### Sprint Qualifying Results:\n`;
+    sprintQualiResults.forEach((q, idx) => {
+      const sq3 = q.Q3 || '';
+      const sq2 = q.Q2 || '';
+      const sq1 = q.Q1 || '';
+      const time = sq3 || sq2 || sq1 || 'No Time';
+      const segments = [
+        sq1 ? `SQ1: ${sq1}` : '',
+        sq2 ? `SQ2: ${sq2}` : '',
+        sq3 ? `SQ3: ${sq3}` : '',
+      ].filter(Boolean).join(', ');
+      context += `Pos ${idx + 1}: No. ${q.number} ${q.driver.givenName} ${q.driver.familyName} (${q.constructor.name}) - Best: ${time}${segments ? ` (${segments})` : ''}\n`;
     });
     context += `\n`;
   }
@@ -133,6 +152,19 @@ The "${sectionName}" section should summarize this free practice session:
 - Highlight any incidents, spins, mechanical issues, or driver feedback reported in the official session context.
 - Note any notable team or tyre performance trends visible from the results.
 - Describe any test driver appearances if relevant.`;
+  } else if (nameLower.includes("sprint qualifying") || nameLower === "sq1" || nameLower === "sq2" || nameLower === "sq3") {
+    const isSegment = nameLower === "sq1" || nameLower === "sq2" || nameLower === "sq3";
+    sectionInstructions = isSegment
+      ? `
+The "${sectionName}" section should summarize the events and eliminations in this segment of sprint qualifying:
+- Mention the top times and drivers.
+- List which drivers were eliminated in this session and the gap or circumstances, if visible.
+- Highlight the battle at the cutoff zone.`
+      : `
+The "Sprint Qualifying" section should summarize the full sprint qualifying session (SQ1, SQ2, and SQ3):
+- Mention the sprint pole position sitter and their fastest time.
+- Summarize eliminations and key battles in each segment (SQ1, SQ2, SQ3) based on the provided results.
+- Highlight notable gaps, incidents, or circumstances visible from the classification data.`;
   } else if (nameLower === "q1" || nameLower === "q2" || nameLower === "q3" || nameLower.includes("qualifying")) {
     sectionInstructions = `
 The "${sectionName}" section should summarize the events and eliminations in this segment of qualifying:

@@ -1247,7 +1247,8 @@ export default {
                     qualiResults,
                     sprintResults,
                     raceResults,
-                    { fp1: fp1Results, fp2: fp2Results, fp3: fp3Results }
+                    { fp1: fp1Results, fp2: fp2Results, fp3: fp3Results },
+                    sprintQualiResults
                   );
                 }
 
@@ -1513,8 +1514,10 @@ export default {
                 title: string;
                 section: GpPageSection;
                 check: () => boolean;
+                sessionName?: string;
               }> = [
                 { header: "==Background==", title: "Background", section: 'background_report', check: () => isBackgroundTime },
+                { header: "=== Sprint Qualifying ===", title: "Sprint Qualifying", section: 'sprint_qualifying_report', sessionName: 'Sprint Qualifying', check: () => !!race.Sprint && isSprintQualiConcluded && !!sprintQualiResults && sprintQualiResults.length > 0 },
                 { header: "=== Q1 ===", title: "Q1", section: 'q1_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
                 { header: "=== Q2 ===", title: "Q2", section: 'q2_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
                 { header: "=== Q3 ===", title: "Q3", section: 'q3_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
@@ -1545,14 +1548,28 @@ export default {
                     driverStandings: prevDrivers || [],
                     constructorStandings: prevConstructors || []
                   };
-                  promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
+                  promptContext = generatePromptContext(
+                    race,
+                    drivers,
+                    standingsData,
+                    qualiResults,
+                    sprintResults,
+                    raceResults,
+                    undefined,
+                    sprintQualiResults
+                  );
                 }
 
                 console.log(`Generating ${reportSectionsToGenerate.length} session reports in parallel...`);
                 const reports = await Promise.all(
                   reportSectionsToGenerate.map(async (sec) => {
                     try {
-                      const text = await generateReportForSection(env, sec.title, promptContext!);
+                      const text = await generateReportForSection(
+                        env,
+                        sec.title,
+                        promptContext!,
+                        sec.sessionName ? { year, racingKey, sessionName: sec.sessionName } : undefined
+                      );
                       return { sec, text };
                     } catch (err: any) {
                       console.error(`Failed to generate report for ${sec.title}:`, err.message);
