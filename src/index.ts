@@ -604,7 +604,6 @@ export default {
       }
 
       const apiCtx = createF1ApiContextFromEnv(env);
-      console.log("Fetching 2026 schedule from Jolpi...");
       const year = 2026;
       const schedule = await getSchedule(year, apiCtx);
       console.log(`Loaded schedule with ${schedule.length} rounds.`);

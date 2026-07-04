@@ -7,6 +7,7 @@ import {
   createF1ApiContext,
   getCacheTtl,
   isResponseEmpty,
+  isRoundSettled,
 } from '../src/f1-api-cache';
 import { getSchedule, getRaceResult } from '../src/f1-api';
 
@@ -112,13 +113,13 @@ async function testRaceResultDedup() {
 
 async function test429Backoff() {
   fetchCount = 0;
-  const ctx = createF1ApiContext();
-  const start = Date.now();
+  const ctx = createF1ApiContext(undefined, undefined);
+  ctx.testBackoffMs = 10;
   const prev = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
     calls++;
-    if (calls <= 2) {
+    if (calls === 1) {
       return new Response('throttled', { status: 429, headers: { 'Retry-After': '1' } });
     }
     return scheduleResponse();
@@ -126,10 +127,8 @@ async function test429Backoff() {
 
   try {
     await getSchedule(2026, ctx);
-    const elapsed = Date.now() - start;
-    assert(calls >= 3, `Expected at least 3 attempts on 429, got ${calls}`);
-    assert(elapsed >= 1000, `Expected backoff delay >= 1s, got ${elapsed}ms`);
-    console.log(`PASS: 429 backoff (${calls} attempts, ${elapsed}ms elapsed)`);
+    assert(calls === 2, `Expected 2 attempts on 429 (1 retry), got ${calls}`);
+    console.log(`PASS: 429 backoff (${calls} attempts with single retry)`);
   } finally {
     globalThis.fetch = prev;
   }
@@ -172,7 +171,21 @@ function testGetCacheTtl() {
   const constructorUrl = `${BASE}/2026/constructorStandings.json?limit=1000`;
   assert(getCacheTtl(constructorUrl, freshStandings, ctx) === 86_400, 'constructor standings TTL');
 
-  console.log('PASS: getCacheTtl (schedule, stale/fresh standings)');
+  const settledRoundUrl = `${BASE}/2026/3/results.json?limit=1000`;
+  const roundResults = {
+    MRData: { RaceTable: { Races: [{ Results: [{ position: '1' }] }] } },
+  };
+  ctx.schedule = [{ round: '3', date: '2020-01-01', time: '12:00:00Z' }];
+  assert(
+    isRoundSettled(3, ctx.schedule, new Date('2020-01-04T15:00:00Z')),
+    'round 3 should be settled after 48h'
+  );
+  assert(
+    getCacheTtl(settledRoundUrl, roundResults, ctx) === 604_800,
+    'settled round data TTL 7 days'
+  );
+
+  console.log('PASS: getCacheTtl (schedule, stale/fresh/settled)');
 }
 
 function createMockKv(store = new Map<string, string>()) {
