@@ -1024,6 +1024,7 @@ export const frontendHtml = `<!DOCTYPE html>
       const mapping = {
         "australian": "australia",
         "bahrain": "bahrain",
+        "japanese": "japan",
         "saudi arabian": "saudi-arabia",
         "chinese": "china",
         "miami": "miami",
@@ -1046,7 +1047,7 @@ export const frontendHtml = `<!DOCTYPE html>
         "são paulo": "brazil",
         "las vegas": "las-vegas",
         "qatar": "qatar",
-        "abu dhabi": "abu-dhabi"
+        "abu dhabi": "united-arab-emirates"
       };
       const nameLower = raceName.toLowerCase();
       for (const [key, val] of Object.entries(mapping)) {
