@@ -1030,8 +1030,8 @@ export const frontendHtml = `<!DOCTYPE html>
       const race = f1Schedule.find(r => r.round === round);
       if (!race) return;
 
-      const raceNameLower = race.raceName.toLowerCase().replace(/[\s_]+/g, '-');
-      let circuitId = race.Circuit.circuitId.replace(/[\s_-]+/g, '_');
+      const raceNameLower = race.raceName.toLowerCase().replace(/[\\s_]+/g, '-');
+      let circuitId = race.Circuit.circuitId.replace(/[\\s_-]+/g, '_');
       
       const raceIdMapping = {
         'hungaroring': '1266', 'silverstone': '1267', 'monaco': '1268', 'spa': '1269',
