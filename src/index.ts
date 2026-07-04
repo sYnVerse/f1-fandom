@@ -1381,10 +1381,14 @@ export default {
                 await markGpPageSectionSynced('standings');
               }
 
-              if (isRaceConcluded && !isGpPageSectionSynced('infobox')) {
+              const shouldUpdateInfobox =
+                !isGpPageSectionSynced('infobox') &&
+                (isQualiConcluded || isSprintQualiConcluded || isSprintConcluded || isRaceConcluded);
+
+              if (shouldUpdateInfobox) {
                 const infoboxUpdates: Record<string, string> = {};
 
-                if (qualiResults && qualiResults.length > 0) {
+                if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
                   const poleSitter = qualiResults[0];
                   if (poleSitter) {
                     const poleName = `${poleSitter.driver.givenName} ${poleSitter.driver.familyName}`;
@@ -1401,7 +1405,22 @@ export default {
                   }
                 }
 
-                if (race.Sprint && sprintResults && sprintResults.length > 0) {
+                if (race.Sprint && isSprintQualiConcluded && sprintQualiResults && sprintQualiResults.length > 0) {
+                  const sprintPoleSitter = sprintQualiResults[0];
+                  if (sprintPoleSitter) {
+                    infoboxUpdates["sprintpole"] = `${sprintPoleSitter.driver.givenName} ${sprintPoleSitter.driver.familyName}`;
+                    infoboxUpdates["sprintpoleteam"] = getTeamTemplate(
+                      sprintPoleSitter.constructor.constructorId,
+                      sprintPoleSitter.constructor.name
+                    );
+                    const sprintPoleTime = sprintPoleSitter.Q3 || sprintPoleSitter.Q2 || sprintPoleSitter.Q1 || "";
+                    if (sprintPoleTime) {
+                      infoboxUpdates["sprintpoletime"] = sprintPoleTime;
+                    }
+                  }
+                }
+
+                if (race.Sprint && isSprintConcluded && sprintResults && sprintResults.length > 0) {
                   const sprintWinner = sprintResults.find(r => r.position === "1");
                   const sprintSecond = sprintResults.find(r => r.position === "2");
                   const sprintThird = sprintResults.find(r => r.position === "3");
@@ -1422,7 +1441,7 @@ export default {
                   }
                 }
 
-                if (raceResults && raceResults.length > 0) {
+                if (isRaceConcluded && raceResults && raceResults.length > 0) {
                   const winner = raceResults.find(r => r.position === "1");
                   const second = raceResults.find(r => r.position === "2");
                   const third = raceResults.find(r => r.position === "3");
@@ -1476,14 +1495,16 @@ export default {
                   }
                 }
 
-                const hasQualiData = !!(qualiResults && qualiResults.length > 0);
-                const hasSprintData = !!(race.Sprint && sprintResults && sprintResults.length > 0);
-                const hasRaceData = !!(raceResults && raceResults.length > 0);
+                if (isRaceConcluded) {
+                  const hasQualiData = !!(qualiResults && qualiResults.length > 0);
+                  const hasSprintData = !!(race.Sprint && sprintResults && sprintResults.length > 0);
+                  const hasRaceData = !!(raceResults && raceResults.length > 0);
 
-                if (isInfoboxSyncComplete(updatedContent, { hasQualiData, hasSprintData, hasRaceData })) {
-                  await markGpPageSectionSynced('infobox');
-                } else {
-                  console.log('  Infobox incomplete for available session data — will retry on next cron run.');
+                  if (isInfoboxSyncComplete(updatedContent, { hasQualiData, hasSprintData, hasRaceData })) {
+                    await markGpPageSectionSynced('infobox');
+                  } else {
+                    console.log('  Infobox incomplete for race weekend — will retry on next cron run.');
+                  }
                 }
               }
 
@@ -1671,7 +1692,7 @@ export function isInfoboxParameterEmpty(value: string | null): boolean {
   return value.trim().length === 0;
 }
 
-/** True when required infobox fields are populated for the data currently available. */
+/** True when all infobox fields for a concluded race weekend are populated. */
 export function isInfoboxSyncComplete(
   wikitext: string,
   options: {
@@ -1680,6 +1701,7 @@ export function isInfoboxSyncComplete(
     hasRaceData: boolean;
   }
 ): boolean {
+  // KV infobox sync is only marked after the GP; partial sprint/quali updates run earlier.
   if (!options.hasRaceData) {
     return false;
   }
@@ -1696,7 +1718,7 @@ export function isInfoboxSyncComplete(
     requiredKeys.push('pole');
   }
   if (options.hasSprintData) {
-    requiredKeys.push('sprintwinner');
+    requiredKeys.push('sprintwinner', 'sprintsecond', 'sprintthird', 'sprintpole');
   }
 
   return requiredKeys.every(

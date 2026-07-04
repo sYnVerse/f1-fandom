@@ -79,5 +79,28 @@ assert(
   'Infobox with pole and winner should be sync-complete when race data exists'
 );
 
+const sprintOnlyInfobox = `{{Infobox Sprint Race
+| sprintpole = Oscar Piastri
+| sprintpoleteam = {{AUS}} {{McLaren-CON}}
+| sprintwinner = Oscar Piastri
+| sprintsecond = George Russell
+| sprintthird = Lando Norris
+| winner =
+}}`;
+assert(
+  !isInfoboxSyncComplete(sprintOnlyInfobox, { hasQualiData: false, hasSprintData: true, hasRaceData: false }),
+  'Sprint infobox fields must not mark KV synced before race concludes'
+);
+
+const sprintWeekendComplete = updateParameterInInfobox(
+  updateParameterInInfobox(sprintOnlyInfobox, 'pole', 'Lando Norris'),
+  'winner',
+  'Lando Norris'
+);
+assert(
+  isInfoboxSyncComplete(sprintWeekendComplete, { hasQualiData: true, hasSprintData: true, hasRaceData: true }),
+  'Sprint weekend infobox should be sync-complete once race winner is set'
+);
+
 console.log('PASS: infobox parameter read/update with template values');
 console.log('All infobox verification tests passed.');
