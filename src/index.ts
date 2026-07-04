@@ -1,5 +1,5 @@
 import { frontendHtml } from './frontend-html';
-import { pageContainsHeader } from './wikitext-parse';
+import { pageContainsHeader, extractBackgroundTemplates } from './wikitext-parse';
 import { 
   getSchedule,
   getRaceResult, 
@@ -18,6 +18,7 @@ import {
   F1ApiContext,
   ScheduleRace,
   PracticeSessionData,
+  fetchFiaEntryListText,
 } from './f1-api';
 import { 
   generateGridWikitext, 
@@ -720,6 +721,9 @@ export default {
         const isFp2Concluded = fp2EndTime ? now >= fp2EndTime : false;
         const isFp3Concluded = fp3EndTime ? now >= fp3EndTime : false;
 
+        const fp1StartTime = race.FirstPractice ? new Date(`${getRaceStartDate(race)}T${race.FirstPractice.time || "00:00:00Z"}`) : null;
+        const isBackgroundTime = fp1StartTime ? now >= new Date(fp1StartTime.getTime() - 60 * 60 * 1000) : false;
+
         let sprintEndTime: Date | null = null;
         let isSprintConcluded = false;
         if (race.Sprint) {
@@ -744,6 +748,7 @@ export default {
           isFp1Concluded,
           isFp2Concluded,
           isFp3Concluded,
+          isBackgroundTime,
         };
 
         const [
@@ -793,8 +798,9 @@ export default {
         const needQuali = needGpPage && isQualiConcluded;
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
-        const needStandings = needGpPage && isRaceConcluded;
+        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime);
         const needDrivers = needGpPage && (
+          isBackgroundTime ||
           isQualiConcluded ||
           isSprintConcluded ||
           isRaceConcluded ||
@@ -1005,6 +1011,77 @@ export default {
               fp2Results = fp2;
               fp3Results = fp3;
 
+              // Fetch and parse the FIA entry list PDF if available to filter out test drivers not participating
+              let pdfText: string | null = null;
+              try {
+                console.log(`Fetching FIA entry list PDF for ${year} ${raceName}...`);
+                pdfText = await fetchFiaEntryListText(year, raceName);
+                if (pdfText) {
+                  console.log(`Successfully fetched and parsed FIA entry list PDF (${pdfText.length} chars).`);
+                } else {
+                  console.log(`FIA entry list PDF not found or could not be parsed.`);
+                }
+              } catch (e: any) {
+                console.error(`Error parsing FIA entry list PDF: ${e.message}`);
+              }
+
+              if (pdfText) {
+                const mainDriverKeys = new Set<string>();
+                for (const driver of drivers) {
+                  mainDriverKeys.add(driver.driverId.toLowerCase());
+                  mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
+                  mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
+                }
+
+                const isMainDriver = (name: string): boolean => {
+                  const lower = name.toLowerCase();
+                  const clean = lower.replace(/[\s'-]/g, '');
+                  return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
+                };
+
+                const isDriverInEntryList = (driverName: string, textStr: string): boolean => {
+                  const normalizedPdf = textStr.toLowerCase();
+                  const cleanName = driverName.toLowerCase().replace(/[\s'-]/g, ' ').trim();
+                  
+                  if (normalizedPdf.includes(cleanName)) return true;
+                  
+                  const parts = cleanName.split(/\s+/);
+                  if (parts.length > 0) {
+                    const lastName = parts[parts.length - 1];
+                    if (lastName.length > 2 && normalizedPdf.includes(lastName)) {
+                      return true;
+                    }
+                  }
+                  
+                  if (parts.length > 2) {
+                    const firstName = parts[0];
+                    const lastName = parts[parts.length - 1];
+                    if (normalizedPdf.includes(firstName) && normalizedPdf.includes(lastName)) {
+                      return true;
+                    }
+                  }
+                  
+                  return false;
+                };
+
+                const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
+                  if (!sessionData) return;
+                  for (const driverName of Object.keys(sessionData)) {
+                    if (!isMainDriver(driverName)) {
+                      // It's a detected test driver. Validate against FIA Entry List PDF.
+                      if (!isDriverInEntryList(driverName, pdfText!)) {
+                        console.log(`Filtering out test driver ${driverName} from practice results because they are not on the FIA Entry List.`);
+                        delete sessionData[driverName];
+                      }
+                    }
+                  }
+                };
+
+                filterSessionResults(fp1Results);
+                filterSessionResults(fp2Results);
+                filterSessionResults(fp3Results);
+              }
+
               const hasAnyPracticeData =
                 (fp1Results && Object.keys(fp1Results).length > 0) ||
                 (fp2Results && Object.keys(fp2Results).length > 0) ||
@@ -1096,7 +1173,7 @@ export default {
                   practicePromptContext = generatePromptContext(
                     race,
                     drivers,
-                    { driverStandings: currentDrivers, constructorStandings: currentConstructors },
+                    { driverStandings: prevDrivers || [], constructorStandings: prevConstructors || [] },
                     qualiResults,
                     sprintResults,
                     raceResults,
@@ -1306,7 +1383,7 @@ export default {
                 section: GpPageSection;
                 check: () => boolean;
               }> = [
-                { header: "==Background==", title: "Background", section: 'background_report', check: () => isRaceConcluded },
+                { header: "==Background==", title: "Background", section: 'background_report', check: () => isBackgroundTime },
                 { header: "=== Q1 ===", title: "Q1", section: 'q1_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
                 { header: "=== Q2 ===", title: "Q2", section: 'q2_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
                 { header: "=== Q3 ===", title: "Q3", section: 'q3_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
@@ -1327,15 +1404,22 @@ export default {
 
                   if (!promptContext) {
                     const standingsData = {
-                      driverStandings: currentDrivers,
-                      constructorStandings: currentConstructors
+                      driverStandings: prevDrivers || [],
+                      constructorStandings: prevConstructors || []
                     };
                     promptContext = generatePromptContext(race, drivers, standingsData, qualiResults, sprintResults, raceResults);
                   }
 
                   try {
-                    const reportText = await generateReportForSection(env, sec.title, promptContext);
+                    let reportText = await generateReportForSection(env, sec.title, promptContext);
                     if (reportText && reportText.length > 10) {
+                      if (sec.title === "Background") {
+                        const { weatherTemplate, tyresTemplate } = extractBackgroundTemplates(sectionContent);
+                        const weatherPart = weatherTemplate || (race.Sprint ? `{{WeatherSprint/2023\n| fp1 = \n| quali = \n| Sprint_shootout = \n| sprint = \n| race = \n}}` : `{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}`);
+                        const tyresPart = tyresTemplate || `{{AvailableTyres/2023|H=|M=|S=}}`;
+                        reportText = `${weatherPart}${tyresPart}\n{{Clear}}\n${reportText}`;
+                      }
+
                       const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
                       if (replaced !== updatedContent) {
                         updatedContent = replaced;

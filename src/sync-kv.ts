@@ -132,6 +132,7 @@ export function gpPageSectionRequired(
     isFp1Concluded: boolean;
     isFp2Concluded: boolean;
     isFp3Concluded: boolean;
+    isBackgroundTime?: boolean;
   }
 ): boolean {
   const {
@@ -142,6 +143,7 @@ export function gpPageSectionRequired(
     isFp1Concluded,
     isFp2Concluded,
     isFp3Concluded,
+    isBackgroundTime = false,
   } = options;
   switch (section) {
     case 'qualifying':
@@ -156,9 +158,10 @@ export function gpPageSectionRequired(
     case 'race_results':
     case 'standings':
     case 'infobox':
-    case 'background_report':
     case 'race_report':
       return isRaceConcluded;
+    case 'background_report':
+      return isBackgroundTime;
     case 'practice_results_fp1':
     case 'fp1_report':
       return isFp1Concluded;
@@ -183,6 +186,7 @@ export function allRequiredGpPageSectionsSynced(
     isFp1Concluded: boolean;
     isFp2Concluded: boolean;
     isFp3Concluded: boolean;
+    isBackgroundTime?: boolean;
   }
 ): boolean {
   return GP_PAGE_SECTIONS.every(

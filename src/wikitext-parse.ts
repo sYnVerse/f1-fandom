@@ -150,3 +150,42 @@ export function parsePipeParamLine(line: string): {
 
   return { prefix, name, separator, value, suffix };
 }
+
+export function extractBackgroundTemplates(sectionContent: string): { weatherTemplate: string; tyresTemplate: string } {
+  let weatherTemplate = "";
+  let tyresTemplate = "";
+
+  let i = 0;
+  while (i < sectionContent.length) {
+    const start = sectionContent.indexOf('{{', i);
+    if (start === -1) {
+      break;
+    }
+    let depth = 0;
+    let j = start;
+    while (j < sectionContent.length - 1) {
+      if (sectionContent[j] === '{' && sectionContent[j + 1] === '{') {
+        depth++;
+        j += 2;
+      } else if (sectionContent[j] === '}' && sectionContent[j + 1] === '}') {
+        depth--;
+        j += 2;
+        if (depth === 0) break;
+      } else {
+        j++;
+      }
+    }
+    const templateContent = sectionContent.slice(start, j);
+    const inner = templateContent.slice(2).trim();
+    
+    if (/^Weather/i.test(inner)) {
+      weatherTemplate = templateContent;
+    } else if (/^AvailableTyre/i.test(inner)) {
+      tyresTemplate = templateContent;
+    }
+
+    i = j < sectionContent.length ? j : sectionContent.length;
+  }
+
+  return { weatherTemplate, tyresTemplate };
+}
