@@ -620,7 +620,7 @@ export default {
         }
       }
 
-      const isHighFrequency = cronTrigger === "*/10 * * * *";
+      const isHighFrequency = cronTrigger === "*/21 * * * *";
       const statsSyncEnabled = isStatsSyncEnabled(env);
       if (!statsSyncEnabled) {
         console.log("STATS_SYNC is not set to TRUE — skipping all Stats template cron tasks.");
