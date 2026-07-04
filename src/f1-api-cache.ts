@@ -5,16 +5,24 @@
 
 import { trackedKvPut } from './kv-ops';
 
-const MAX_RETRIES = 4;
-const BASE_BACKOFF_MS = 2000;
+const MAX_ATTEMPTS = 2;
+const RATE_LIMIT_BACKOFF_MS = 15_000;
 const MIN_FETCH_INTERVAL_MS = 300;
 const KV_CACHE_PREFIX = 'f1_api_cache:';
+const SETTLED_ROUND_AGE_MS = 48 * 60 * 60 * 1000;
 
 const TTL_SCHEDULE = 604_800;
 const TTL_STANDINGS_FRESH = 86_400;
 const TTL_STANDINGS_STALE = 1_200;
 const TTL_ROUND_DATA = 86_400;
+const TTL_SETTLED_ROUND = 604_800;
 const TTL_DEFAULT = 1_200;
+
+export interface CachedScheduleRace {
+  round: string;
+  date: string;
+  time?: string;
+}
 
 export interface F1ApiContext {
   readonly cache: Map<string, unknown>;
@@ -24,8 +32,12 @@ export interface F1ApiContext {
   /** Optional secret: wrangler secret put JOLPICA_API_KEY */
   apiKey?: string;
   latestConcludedRound?: number;
+  /** Populated by getSchedule(); used for settled-round TTL decisions. */
+  schedule?: CachedScheduleRace[];
   lastFetchTime?: number;
   fetchQueuePromise?: Promise<void>;
+  /** Test override for 429 backoff delay (ms). */
+  testBackoffMs?: number;
 }
 
 export function createF1ApiContext(kv?: any, apiKey?: string): F1ApiContext {
@@ -87,6 +99,28 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
   return false;
 }
 
+export function parseRoundFromJolpicaUrl(url: string): number | null {
+  const match = new URL(url).pathname.match(/\/(\d{4})\/(\d+)\//);
+  return match ? parseInt(match[2], 10) : null;
+}
+
+function getRoundRaceEndTime(round: number, schedule?: CachedScheduleRace[]): Date | null {
+  const race = schedule?.find(r => parseInt(r.round, 10) === round);
+  if (!race) return null;
+  const start = new Date(`${race.date}T${race.time || '12:00:00Z'}`);
+  return new Date(start.getTime() + 2 * 60 * 60 * 1000);
+}
+
+export function isRoundSettled(
+  round: number,
+  schedule?: CachedScheduleRace[],
+  now = new Date()
+): boolean {
+  const end = getRoundRaceEndTime(round, schedule);
+  if (!end) return false;
+  return now.getTime() - end.getTime() > SETTLED_ROUND_AGE_MS;
+}
+
 export function getCacheTtl(url: string, data: unknown, ctx?: F1ApiContext): number {
   if (isResponseEmpty(url, data)) {
     return TTL_DEFAULT;
@@ -94,7 +128,13 @@ export function getCacheTtl(url: string, data: unknown, ctx?: F1ApiContext): num
 
   const urlClass = classifyJolpicaUrl(url);
   if (urlClass === 'schedule') return TTL_SCHEDULE;
-  if (urlClass === 'roundData') return TTL_ROUND_DATA;
+  if (urlClass === 'roundData') {
+    const round = parseRoundFromJolpicaUrl(url);
+    if (round !== null && isRoundSettled(round, ctx?.schedule)) {
+      return TTL_SETTLED_ROUND;
+    }
+    return TTL_ROUND_DATA;
+  }
   if (urlClass === 'seasonStandings') {
     const lists = (data as { MRData?: { StandingsTable?: { StandingsLists?: Array<{ round?: string }> } } })
       ?.MRData?.StandingsTable?.StandingsLists;
@@ -102,6 +142,9 @@ export function getCacheTtl(url: string, data: unknown, ctx?: F1ApiContext): num
     const latestConcluded = ctx?.latestConcludedRound ?? 0;
     if (latestConcluded > 0 && standingsRound >= latestConcluded) {
       return TTL_STANDINGS_FRESH;
+    }
+    if (standingsRound > 0 && isRoundSettled(standingsRound, ctx?.schedule)) {
+      return TTL_SETTLED_ROUND;
     }
     return TTL_STANDINGS_STALE;
   }
@@ -112,25 +155,12 @@ function kvCacheKey(url: string): string {
   return `${KV_CACHE_PREFIX}${url}`;
 }
 
-function parseRetryAfterMs(retryAfter: string | null): number | null {
-  if (!retryAfter) return null;
-  const asSeconds = Number(retryAfter);
-  if (!Number.isNaN(asSeconds) && asSeconds >= 0) {
-    return asSeconds * 1000;
-  }
-  const asDate = Date.parse(retryAfter);
-  if (!Number.isNaN(asDate)) {
-    return Math.max(0, asDate - Date.now());
-  }
-  return null;
-}
-
-function backoffDelayMs(attempt: number, retryAfter: string | null): number {
-  const fromHeader = parseRetryAfterMs(retryAfter);
-  if (fromHeader !== null) {
-    return Math.min(fromHeader, 60_000);
-  }
-  return Math.min(BASE_BACKOFF_MS * 2 ** (attempt - 1), 30_000);
+/** True when URL is already in the per-run memory cache or KV store. */
+export async function isJolpicaUrlCached(url: string, ctx: F1ApiContext): Promise<boolean> {
+  if (ctx.cache.has(url)) return true;
+  if (!ctx.kv) return false;
+  const raw = await ctx.kv.get(kvCacheKey(url));
+  return raw !== null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -209,7 +239,7 @@ async function fetchJolpicaUncached(
   let lastError: Error | null = null;
   const fetchInit = buildFetchInit(ctx, init);
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (ctx) ctx.apiCallCount++;
 
     const res = ctx
@@ -217,13 +247,10 @@ async function fetchJolpicaUncached(
       : await fetch(url, fetchInit);
 
     if (res.status === 429) {
-      const retryAfter = res.headers.get('Retry-After');
       lastError = new Error('Jolpica API error: Too Many Requests');
-      if (attempt < MAX_RETRIES) {
-        const delay = backoffDelayMs(attempt, retryAfter);
-        console.warn(
-          `Jolpica 429 on ${url} (attempt ${attempt}/${MAX_RETRIES}), backing off ${delay}ms...`
-        );
+      if (attempt < MAX_ATTEMPTS) {
+        const delay = ctx?.testBackoffMs ?? RATE_LIMIT_BACKOFF_MS;
+        console.warn(`Jolpica 429 on ${url}, backing off ${delay}ms before one retry...`);
         await sleep(delay);
         continue;
       }

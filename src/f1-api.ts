@@ -3,6 +3,7 @@ import {
   createF1ApiContext,
   createF1ApiContextFromEnv,
   F1ApiContext,
+  isJolpicaUrlCached,
 } from './f1-api-cache';
 
 export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext };
@@ -166,6 +167,10 @@ export function getLatestConcludedRound(schedule: ScheduleRace[], now = new Date
 // Fetch season schedule
 export async function getSchedule(year: number, ctx?: F1ApiContext): Promise<ScheduleRace[]> {
   const url = scheduleCacheKey(year);
+  const fromCache = ctx ? await isJolpicaUrlCached(url, ctx) : false;
+  if (!fromCache) {
+    console.log(`Fetching ${year} schedule from Jolpi...`);
+  }
   const races = await cachedJolpicaJson(url, ctx, (data: any) => {
     const list = data.MRData.RaceTable.Races as ScheduleRace[];
     if (!list || list.length === 0) {
@@ -175,6 +180,7 @@ export async function getSchedule(year: number, ctx?: F1ApiContext): Promise<Sch
   });
   if (ctx) {
     ctx.latestConcludedRound = getLatestConcludedRound(races);
+    ctx.schedule = races;
   }
   return races;
 }
