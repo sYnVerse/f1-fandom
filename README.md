@@ -18,6 +18,7 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 - **Latest News & Events Sync**: Periodically compiles the previous, latest, and upcoming event schedules and updates `Template:Latest_F1_News/Events`.
 - **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with the latest standings from the Jolpi API.
 - **Concluded Sessions Polling**: Automatically checks KV caches and conclusion status for completed Grand Prix and Sprint sessions, polling results and deploying them to wiki templates as soon as they become available.
+- **Sprint Qualifying Automation**: Fetches Sprint Qualifying session classifications from the OpenF1 API, resolves driver numbers to current season constructors, and updates the GP page's Sprint Qualifying Results section with a formatted wikitext table.
 - **Practice Session Automation**: Scrapes F1.com practice results (FP1, FP2, FP3) during active race weekends, updates the GP page practice results table incrementally, and retries automatically when results are not yet published.
 - **Entry List Synchronization & Test Drivers**: Automatically updates and maintains the Grand Prix page's main Entry List table using FIA Entry List PDF data, detects rookie/test drivers appearing in FP1, validates them against the PDF, and appends them to a dedicated "Test Drivers for Practice 1" subsection with team details from `TEAM_DETAILS_2026`.
 - **Scheduled Stats Sync**: Automatically computes and synchronizes career stats templates once a race weekend's Grand Prix results are published.
@@ -96,9 +97,10 @@ f1-fandom/
 │   ├── verify-infobox-update.ts    # Infobox parameter read/update tests
 │   ├── verify-jolpica-cache.ts     # API cache dedup and backoff tests
 │   ├── verify-practice-sessions.ts # Practice scraping and test driver tests
+│   ├── verify-openf1-sync.ts       # OpenF1 Sprint Qualifying sync and wikitext tests
 │   ├── verify-llm-reporter.ts      # HTML sanitization and prompt context tests
 │   ├── verify-entry-list-sync.ts   # Entry list table sync and PDF parser tests
-│   ├── verify-kv-ops.ts            # KV daily write count and edit failure block tests
+│   ├── verify-kv-ops.ts            # KV daily write count and edit failure lock tests
 │   └── verify-stats-sync.ts        # Career stats template calculations verification
 ├── f1.py                     # Python wiki table generator
 ├── pyergast.py               # Python Ergast API wrapper
@@ -124,6 +126,12 @@ This runs the TypeScript compiler (`tsc --noEmit`) and all verification scripts 
 ## Recent Updates & Changelog
 
 Summary of improvements (updated July 4, 2026):
+
+### OpenF1 Sprint Qualifying Cron Update (July 2026)
+- **OpenF1 API Integration**: Integrated `api.openf1.org` to retrieve Sprint Qualifying classifications.
+- **Sprint Qualifying Table Generation**: Added `generateSprintQualifyingWikitext` to compile results into a structured wikitext table with SQ1/SQ2/SQ3 segment classification times, 107% time calculations, and official FIA source reference.
+- **Standings-Based Constructor Mapping**: Maps driver numbers to constructors dynamically using active standings or fallback Jolpica constructor endpoint queries.
+- **Unit and Integration Tests**: Added a dedicated `verify-openf1-sync.ts` test suite to the project test runner to verify time formatting and wikitext table compilation.
 
 ### Entry List Syncing & Team Details (July 2026)
 - **Automated Entry List Syncing**: Cron worker automatically updates and maintains Grand Prix Entry List tables, detecting rookie/test drivers in FP1 results, validating them against the FIA Entry List PDF, and appending them to the "Test Drivers for Practice 1" subsection.

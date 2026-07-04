@@ -32,6 +32,7 @@ assert(
 const sprintTiming = {
   hasSprint: true,
   isQualiConcluded: false,
+  isSprintQualiConcluded: false,
   isSprintConcluded: false,
   isRaceConcluded: false,
   isFp1Concluded: true,

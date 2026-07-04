@@ -22,9 +22,12 @@ export interface CachedScheduleRace {
   round: string;
   date: string;
   time?: string;
+  raceName?: string;
+  Circuit?: { circuitId?: string };
   Qualifying?: { date: string; time?: string };
   Sprint?: { date: string; time?: string };
   FirstPractice?: { date: string; time?: string };
+  SprintQualifying?: { date: string; time?: string };
 }
 
 export interface F1ApiContext {

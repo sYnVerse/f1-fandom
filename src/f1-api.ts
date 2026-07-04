@@ -4,7 +4,9 @@ import {
   createF1ApiContextFromEnv,
   F1ApiContext,
   isJolpicaUrlCached,
+  CachedScheduleRace,
 } from './f1-api-cache';
+import { trackedKvPut } from './kv-ops';
 
 export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext };
 
@@ -114,6 +116,10 @@ export interface ScheduleRace {
     time?: string;
   };
   Sprint?: {
+    date: string;
+    time?: string;
+  };
+  SprintQualifying?: {
     date: string;
     time?: string;
   };
@@ -598,12 +604,14 @@ export async function fetchRoundJolpicaData(
     needStandings: boolean;
     needDrivers: boolean;
     hasSprint: boolean;
+    needSprintQuali: boolean;
   },
   ctx?: F1ApiContext
 ): Promise<{
   qualiResults: QualifyingResult[];
   gpResults: RaceResult[];
   sprintResults: RaceResult[];
+  sprintQualiResults: QualifyingResult[];
   drivers: Driver[];
   currentDrivers: DriverStanding[];
   prevDrivers: DriverStanding[] | null;
@@ -617,6 +625,7 @@ export async function fetchRoundJolpicaData(
     needStandings,
     needDrivers,
     hasSprint,
+    needSprintQuali,
   } = options;
 
   const [
@@ -636,13 +645,35 @@ export async function fetchRoundJolpicaData(
     needStandings && round > 1 ? getDriverStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
     needStandings ? getConstructorStandings(year, round, ctx).catch(() => []) : Promise.resolve([]),
     needStandings && round > 1 ? getConstructorStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
-    needDrivers ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
+    needDrivers || needSprintQuali ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
   ]);
+
+  let sprintQualiResults: QualifyingResult[] = [];
+  if (needSprintQuali && hasSprint) {
+    const race = ctx?.schedule?.find(r => parseInt(r.round, 10) === round);
+    if (race) {
+      sprintQualiResults = await getOpenF1SprintQualifyingResult(
+        year,
+        round,
+        race,
+        ctx,
+        currentDrivers,
+        prevDrivers,
+        drivers
+      ).catch(e => {
+        console.error("Failed to fetch OpenF1 Sprint Qualifying results:", e);
+        return [];
+      });
+    } else {
+      console.warn(`Could not find race for round ${round} in schedule cache for Sprint Qualifying fetch.`);
+    }
+  }
 
   return {
     qualiResults,
     gpResults,
     sprintResults,
+    sprintQualiResults,
     drivers,
     currentDrivers,
     prevDrivers,
@@ -984,5 +1015,354 @@ export async function fetchFiaEntryListText(year: number, raceName: string): Pro
     console.warn(`Failed to fetch or parse FIA Entry List PDF from ${url}:`, e.message);
     return null;
   }
+}
+
+export interface OpenF1Session {
+  session_key: number;
+  session_name: string;
+  date_start: string;
+  circuit_short_name?: string;
+  circuit_key?: number;
+  meeting_key?: number;
+}
+
+export interface OpenF1SessionResult {
+  position: number;
+  driver_number: number;
+  duration: (number | null)[];
+  gap_to_leader: (number | null)[];
+  dns: boolean;
+  dnf: boolean;
+  dsq: boolean;
+}
+
+const OPENF1_SESSION_MATCH_WINDOW_DAYS = 4;
+
+function normalizeCircuitToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function circuitsMatch(scheduleCircuitId: string, openF1ShortName: string): boolean {
+  const scheduleToken = normalizeCircuitToken(scheduleCircuitId);
+  const openF1Token = normalizeCircuitToken(openF1ShortName);
+  if (!scheduleToken || !openF1Token) return false;
+  if (scheduleToken === openF1Token || scheduleToken.includes(openF1Token) || openF1Token.includes(scheduleToken)) {
+    return true;
+  }
+
+  const aliasGroups = [
+    ['americas', 'austin'],
+    ['spa', 'spafrancorchamps'],
+    ['ricard', 'lecastellet'],
+    ['redbullring', 'spielberg'],
+    ['hungaroring', 'hungaroring'],
+    ['marinabay', 'marinabay', 'singapore'],
+  ];
+  return aliasGroups.some(group =>
+    group.some(token => scheduleToken.includes(token) || token.includes(scheduleToken)) &&
+    group.some(token => openF1Token.includes(token) || token.includes(openF1Token))
+  );
+}
+
+/** Pick the closest Sprint Qualifying session for a race weekend (exported for tests). */
+export function matchOpenF1SprintQualifyingSession(
+  sessions: OpenF1Session[],
+  race: CachedScheduleRace,
+  round: number
+): OpenF1Session | undefined {
+  const targetDateStr = race.SprintQualifying?.date ?? race.date;
+  const targetDate = new Date(`${targetDateStr}T12:00:00Z`);
+  const circuitId = race.Circuit?.circuitId;
+
+  let candidates = sessions;
+  if (circuitId) {
+    const byCircuit = sessions.filter(session =>
+      session.circuit_short_name && circuitsMatch(circuitId, session.circuit_short_name)
+    );
+    if (byCircuit.length > 0) {
+      candidates = byCircuit;
+    }
+  }
+
+  let best: OpenF1Session | undefined;
+  let bestDiffMs = Infinity;
+  for (const session of candidates) {
+    const sessionDate = new Date(session.date_start);
+    const diffMs = Math.abs(sessionDate.getTime() - targetDate.getTime());
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays <= OPENF1_SESSION_MATCH_WINDOW_DAYS && diffMs < bestDiffMs) {
+      best = session;
+      bestDiffMs = diffMs;
+    }
+  }
+
+  if (!best) {
+    const raceName = race.raceName || 'Unknown';
+    console.warn(`No matching OpenF1 Sprint Qualifying session found for round ${round} (${raceName})`);
+  }
+  return best;
+}
+
+export async function fetchOpenF1Json<T>(
+  url: string,
+  ctx?: F1ApiContext,
+  expirationTtl?: number
+): Promise<T> {
+  const cacheKey = `openf1:${url}`;
+  if (ctx?.cache.has(cacheKey)) {
+    return ctx.cache.get(cacheKey) as T;
+  }
+
+  if (ctx) {
+    const existing = ctx.inFlight.get(cacheKey);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+  }
+
+  if (ctx?.kv) {
+    const raw = await ctx.kv.get(`f1_api_cache:${cacheKey}`);
+    if (raw) {
+      const data = JSON.parse(raw);
+      ctx.cache.set(cacheKey, data);
+      return data;
+    }
+  }
+
+  const promise = (async (): Promise<T> => {
+    console.log(`Fetching from OpenF1: ${url}`);
+    if (ctx) ctx.apiCallCount++;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`OpenF1 API error: ${res.statusText}`);
+    }
+    const rawText = await res.text();
+    const data = JSON.parse(rawText);
+
+    if (ctx) {
+      ctx.cache.set(cacheKey, data);
+      if (ctx.kv) {
+        if (expirationTtl !== undefined) {
+          await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText, { expirationTtl });
+        } else {
+          await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText);
+        }
+      }
+    }
+    return data;
+  })();
+
+  if (ctx) {
+    ctx.inFlight.set(cacheKey, promise);
+  }
+
+  try {
+    return await promise;
+  } finally {
+    if (ctx) {
+      ctx.inFlight.delete(cacheKey);
+    }
+  }
+}
+
+export function formatOpenF1Time(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '';
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = (seconds % 60).toFixed(3);
+  const parts = remainingSeconds.split('.');
+  const secInt = parts[0].padStart(2, '0');
+  const secDec = parts[1] || '000';
+  
+  if (minutes > 0) {
+    return `${minutes}:${secInt}.${secDec}`;
+  }
+  return `${secInt}.${secDec}`;
+}
+
+/** Format a single SQ segment, handling DNS/DSQ and missing times (exported for tests). */
+export function formatOpenF1SessionSegmentTime(
+  seconds: number | null | undefined,
+  result: Pick<OpenF1SessionResult, 'dns' | 'dsq' | 'dnf'>,
+  segmentIndex: number
+): string {
+  if (result.dns) return segmentIndex === 0 ? 'DNS' : '';
+  if (result.dsq) return segmentIndex === 0 ? 'DSQ' : '';
+  if (seconds === null || seconds === undefined) return '';
+  return formatOpenF1Time(seconds);
+}
+
+function buildConstructorLookup(
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null
+): Map<string, Constructor> {
+  const lookup = new Map<string, Constructor>();
+  for (const standing of currentDrivers ?? []) {
+    if (standing.Constructors?.[0]) {
+      lookup.set(standing.Driver.driverId, standing.Constructors[0]);
+    }
+  }
+  for (const standing of prevDrivers ?? []) {
+    if (!lookup.has(standing.Driver.driverId) && standing.Constructors?.[0]) {
+      lookup.set(standing.Driver.driverId, standing.Constructors[0]);
+    }
+  }
+  return lookup;
+}
+
+async function resolveConstructorsForDrivers(
+  year: number,
+  driverIds: string[],
+  ctx: F1ApiContext | undefined,
+  currentDrivers: DriverStanding[] | undefined,
+  prevDrivers: DriverStanding[] | null | undefined
+): Promise<Map<string, Constructor>> {
+  const lookup = buildConstructorLookup(currentDrivers, prevDrivers);
+  const missingIds = [...new Set(driverIds)].filter(id => !lookup.has(id));
+  if (missingIds.length === 0) return lookup;
+
+  await Promise.all(
+    missingIds.map(async driverId => {
+      const constructor = await getDriverConstructorForSeason(year, driverId, ctx);
+      if (constructor) lookup.set(driverId, constructor);
+    })
+  );
+  return lookup;
+}
+
+export async function getDriverConstructorForSeason(
+  year: number,
+  driverId: string,
+  ctx?: F1ApiContext
+): Promise<Constructor | null> {
+  const url = `${BASE_URL}/${year}/drivers/${driverId}/constructors.json`;
+  try {
+    return await cachedJolpicaJson(url, ctx, (data: any) => {
+      const list = data?.MRData?.ConstructorTable?.Constructors;
+      return list && list.length > 0 ? list[0] : null;
+    });
+  } catch (e) {
+    console.error(`Failed to fetch constructor for driver ${driverId} in season ${year}:`, e);
+    return null;
+  }
+}
+
+export async function getDriverConstructor(
+  year: number,
+  driverId: string,
+  ctx?: F1ApiContext,
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null
+): Promise<Constructor | null> {
+  if (currentDrivers) {
+    const s = currentDrivers.find(x => x.Driver.driverId === driverId);
+    if (s && s.Constructors && s.Constructors.length > 0) return s.Constructors[0];
+  }
+  if (prevDrivers) {
+    const s = prevDrivers.find(x => x.Driver.driverId === driverId);
+    if (s && s.Constructors && s.Constructors.length > 0) return s.Constructors[0];
+  }
+  return getDriverConstructorForSeason(year, driverId, ctx);
+}
+
+export async function getOpenF1SprintQualifyingResult(
+  year: number,
+  round: number,
+  race: CachedScheduleRace,
+  ctx?: F1ApiContext,
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null,
+  driversForRound?: Driver[]
+): Promise<QualifyingResult[]> {
+  const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=Sprint%20Qualifying&year=${year}`;
+  let sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
+  
+  if ((!sessions || sessions.length === 0) && sessionsUrl.includes('session_name=Sprint%20Qualifying')) {
+    const fallbackUrl = sessionsUrl.replace('session_name=Sprint%20Qualifying', 'session_name=Sprint%20Shootout');
+    sessions = await fetchOpenF1Json<OpenF1Session[]>(fallbackUrl, ctx, 86400 * 7);
+  }
+
+  if (!sessions || sessions.length === 0) {
+    console.warn(`No OpenF1 Sprint Qualifying sessions found for year ${year}`);
+    return [];
+  }
+
+  const matchedSession = matchOpenF1SprintQualifyingSession(sessions, race, round);
+  const raceName = race.raceName || 'Unknown';
+
+  if (!matchedSession) {
+    return [];
+  }
+
+  console.log(`Matched OpenF1 session_key ${matchedSession.session_key} for ${raceName}`);
+
+  const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
+  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
+
+  if (!results || results.length === 0) {
+    console.warn(`No OpenF1 session results found for session_key ${matchedSession.session_key}`);
+    return [];
+  }
+
+  results.sort((a, b) => a.position - b.position);
+  const drivers = driversForRound ?? await getDriversForRaceWithFallback(year, round, ctx).catch(() => []);
+
+  const resolvedDrivers: Driver[] = [];
+  for (const r of results) {
+    const driverNumStr = r.driver_number.toString();
+    let driver = drivers.find(d => d.permanentNumber === driverNumStr);
+    if (!driver && currentDrivers) {
+      const standing = currentDrivers.find(s => s.Driver.permanentNumber === driverNumStr);
+      if (standing) driver = standing.Driver;
+    }
+    if (!driver && prevDrivers) {
+      const standing = prevDrivers.find(s => s.Driver.permanentNumber === driverNumStr);
+      if (standing) driver = standing.Driver;
+    }
+    if (!driver) {
+      driver = {
+        driverId: `driver_${driverNumStr}`,
+        permanentNumber: driverNumStr,
+        code: `DRV`,
+        url: ``,
+        givenName: `Driver`,
+        familyName: `#${driverNumStr}`,
+        dateOfBirth: ``,
+        nationality: ``,
+      };
+    }
+    resolvedDrivers.push(driver);
+  }
+
+  const constructorLookup = await resolveConstructorsForDrivers(
+    year,
+    resolvedDrivers.map(driver => driver.driverId),
+    ctx,
+    currentDrivers,
+    prevDrivers
+  );
+
+  const unknownConstructor: Constructor = {
+    constructorId: 'unknown',
+    url: '',
+    name: 'Unknown',
+    nationality: '',
+  };
+
+  return results.map((r, index) => {
+    const driverNumStr = r.driver_number.toString();
+    const driver = resolvedDrivers[index];
+    const constructor = constructorLookup.get(driver.driverId) ?? unknownConstructor;
+
+    return {
+      number: driverNumStr,
+      position: r.position.toString(),
+      driver,
+      constructor,
+      Q1: formatOpenF1SessionSegmentTime(r.duration?.[0], r, 0),
+      Q2: formatOpenF1SessionSegmentTime(r.duration?.[1], r, 1),
+      Q3: formatOpenF1SessionSegmentTime(r.duration?.[2], r, 2),
+    };
+  });
 }
 
