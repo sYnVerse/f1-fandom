@@ -15,17 +15,17 @@
     "semantic_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9"
   },
   "src/f1-api.ts": {
-    "mtime": 1783147257.9136994,
+    "mtime": 1783149064.7787542,
     "ast_hash": "8c79bb8cbf39d19cac127ed651fdef90",
     "semantic_hash": ""
   },
   "src/frontend-html.ts": {
-    "mtime": 1783141489.2117388,
-    "ast_hash": "b9c0728baa79b92c2d26283f42f19d9b",
+    "mtime": 1783151620.8829985,
+    "ast_hash": "4da70a6f66aec71210f16572d9e6c6d7",
     "semantic_hash": ""
   },
   "src/index.ts": {
-    "mtime": 1783147257.9237,
+    "mtime": 1783149064.780753,
     "ast_hash": "67444423d10a918a6972c74778670756",
     "semantic_hash": ""
   },
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "src/wikitext-generator.ts": {
-    "mtime": 1783143044.0189695,
-    "ast_hash": "dbfd31a2f26985b79709152d9b326b80",
+    "mtime": 1783151154.4983468,
+    "ast_hash": "257b847d0c60589dcd79167a1581e0c8",
     "semantic_hash": ""
   },
   "tsconfig.json": {
@@ -65,7 +65,7 @@
     "semantic_hash": "350e7dc36d57a75a9a2db3a7cd71f78a"
   },
   "README.md": {
-    "mtime": 1783147756.1186383,
+    "mtime": 1783149064.7687445,
     "ast_hash": "aa486aefe536e3039811732ede5b68e0",
     "semantic_hash": ""
   },
@@ -90,7 +90,7 @@
     "semantic_hash": ""
   },
   "src/f1-api-cache.ts": {
-    "mtime": 1783147257.9031725,
+    "mtime": 1783149064.7777517,
     "ast_hash": "1b5521034ecc8ccb9c60122e4e5070b2",
     "semantic_hash": ""
   },

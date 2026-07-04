@@ -1,7 +1,7 @@
-# Graph Report - f1-fandom  (2026-07-03)
+# Graph Report - f1-fandom  (2026-07-04)
 
 ## Corpus Check
-- 17 files · ~47,783 words
+- 17 files · ~47,909 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6d07f949`
+- Built from commit: `a2721f16`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -34,11 +34,11 @@
 3. `compilerOptions` - 21 edges
 4. `getSchedule()` - 15 edges
 5. `syncStatsTemplates()` - 15 edges
-6. `F1 Fandom Wiki Automator` - 13 edges
-7. `editPage()` - 13 edges
+6. `editPage()` - 13 edges
+7. `F1 Fandom Wiki Automator` - 13 edges
 8. `syncCareerStandingsTemplates()` - 12 edges
 9. `syncLatestNewsEvents()` - 11 edges
-10. `Recent Updates & Changelog` - 10 edges
+10. `getRaceResult()` - 10 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `NPM Dependabot Updates` --conceptually_related_to--> `F1 Fandom Wiki Automator`  [INFERRED]
@@ -106,7 +106,7 @@ Cohesion: 0.14
 Nodes (25): buildFetchInit(), CachedScheduleRace, CacheTtl, classifyJolpicaUrl(), fetchJolpica(), fetchJolpicaUncached(), getCacheTtl(), getFirstPracticeEndTime() (+17 more)
 
 ## Knowledge Gaps
-- **91 isolated node(s):** `Core Functionality`, `Automated Syncing & Background Tasks (Cron Workers)`, `Data Processing`, `Technology Stack`, `Use Cases` (+86 more)
+- **91 isolated node(s):** `name`, `version`, `description`, `main`, `dev` (+86 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 
 ## Suggested Questions
@@ -120,7 +120,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.011) - this node is a cross-community bridge._
 - **Are the 15 inferred relationships involving `fetch()` (e.g. with `fetchJolpicaUncached()` and `throttledFetch()`) actually correct?**
   _`fetch()` has 15 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Core Functionality`, `Automated Syncing & Background Tasks (Cron Workers)`, `Data Processing` to the rest of the system?**
+- **What connects `Convert a time differential (e.g., +0.087s) to an absolute time based on a base`, `Get the previous race number for comparison.     Returns None if this is the fi`, `Validate if a URL appears to be a valid F1.com practice session URL.` to the rest of the system?**
   _114 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `F1 API Clients and Types` be split into smaller, more focused modules?**
   _Cohesion score 0.07777777777777778 - nodes in this community are weakly interconnected._
