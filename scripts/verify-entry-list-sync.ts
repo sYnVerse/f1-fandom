@@ -4,6 +4,8 @@
  */
 import {
   detectTestDriversFromPdf,
+  detectTestDriversFromJolpica,
+  resolveTestDriversForRace,
   updateEntryListTableIfNeeded,
   extractEntryListTable
 } from '../src/wikitext-generator';
@@ -171,7 +173,36 @@ const testDrivers2 = [{
 
 const updateWithBoth = updateEntryListTableIfNeeded(wikiPageWithTestDrivers, mainDrivers, testDrivers2);
 assert(updateWithBoth.changed === true, 'Should update to add Felipe Drugovich');
-assert(!updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should remove wiki-only test drivers when PDF list is authoritative');
+assert(!updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should remove wiki-only test drivers when authoritative list is provided');
 assert(updateWithBoth.updatedWikitext.includes('Felipe Drugovich'), 'Should have added Felipe Drugovich');
+
+// --- 5. Jolpica-first test driver detection ---
+const jolpicaDrivers: Driver[] = [
+  ...mainDrivers,
+  {
+    driverId: 'drugovich',
+    givenName: 'Felipe',
+    familyName: 'Drugovich',
+  } as Driver,
+  {
+    driverId: 'iwasa',
+    givenName: 'Ayumu',
+    familyName: 'Iwasa',
+  } as Driver,
+];
+
+const jolpicaTestDrivers = detectTestDriversFromJolpica(jolpicaDrivers);
+assert(jolpicaTestDrivers.length === 2, `Expected 2 Jolpica test drivers, got ${jolpicaTestDrivers.length}`);
+assert(jolpicaTestDrivers.some(td => td.name === 'Felipe Drugovich'), 'Should detect Drugovich from Jolpica');
+assert(jolpicaTestDrivers.some(td => td.name === 'Ayumu Iwasa'), 'Should detect Iwasa from Jolpica');
+
+const resolvedFromJolpica = resolveTestDriversForRace(jolpicaDrivers, { pdfText: mockPdfText });
+assert(resolvedFromJolpica.length === 2, 'Jolpica should win over PDF-only rows');
+assert(resolvedFromJolpica.find(td => td.name === 'Felipe Drugovich')?.number === '34', 'PDF should enrich Jolpica test driver number');
+assert(resolvedFromJolpica.find(td => td.name === 'Felipe Drugovich')?.constructorId === 'aston_martin', 'PDF should enrich Jolpica test driver team');
+
+const resolvedPdfFallback = resolveTestDriversForRace(mainDrivers, { pdfText: mockPdfText });
+assert(resolvedPdfFallback.length === 1, 'Should fall back to PDF when Jolpica has no extra drivers');
+assert(resolvedPdfFallback[0].name === 'Felipe Drugovich', 'PDF fallback should return Drugovich');
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');
