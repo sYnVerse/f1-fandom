@@ -80,7 +80,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "src_f1_api_schedulerace",
-      "community": 3,
+      "community": 6,
       "norm_label": "schedulerace"
     },
     {
@@ -90,7 +90,7 @@
       "source_location": "L121",
       "_origin": "ast",
       "id": "src_f1_api_practicesessiondata",
-      "community": 6,
+      "community": 10,
       "norm_label": "practicesessiondata"
     },
     {
@@ -150,7 +150,7 @@
       "source_location": "L182",
       "_origin": "ast",
       "id": "src_f1_api_getschedulewithretry",
-      "community": 6,
+      "community": 1,
       "norm_label": "getschedulewithretry()"
     },
     {
@@ -284,20 +284,10 @@
       "norm_label": "getf1racingkey()"
     },
     {
-      "label": "getF1RaceNameSlug()",
-      "file_type": "code",
-      "source_file": "src/f1-api.ts",
-      "source_location": "L527",
-      "_origin": "ast",
-      "id": "src_f1_api_getf1racenameslug",
-      "community": 6,
-      "norm_label": "getf1racenameslug()"
-    },
-    {
       "label": "getF1comRaceId()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L532",
+      "source_location": "L529",
       "_origin": "ast",
       "id": "src_f1_api_getf1comraceid",
       "community": 6,
@@ -307,7 +297,7 @@
       "label": "buildPracticeSessionUrl()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L539",
+      "source_location": "L536",
       "_origin": "ast",
       "id": "src_f1_api_buildpracticesessionurl",
       "community": 6,
@@ -317,7 +307,7 @@
       "label": "cleanOfficialName()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L550",
+      "source_location": "L547",
       "_origin": "ast",
       "id": "src_f1_api_cleanofficialname",
       "community": 6,
@@ -327,7 +317,7 @@
       "label": "fetchOfficialRaceName()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L557",
+      "source_location": "L554",
       "_origin": "ast",
       "id": "src_f1_api_fetchofficialracename",
       "community": 6,
@@ -337,7 +327,7 @@
       "label": "fetchRoundJolpicaData()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L588",
+      "source_location": "L585",
       "_origin": "ast",
       "id": "src_f1_api_fetchroundjolpicadata",
       "community": 6,
@@ -347,7 +337,7 @@
       "label": "uint8ArrayToBinaryString()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L651",
+      "source_location": "L648",
       "_origin": "ast",
       "id": "src_f1_api_uint8arraytobinarystring",
       "community": 6,
@@ -357,7 +347,7 @@
       "label": "binaryStringtoUint8Array()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L661",
+      "source_location": "L658",
       "_origin": "ast",
       "id": "src_f1_api_binarystringtouint8array",
       "community": 6,
@@ -367,7 +357,7 @@
       "label": "decompressZlib()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L669",
+      "source_location": "L666",
       "_origin": "ast",
       "id": "src_f1_api_decompresszlib",
       "community": 6,
@@ -377,7 +367,7 @@
       "label": "parsePDF()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L695",
+      "source_location": "L692",
       "_origin": "ast",
       "id": "src_f1_api_parsepdf",
       "community": 6,
@@ -387,7 +377,7 @@
       "label": "getFiaRaceNameSlug()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L956",
+      "source_location": "L953",
       "_origin": "ast",
       "id": "src_f1_api_getfiaracenameslug",
       "community": 6,
@@ -397,7 +387,7 @@
       "label": "buildFiaEntryListUrl()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L965",
+      "source_location": "L962",
       "_origin": "ast",
       "id": "src_f1_api_buildfiaentrylisturl",
       "community": 6,
@@ -407,7 +397,7 @@
       "label": "fetchFiaEntryListText()",
       "file_type": "code",
       "source_file": "src/f1-api.ts",
-      "source_location": "L970",
+      "source_location": "L967",
       "_origin": "ast",
       "id": "src_f1_api_fetchfiaentrylisttext",
       "community": 6,
@@ -419,9 +409,9 @@
       "source_file": "src/frontend-html.ts",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "src_frontend_html",
       "community": 1,
-      "norm_label": "frontend-html.ts"
+      "norm_label": "frontend-html.ts",
+      "id": "src_frontend_html"
     },
     {
       "label": "f1.py",
@@ -1119,7 +1109,7 @@
       "source_file": "src/f1-api-cache.ts",
       "source_location": "L19",
       "_origin": "ast",
-      "community": 3,
+      "community": 12,
       "norm_label": "f1apicontext",
       "id": "src_f1_api_cache_f1apicontext"
     },
@@ -1499,7 +1489,7 @@
       "source_file": "src/index.ts",
       "source_location": "L1828",
       "_origin": "ast",
-      "community": 6,
+      "community": 1,
       "norm_label": "synclatestnewsevents()",
       "id": "src_index_synclatestnewsevents"
     },
@@ -2939,7 +2929,7 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1388",
       "_origin": "ast",
-      "community": 6,
+      "community": 1,
       "norm_label": "generatelatesteventswikitext()",
       "id": "src_wikitext_generator_generatelatesteventswikitext"
     },
@@ -2979,7 +2969,7 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1458",
       "_origin": "ast",
-      "community": 0,
+      "community": 1,
       "norm_label": "generatecareerpointswikitext()",
       "id": "src_wikitext_generator_generatecareerpointswikitext"
     },
@@ -2989,7 +2979,7 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1473",
       "_origin": "ast",
-      "community": 0,
+      "community": 1,
       "norm_label": "generatecareerpositionwikitext()",
       "id": "src_wikitext_generator_generatecareerpositionwikitext"
     },
@@ -2999,7 +2989,7 @@
       "source_file": "src/wikitext-generator.ts",
       "source_location": "L1488",
       "_origin": "ast",
-      "community": 0,
+      "community": 1,
       "norm_label": "generatecareerteampositionwikitext()",
       "id": "src_wikitext_generator_generatecareerteampositionwikitext"
     },
@@ -3649,9 +3639,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L661",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_binarystringtouint8array",
-      "confidence_score": 1.0
+      "target": "src_f1_api_binarystringtouint8array"
     },
     {
       "relation": "contains",
@@ -3659,9 +3649,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L965",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_buildfiaentrylisturl",
-      "confidence_score": 1.0
+      "target": "src_f1_api_buildfiaentrylisturl"
     },
     {
       "relation": "contains",
@@ -3764,9 +3754,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L669",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_decompresszlib",
-      "confidence_score": 1.0
+      "target": "src_f1_api_decompresszlib"
     },
     {
       "relation": "contains",
@@ -3794,9 +3784,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L970",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_fetchfiaentrylisttext",
-      "confidence_score": 1.0
+      "target": "src_f1_api_fetchfiaentrylisttext"
     },
     {
       "relation": "contains",
@@ -3872,16 +3862,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/f1-api.ts",
-      "source_location": "L505",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "src_f1_api",
-      "target": "src_f1_api_getf1racenameslug"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "src/f1-api.ts",
       "source_location": "L419",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -3894,9 +3874,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L956",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_getfiaracenameslug",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getfiaracenameslug"
     },
     {
       "relation": "contains",
@@ -3994,9 +3974,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L695",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_parsepdf",
-      "confidence_score": 1.0
+      "target": "src_f1_api_parsepdf"
     },
     {
       "relation": "contains",
@@ -4094,9 +4074,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L651",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api",
-      "target": "src_f1_api_uint8arraytobinarystring",
-      "confidence_score": 1.0
+      "target": "src_f1_api_uint8arraytobinarystring"
     },
     {
       "relation": "imports_from",
@@ -4963,9 +4943,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L546",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_buildpracticesessionurl",
-      "target": "src_f1_api_getf1racingkey",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getf1racingkey"
     },
     {
       "relation": "imports",
@@ -4999,17 +4979,6 @@
       "weight": 1.0,
       "source": "src_index_scheduled",
       "target": "src_f1_api_getf1racingkey"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "src/f1-api.ts",
-      "source_location": "L524",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "src_f1_api_buildpracticesessionurl",
-      "target": "src_f1_api_getf1racenameslug"
     },
     {
       "relation": "calls",
@@ -5117,9 +5086,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L696",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_parsepdf",
-      "target": "src_f1_api_uint8arraytobinarystring",
-      "confidence_score": 1.0
+      "target": "src_f1_api_uint8arraytobinarystring"
     },
     {
       "relation": "calls",
@@ -5128,9 +5097,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L740",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_parsepdf",
-      "target": "src_f1_api_binarystringtouint8array",
-      "confidence_score": 1.0
+      "target": "src_f1_api_binarystringtouint8array"
     },
     {
       "relation": "calls",
@@ -5139,9 +5108,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L747",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_parsepdf",
-      "target": "src_f1_api_decompresszlib",
-      "confidence_score": 1.0
+      "target": "src_f1_api_decompresszlib"
     },
     {
       "relation": "calls",
@@ -5150,9 +5119,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L979",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_fetchfiaentrylisttext",
-      "target": "src_f1_api_parsepdf",
-      "confidence_score": 1.0
+      "target": "src_f1_api_parsepdf"
     },
     {
       "relation": "calls",
@@ -5161,9 +5130,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L966",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_buildfiaentrylisturl",
-      "target": "src_f1_api_getfiaracenameslug",
-      "confidence_score": 1.0
+      "target": "src_f1_api_getfiaracenameslug"
     },
     {
       "relation": "calls",
@@ -5172,9 +5141,9 @@
       "source_file": "src/f1-api.ts",
       "source_location": "L971",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "src_f1_api_fetchfiaentrylisttext",
-      "target": "src_f1_api_buildfiaentrylisturl",
-      "confidence_score": 1.0
+      "target": "src_f1_api_buildfiaentrylisturl"
     },
     {
       "relation": "imports_from",
@@ -11865,5 +11834,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e473070e4931f6a68aa86e3b4d835c64087cb0a7"
+  "built_at_commit": "35c243e05a83b6ca9ae079df5b71835ec74f8f2e"
 }

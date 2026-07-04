@@ -1,16 +1,16 @@
 # Graph Report - f1-fandom  (2026-07-03)
 
 ## Corpus Check
-- 17 files · ~45,551 words
+- 17 files · ~45,531 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 362 nodes · 779 edges · 12 communities
+- 361 nodes · 777 edges · 12 communities
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 16 edges (avg confidence: 0.81)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e473070e`
+- Built from commit: `35c243e0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -59,19 +59,19 @@
 
 ### Community 0 - "F1 API Clients and Types"
 Cohesion: 0.07
-Nodes (41): addTestDriversToEntryList(), calculate107Time(), CONSTRUCTORS, COUNTRY_FLAGS, detectTestDriversFromFp1(), DRIVER_TO_CONSTRUCTOR_2026, ENTRY_LIST_HEADING_VARIANTS, EventInfo (+33 more)
+Nodes (38): addTestDriversToEntryList(), calculate107Time(), CONSTRUCTORS, COUNTRY_FLAGS, detectTestDriversFromFp1(), DRIVER_TO_CONSTRUCTOR_2026, ENTRY_LIST_HEADING_VARIANTS, EventInfo (+30 more)
 
 ### Community 1 - "Wiki Standings Syncing and Formatting"
-Cohesion: 0.10
-Nodes (43): findInfoboxParamLineIndex(), findInfoboxRange(), formatResult(), generateWikiResultsText(), getInfoboxParameterValue(), getOrdinal(), getPracticeEndTime(), getRaceStartDate() (+35 more)
+Cohesion: 0.09
+Nodes (49): getScheduleWithRetry(), findInfoboxParamLineIndex(), findInfoboxRange(), formatResult(), generateWikiResultsText(), getInfoboxParameterValue(), getOrdinal(), getPracticeEndTime() (+41 more)
 
 ### Community 2 - "Ergast API Python Client (pyergast)"
 Cohesion: 0.08
 Nodes (30): constructor_standings(), driver_standings(), find_circuitid(), find_constructorid(), find_driverid(), get_circuits(), get_constructors(), get_drivers() (+22 more)
 
 ### Community 3 - "F1 Statistics and Calculations"
-Cohesion: 0.11
-Nodes (23): F1ApiContext, RaceResult, ScheduleRace, trackedKvPut(), BASE_STATS_2025, CIRCUIT_LENGTHS, driverIdToWikiName, DriverStats (+15 more)
+Cohesion: 0.12
+Nodes (21): RaceResult, trackedKvPut(), BASE_STATS_2025, CIRCUIT_LENGTHS, driverIdToWikiName, DriverStats, get2026CumulativeStats(), getRoundStatsCached() (+13 more)
 
 ### Community 4 - "F1.com Practice Scraping and Reports"
 Cohesion: 0.13
@@ -83,7 +83,7 @@ Nodes (22): compilerOptions, alwaysStrict, emitDecoratorMetadata, esModuleIntero
 
 ### Community 6 - "Daily Reporting and Cloudflare Worker HTTP"
 Cohesion: 0.09
-Nodes (45): binaryStringtoUint8Array(), buildFiaEntryListUrl(), buildPracticeSessionUrl(), cachedJolpicaJson(), createF1ApiContext(), createF1ApiContextFromEnv(), cleanOfficialName(), Constructor (+37 more)
+Nodes (41): binaryStringtoUint8Array(), buildFiaEntryListUrl(), buildPracticeSessionUrl(), cachedJolpicaJson(), createF1ApiContext(), createF1ApiContextFromEnv(), cleanOfficialName(), Constructor (+33 more)
 
 ### Community 7 - "Project Dependencies and Scripts (package.json)"
 Cohesion: 0.14
@@ -98,12 +98,12 @@ Cohesion: 0.09
 Nodes (37): checkAndSendDailySummary(), findBestHeader(), apiLogBuffer, ApiLogEntry, beginKvInvocation(), bufferApiLog(), clearEditFailures(), EditBlockedError (+29 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.21
-Nodes (15): bufferKvWarning(), appendKvWarning(), callGemini(), callOpenAI(), callWorkersAI(), extractArticleLinks(), extractArticleText(), fetchF1comSessionArticle() (+7 more)
+Cohesion: 0.19
+Nodes (16): PracticeSessionData, bufferKvWarning(), appendKvWarning(), callGemini(), callOpenAI(), callWorkersAI(), extractArticleLinks(), extractArticleText() (+8 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.25
-Nodes (12): backoffDelayMs(), buildFetchInit(), classifyJolpicaUrl(), fetchJolpica(), fetchJolpicaUncached(), getCacheTtl(), isResponseEmpty(), JolpicaUrlClass (+4 more)
+Cohesion: 0.23
+Nodes (13): backoffDelayMs(), buildFetchInit(), classifyJolpicaUrl(), F1ApiContext, fetchJolpica(), fetchJolpicaUncached(), getCacheTtl(), isResponseEmpty() (+5 more)
 
 ## Knowledge Gaps
 - **87 isolated node(s):** `Constructor`, `PracticeResults`, `RACING_KEY_MAPPING`, `name`, `version` (+82 more)
@@ -125,4 +125,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `Constructor`, `PracticeResults`, `RACING_KEY_MAPPING` to the rest of the system?**
   _110 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `F1 API Clients and Types` be split into smaller, more focused modules?**
-  _Cohesion score 0.0666049953746531 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07293868921775898 - nodes in this community are weakly interconnected._
