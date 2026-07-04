@@ -2,6 +2,7 @@ import { frontendHtml } from './frontend-html';
 import { pageContainsHeader, extractBackgroundTemplates } from './wikitext-parse';
 import { 
   getSchedule,
+  setActiveSeasonSchedule,
   getRaceResult, 
   getQualifyingResult, 
   getDriverStandings, 
@@ -83,6 +84,8 @@ import {
 import {
   beginKvInvocation,
   endKvInvocation,
+  acquireCronSyncLock,
+  releaseCronSyncLock,
   getDailyKvPutCount,
   getPacificDateString,
   KV_FREE_TIER_DAILY_WRITE_LIMIT,
@@ -589,6 +592,8 @@ export default {
 
   async scheduled(event: any, env: any, _ctx: any): Promise<void> {
     beginKvInvocation();
+    const lockOwner = crypto.randomUUID();
+    let lockHeld = false;
     try {
       const cronTrigger = event?.cron || "";
       console.log(`Scheduled sync trigger fired! Trigger: ${cronTrigger || "manual/unknown"}`);
@@ -604,12 +609,23 @@ export default {
         return;
       }
 
+      const isHighFrequency = cronTrigger === "*/21 * * * *";
+      const now = new Date();
+
+      if (isHighFrequency && now.getUTCMinutes() === 0) {
+        console.log("High-frequency sync skipped: hourly cron runs at the top of each hour.");
+        return;
+      }
+
+      lockHeld = await acquireCronSyncLock(env.F1_WIKI_STATE, lockOwner);
+      if (!lockHeld) {
+        return;
+      }
+
       const apiCtx = createF1ApiContextFromEnv(env);
       const year = 2026;
       const schedule = await getSchedule(year, apiCtx);
       console.log(`Loaded schedule with ${schedule.length} rounds.`);
-
-      const now = new Date();
       
       // Determine if a race weekend is currently active
       let activeWeekendRace: any = null;
@@ -621,7 +637,6 @@ export default {
         }
       }
 
-      const isHighFrequency = cronTrigger === "*/21 * * * *";
       const statsSyncEnabled = isStatsSyncEnabled(env);
       if (!statsSyncEnabled) {
         console.log("STATS_SYNC is not set to TRUE — skipping all Stats template cron tasks.");
@@ -665,6 +680,7 @@ export default {
         } catch (e: any) {
           console.error("Failed to sync latest news/events template:", e.message);
         }
+        setActiveSeasonSchedule(apiCtx, schedule);
       }
 
       // --- Sync Career Results Standings Templates (only on hourly/low-frequency/manual sync) ---
@@ -674,6 +690,7 @@ export default {
         } catch (e: any) {
           console.error("Failed to sync Career Results standings templates:", e.message);
         }
+        setActiveSeasonSchedule(apiCtx, schedule);
       }
 
       // Filter to races that have concluded
@@ -853,6 +870,7 @@ export default {
               needDrivers,
               hasSprint: !!race.Sprint,
               needSprintQuali,
+              race,
             },
             apiCtx
           );
@@ -1264,9 +1282,28 @@ export default {
             }
 
             if (isQualiConcluded || isSprintQualiConcluded || isSprintConcluded || isRaceConcluded) {
-              if (race.Sprint && isSprintQualiConcluded && sprintQualiResults && sprintQualiResults.length > 0 && !isGpPageSectionSynced('sprint_qualifying')) {
+              const sprintQualiHeaderCandidates = [
+                "====Sprint Qualifying Results====",
+                "==== Sprint Qualifying Results ====",
+                "=== Sprint Qualifying ===",
+                "===Sprint Qualifying===",
+              ];
+              const sprintQualiOnWiki = sprintQualiHeaderCandidates.some(header =>
+                pageContainsHeader(updatedContent, header)
+              );
+              const needsSprintQualiSync =
+                race.Sprint &&
+                isSprintQualiConcluded &&
+                sprintQualiResults &&
+                sprintQualiResults.length > 0 &&
+                (!isGpPageSectionSynced('sprint_qualifying') || !sprintQualiOnWiki);
+
+              if (needsSprintQualiSync) {
+                if (isGpPageSectionSynced('sprint_qualifying') && !sprintQualiOnWiki) {
+                  console.log('  Sprint Qualifying KV flag set but section missing on wiki; re-syncing...');
+                }
                 const sprintQualiWikitext = generateSprintQualifyingWikitext(sprintQualiResults);
-                const bestSprintQualiHeader = findBestHeader(updatedContent, ["====Sprint Qualifying Results====", "==== Sprint Qualifying Results ====", "=== Sprint Qualifying ===", "===Sprint Qualifying==="], "====Sprint Qualifying Results====");
+                const bestSprintQualiHeader = findBestHeader(updatedContent, sprintQualiHeaderCandidates, "====Sprint Qualifying Results====");
                 const newContent = replaceSectionWikitext(updatedContent, bestSprintQualiHeader, sprintQualiWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
@@ -1559,6 +1596,9 @@ export default {
     } catch (e: any) {
       console.error("Scheduled sync failed:", e.message);
     } finally {
+      if (lockHeld) {
+        await releaseCronSyncLock(env.F1_WIKI_STATE, lockOwner);
+      }
       await endKvInvocation(env.F1_WIKI_STATE);
     }
   }
