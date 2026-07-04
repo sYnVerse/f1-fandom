@@ -1020,6 +1020,52 @@ export const frontendHtml = `<!DOCTYPE html>
       }
     }
 
+    function getF1RacingKey(raceName) {
+      const mapping = {
+        "australian": "australia",
+        "bahrain": "bahrain",
+        "saudi arabian": "saudi-arabia",
+        "chinese": "china",
+        "miami": "miami",
+        "emilia romagna": "emilia-romagna",
+        "monaco": "monaco",
+        "canadian": "canada",
+        "spanish": "spain",
+        "austrian": "austria",
+        "british": "great-britain",
+        "hungarian": "hungary",
+        "belgian": "belgium",
+        "dutch": "netherlands",
+        "italian": "italy",
+        "azerbaijan": "azerbaijan",
+        "singapore": "singapore",
+        "united states": "united-states",
+        "mexican": "mexico",
+        "mexico city": "mexico",
+        "brazilian": "brazil",
+        "são paulo": "brazil",
+        "las vegas": "las-vegas",
+        "qatar": "qatar",
+        "abu dhabi": "abu-dhabi"
+      };
+      const nameLower = raceName.toLowerCase();
+      for (const [key, val] of Object.entries(mapping)) {
+        if (nameLower.includes(key)) {
+          return val;
+        }
+      }
+      return nameLower.replace(" grand prix", "").trim().replace(/[\\\\s_]+/g, "-");
+    }
+
+    function getF1comRaceId(year, round) {
+      const y = parseInt(year, 10);
+      const r = parseInt(round, 10);
+      if (y === 2026) {
+        return r <= 3 ? String(1278 + r) : String(1280 + r);
+      }
+      return String(1278 + r);
+    }
+
     function updatePracticeURLSuggestion() {
       const year = document.getElementById('season-year').value;
       const dropdown = document.getElementById('race-round');
@@ -1030,20 +1076,9 @@ export const frontendHtml = `<!DOCTYPE html>
       const race = f1Schedule.find(r => r.round === round);
       if (!race) return;
 
-      const raceNameLower = race.raceName.toLowerCase().replace(/[\\s_]+/g, '-');
-      let circuitId = race.Circuit.circuitId.replace(/[\\s_-]+/g, '_');
-      
-      const raceIdMapping = {
-        'hungaroring': '1266', 'silverstone': '1267', 'monaco': '1268', 'spa': '1269',
-        'monza': '1270', 'red_bull_ring': '1271', 'catalunya': '1272', 'villeneuve': '1273',
-        'miami': '1274', 'imola': '1275', 'marina_bay': '1276', 'suzuka': '1277',
-        'losail': '1278', 'cota': '1279', 'rodriguez': '1280', 'interlagos': '1281',
-        'vegas': '1282', 'yas_marina': '1283', 'jeddah': '1284', 'albert_park': '1285',
-        'shanghai': '1286', 'baku': '1287', 'zandvoort': '1288'
-      };
-
-      const raceId = raceIdMapping[circuitId.toLowerCase()] || '1266';
-      const proposedUrl = \`https://www.formula1.com/en/results/\${year}/races/\${raceId}/\${raceNameLower}/practice/1\`;
+      const raceSlug = getF1RacingKey(race.raceName);
+      const raceId = getF1comRaceId(year, round);
+      const proposedUrl = \`https://www.formula1.com/en/results/\${year}/races/\${raceId}/\${raceSlug}/practice/1\`;
       document.getElementById('practice-url-input').value = proposedUrl;
     }
 

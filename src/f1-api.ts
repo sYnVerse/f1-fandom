@@ -543,7 +543,7 @@ export function buildPracticeSessionUrl(
   session: 1 | 2 | 3
 ): string {
   const raceId = getF1comRaceId(year, round);
-  const raceSlug = getF1RaceNameSlug(raceName);
+  const raceSlug = getF1RacingKey(raceName);
   return `https://www.formula1.com/en/results/${year}/races/${raceId}/${raceSlug}/practice/${session}`;
 }
 

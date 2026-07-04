@@ -24,7 +24,7 @@ assert(getF1comRaceId(2026, 8) === '1288', 'Round 8 Austria = 1288');
 
 const fp1Url = buildPracticeSessionUrl(2026, 8, 'Austrian Grand Prix', 1);
 assert(
-  fp1Url === 'https://www.formula1.com/en/results/2026/races/1288/austrian-grand-prix/practice/1',
+  fp1Url === 'https://www.formula1.com/en/results/2026/races/1288/austria/practice/1',
   `Unexpected practice URL: ${fp1Url}`
 );
 
