@@ -75,7 +75,8 @@ const FIA_NAT_TO_FLAG: Record<string, string> = {
   RAF: '{{RAF}}',
 };
 
-export function getFlagFromNatCode(natCode: string): string {
+export function getFlagFromNatCode(natCode: string | undefined | null): string {
+  if (!natCode) return '{{FIA}}';
   return FIA_NAT_TO_FLAG[natCode.toUpperCase()] || '{{FIA}}';
 }
 
@@ -107,7 +108,9 @@ function normalizeCarNumber(
   mainDrivers: Driver[],
   isFp1Section: boolean
 ): string {
-  const byTla = mainDrivers.find(d => d.code.toUpperCase() === tla.toUpperCase());
+  const byTla = mainDrivers.find(
+    d => d.code && d.code.toUpperCase() === tla.toUpperCase()
+  );
   if (byTla?.permanentNumber) {
     return byTla.permanentNumber;
   }
@@ -178,6 +181,7 @@ function parseRowsFromText(
     if (!natMatch) continue;
 
     const [, rawName, natCode, teamAndConstructor] = natMatch;
+    if (!natCode) continue;
     const { team, constructor } = splitTeamAndConstructor(teamAndConstructor);
     if (!constructor) continue;
 

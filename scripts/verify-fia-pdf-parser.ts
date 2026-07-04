@@ -62,6 +62,15 @@ async function main() {
   assert(!practiceWiki.includes('{{NoFlag}}'), 'Practice table should not contain NoFlag');
   assert(!practiceWiki.includes('Isack Hadjar') || practiceWiki.includes('! 6'), 'Main drivers should not be misclassified as test drivers');
 
+  const driversMissingCode = [
+    { driverId: 'norris', givenName: 'Lando', familyName: 'Norris', permanentNumber: '4', nationality: 'British', code: undefined },
+    { driverId: 'piastri', givenName: 'Oscar', familyName: 'Piastri', permanentNumber: '81', nationality: 'Australian', code: undefined },
+  ] as any[];
+  assert(
+    detectTestDriversFromPdf(pdfText, driversMissingCode).length === 6,
+    'PDF parsing should not throw when driver code is missing'
+  );
+
   console.log('PASS: Austrian GP FIA PDF parser verification');
 }
 
