@@ -36,10 +36,11 @@ const mainDrivers: Driver[] = [
 const mockPdfText = `
 FIA FORMULA ONE WORLD CHAMPIONSHIP
 2026 Spanish Grand Prix - Entry List
-No. Driver Team
-4 Lando Norris McLaren Mastercard F1 Team
-81 Oscar Piastri McLaren Mastercard F1 Team
-34 Felipe Drugovich Aston Martin Aramco F1 Team
+No. TLA Driver Nat Team Constructor
+4 NOR Lando Norris GBR McLaren Mastercard F1 Team McLaren Mercedes
+81 PIA Oscar Piastri AUS McLaren Mastercard F1 Team McLaren Mercedes
+In addition to the list of cars and drivers eligible to take part in the event the following drivers may also take part in FP1
+134 DRU Felipe Drugovich BRA Aston Martin Aramco F1 Team Aston Martin Aramco Honda
 `;
 
 const pdfTestDrivers = detectTestDriversFromPdf(mockPdfText, mainDrivers);
@@ -51,15 +52,15 @@ assert(pdfTestDrivers[0].flag === '{{BRA}}', `Expected flag {{BRA}}, got ${pdfTe
 
 // --- 2. Test PDF Detection rejects name-only mentions without entry row ---
 const mockPdfTextWithOnlyName = `
-Some random text containing Felipe Drugovich but no number or team.
+Some random text containing Felipe Drugovich but no TLA row.
 `;
 const pdfTestDriversFallback = detectTestDriversFromPdf(mockPdfTextWithOnlyName, mainDrivers);
 assert(pdfTestDriversFallback.length === 0, `Expected 0 test drivers without entry row, got ${pdfTestDriversFallback.length}`);
 
-// O'Ward mentioned in PDF notes but not as an entry row should not be detected
+// O'Ward mentioned in PDF notes but not as an FP1 entry row should not be detected
 const mockPdfTextOwardMentionOnly = `
-4 Lando Norris McLaren Mastercard F1 Team
-81 Oscar Piastri McLaren Mastercard F1 Team
+4 NOR Lando Norris GBR McLaren Mastercard F1 Team McLaren Mercedes
+81 PIA Oscar Piastri AUS McLaren Mastercard F1 Team McLaren Mercedes
 Reserve driver: Pato O'Ward (McLaren)
 `;
 const pdfTestDriversOward = detectTestDriversFromPdf(mockPdfTextOwardMentionOnly, mainDrivers);

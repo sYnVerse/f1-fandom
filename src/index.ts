@@ -21,7 +21,8 @@ import {
   PracticeSessionData,
   fetchFiaEntryListText,
 } from './f1-api';
-import { 
+import { isDriverListedInFiaPdf } from './fia-pdf-parser';
+import {
   generateGridWikitext, 
   generateQualifyingWikitext, 
   generateSprintQualifyingWikitext,
@@ -1104,37 +1105,14 @@ export default {
                   return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
                 };
 
-                const isDriverInEntryList = (driverName: string, textStr: string): boolean => {
-                  const normalizedPdf = textStr.toLowerCase();
-                  const cleanName = driverName.toLowerCase().replace(/[\s'-]/g, ' ').trim();
-                  
-                  if (normalizedPdf.includes(cleanName)) return true;
-                  
-                  const parts = cleanName.split(/\s+/);
-                  if (parts.length > 0) {
-                    const lastName = parts[parts.length - 1];
-                    if (lastName.length > 2 && normalizedPdf.includes(lastName)) {
-                      return true;
-                    }
-                  }
-                  
-                  if (parts.length > 2) {
-                    const firstName = parts[0];
-                    const lastName = parts[parts.length - 1];
-                    if (normalizedPdf.includes(firstName) && normalizedPdf.includes(lastName)) {
-                      return true;
-                    }
-                  }
-                  
-                  return false;
-                };
+                const isDriverInEntryList = (driverName: string): boolean =>
+                  isDriverListedInFiaPdf(driverName, pdfText!, drivers);
 
                 const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
                   if (!sessionData) return;
                   for (const driverName of Object.keys(sessionData)) {
                     if (!isMainDriver(driverName)) {
-                      // It's a detected test driver. Validate against FIA Entry List PDF.
-                      if (!isDriverInEntryList(driverName, pdfText!)) {
+                      if (!isDriverInEntryList(driverName)) {
                         console.log(`Filtering out test driver ${driverName} from practice results because they are not on the FIA Entry List.`);
                         delete sessionData[driverName];
                       }
@@ -1159,7 +1137,7 @@ export default {
                   fp1Results,
                   fp2Results,
                   fp3Results,
-                  { hasSprint: !!race.Sprint }
+                  { hasSprint: !!race.Sprint, pdfText }
                 );
 
                 const bestPracticeHeader = findBestHeader(
@@ -1190,7 +1168,7 @@ export default {
               }
 
               if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0) {
-                const testDrivers = detectTestDriversFromFp1(drivers, fp1Results);
+                const testDrivers = detectTestDriversFromFp1(drivers, fp1Results, pdfText);
                 if (testDrivers.length > 0) {
                   for (const td of testDrivers) {
                     if (!lookupTestDriverNationality(td.name)) {
