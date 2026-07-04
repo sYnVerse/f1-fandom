@@ -23,7 +23,8 @@ export type GpPageSection =
   | 'practice_results_fp3'
   | 'fp1_report'
   | 'fp2_report'
-  | 'fp3_report';
+  | 'fp3_report'
+  | 'entry_list';
 
 export type CareerStandingsPage = 'points' | 'position' | 'team_position';
 
@@ -92,6 +93,7 @@ export const GP_PAGE_SECTIONS: GpPageSection[] = [
   'fp1_report',
   'fp2_report',
   'fp3_report',
+  'entry_list',
 ];
 
 export async function isKvSynced(kv: any, key: string, legacyKeys: string[] = []): Promise<boolean> {
@@ -146,6 +148,8 @@ export function gpPageSectionRequired(
     isBackgroundTime = false,
   } = options;
   switch (section) {
+    case 'entry_list':
+      return isBackgroundTime;
     case 'qualifying':
     case 'grid':
     case 'q1_report':
