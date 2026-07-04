@@ -314,6 +314,157 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
   return output;
 }
 
+// Generate SPRINT QUALIFYING results wikitext
+export function generateSprintQualifyingWikitext(qualifyingResults: QualifyingResult[]): string {
+  if (qualifyingResults.length === 0) return 'No sprint qualifying data available.';
+
+  const totalDrivers = qualifyingResults.length;
+  const q3Count = Math.min(10, totalDrivers);
+  const q2ElimCount = Math.max(0, Math.floor((totalDrivers - q3Count) / 2));
+  const q1ElimCount = Math.max(0, totalDrivers - q3Count - q2ElimCount);
+
+  // Sort lists for position classification
+  const sortQ1 = [...qualifyingResults].sort((a, b) => timeToSeconds(a.Q1) - timeToSeconds(b.Q1));
+  const sortQ2 = [...qualifyingResults].sort((a, b) => timeToSeconds(a.Q2 || '') - timeToSeconds(b.Q2 || ''));
+
+  // Find driver number with fastest time in Q1 & Q2
+  let fastestQ1Number = '';
+  for (const q of sortQ1) {
+    if (q.Q1 && q.Q1 !== 'nan') {
+      fastestQ1Number = q.number;
+      break;
+    }
+  }
+
+  let fastestQ2Number = '';
+  for (const q of sortQ2) {
+    if (q.Q2 && q.Q2 !== 'nan') {
+      fastestQ2Number = q.number;
+      break;
+    }
+  }
+
+  let oneZeroSevenBase = '';
+  for (const q of qualifyingResults) {
+    if (q.number === fastestQ1Number) {
+      oneZeroSevenBase = q.Q1;
+      break;
+    }
+  }
+
+  let output = `====Sprint Qualifying Results====
+The full Sprint Qualifying results for the '''{{PAGENAME}}''' are outlined below:
+
+{|class="wikitable" width=100% style="font-size:77%"
+! rowspan=2 width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! rowspan=2 width=5% | <span style="cursor:help" title="Car Number">No.</span>
+! rowspan=2 width=23% | Driver
+! rowspan=2 width=23% | Team
+| rowspan=${totalDrivers + 6} width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Sprint Qualifying 1">SQ1</span>
+| rowspan=${totalDrivers + 6} width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Sprint Qualifying 2">SQ2</span>
+| rowspan=${totalDrivers + 6} width=1px |
+! colspan=2 width=13% | <span style="cursor:help" title="Sprint Qualifying 3">SQ3</span>
+! rowspan=2 width=5% | Grid
+|-
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time
+! width=4% | <span style="cursor:help" title="Position">Pos.</span>
+! width=9% | Time`;
+
+  for (let row = 0; row < totalDrivers; row++) {
+    const q = qualifyingResults[row];
+    const team = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
+    const driver = `${getFlag(q.driver.nationality)} [[${q.driver.givenName} ${q.driver.familyName}]]`;
+    const number = q.number;
+    const pos = q.position;
+
+    // Print drop indicators
+    if (row === q3Count || row === q3Count + q2ElimCount) {
+      output += '\n|-\n|colspan=14 style="border-bottom:hidden"|\n|-\n|colspan=14|\n|-';
+    } else {
+      output += '\n|-';
+    }
+
+    output += `\n! ${pos}`;
+    output += `\n| align=center | ${number}`;
+    output += `\n| ${driver}`;
+    output += `\n| ${team}`;
+
+    // SQ1
+    if (row >= q3Count + q2ElimCount) {
+      output += `\n! ${pos}`;
+    } else {
+      const q1Pos = sortQ1.findIndex(x => x.number === number) + 1;
+      output += `\n! ${q1Pos}`;
+    }
+
+    if (fastestQ1Number === number) {
+      output += `\n| '''${q.Q1}'''`;
+    } else {
+      output += `\n| ${q.Q1 || ''}`;
+    }
+
+    // SQ2
+    if (row < q3Count + q2ElimCount) {
+      if (row >= q3Count) {
+        output += `\n! ${pos}`;
+      } else {
+        const q2Pos = sortQ2.findIndex(x => x.number === number) + 1;
+        output += `\n! ${q2Pos}`;
+      }
+
+      if (q.Q2 && q.Q2 !== 'nan') {
+        if (fastestQ2Number === number) {
+          output += `\n| '''${q.Q2}'''`;
+        } else {
+          output += `\n| ${q.Q2}`;
+        }
+      } else {
+        output += `\n| `;
+      }
+    } else if (row === q3Count + q2ElimCount) {
+      output += `\n! rowspan="${q1ElimCount}" |`;
+      output += `\n| rowspan="${q1ElimCount}" |`;
+      output += `\n! rowspan="${q1ElimCount}" |`;
+      output += `\n| rowspan="${q1ElimCount}" |`;
+    }
+
+    // SQ3
+    if (row < q3Count) {
+      output += `\n! ${pos}`;
+      if (q.Q3 && q.Q3 !== 'nan') {
+        if (row === 0) {
+          output += `\n| '''${q.Q3}'''`;
+        } else {
+          output += `\n| ${q.Q3}`;
+        }
+      } else {
+        output += `\n| `;
+      }
+    } else if (row === q3Count) {
+      output += `\n! rowspan="${q2ElimCount}" |`;
+      output += `\n| rowspan="${q2ElimCount}" |`;
+    }
+
+    // Grid
+    output += `\n! ${pos}`;
+  }
+
+  const oneZeroSevenTime = calculate107Time(oneZeroSevenBase);
+  output += `\n|-
+! colspan=14 | [[107% Time]]: ${oneZeroSevenTime}
+|-
+! colspan=14 | Source:<ref name=SQR>[https://www.fia.com/system/files/decision-document/{{lc:{{PAGENAMEE}}}}_-_final_sprint_qualifying_classification.pdf {{PAGENAME}} - Final Sprint Qualifying Classification] (PDF). Fédération Internationale de l'Automobile.</ref>
+|}`;
+  output += "\n*'''Bold''' indicates the fastest driver's time in each session.";
+
+  return output;
+}
+
 // Generate RACE or SPRINT results wikitext
 export function generateRaceWikitext(results: RaceResult[], isSprint = false): string {
   if (results.length === 0) return `No ${isSprint ? 'sprint' : 'race'} data available.`;

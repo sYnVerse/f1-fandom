@@ -23,6 +23,7 @@ import {
 import { 
   generateGridWikitext, 
   generateQualifyingWikitext, 
+  generateSprintQualifyingWikitext,
   generateRaceWikitext, 
   generateStandingsWikitext,
   generatePracticeWikitext,
@@ -719,6 +720,17 @@ export default {
         }
         const isQualiConcluded = now >= qualiEndTime;
 
+        let sprintQualiEndTime: Date | null = null;
+        if (race.SprintQualifying) {
+          const sprintQualiStartTime = new Date(`${race.SprintQualifying.date}T${race.SprintQualifying.time || "00:00:00Z"}`);
+          sprintQualiEndTime = new Date(sprintQualiStartTime.getTime() + 60 * 60 * 1000);
+        } else if (race.Sprint) {
+          sprintQualiEndTime = new Date(`${race.date}T00:00:00Z`);
+          sprintQualiEndTime.setUTCDate(sprintQualiEndTime.getUTCDate() - 2);
+          sprintQualiEndTime = new Date(sprintQualiEndTime.getTime() + 18 * 60 * 60 * 1000);
+        }
+        const isSprintQualiConcluded = sprintQualiEndTime ? now >= sprintQualiEndTime : false;
+
         const fp1EndTime = getPracticeEndTime(race.FirstPractice);
         const fp2EndTime = getPracticeEndTime(race.SecondPractice);
         const fp3EndTime = getPracticeEndTime(race.ThirdPractice);
@@ -748,6 +760,7 @@ export default {
         const pageTiming = {
           hasSprint: !!race.Sprint,
           isQualiConcluded,
+          isSprintQualiConcluded,
           isSprintConcluded,
           isRaceConcluded,
           isFp1Concluded,
@@ -802,6 +815,7 @@ export default {
         const isGpPageSectionSynced = (section: GpPageSection): boolean =>
           gpPageSectionState[section] === true;
 
+        const needSprintQuali = needGpPage && !!race.Sprint && isSprintQualiConcluded;
         const needQuali = needGpPage && isQualiConcluded;
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
@@ -809,6 +823,7 @@ export default {
         const needDrivers = needGpPage && (
           isBackgroundTime ||
           isQualiConcluded ||
+          isSprintQualiConcluded ||
           isSprintConcluded ||
           isRaceConcluded ||
           isFp1Concluded ||
@@ -819,13 +834,14 @@ export default {
         let qualiResults: any[] = [];
         let gpResults: any[] = [];
         let sprintResults: any[] = [];
+        let sprintQualiResults: any[] = [];
         let drivers: any[] = [];
         let currentDrivers: any[] = [];
         let prevDrivers: any = null;
         let currentConstructors: any[] = [];
         let prevConstructors: any = null;
 
-        if (needQuali || needGpResults || needSprintResults || needStandings || needDrivers) {
+        if (needQuali || needGpResults || needSprintResults || needStandings || needDrivers || needSprintQuali) {
           const roundData = await fetchRoundJolpicaData(
             year,
             round,
@@ -836,12 +852,14 @@ export default {
               needStandings,
               needDrivers,
               hasSprint: !!race.Sprint,
+              needSprintQuali,
             },
             apiCtx
           );
           qualiResults = roundData.qualiResults;
           gpResults = roundData.gpResults;
           sprintResults = roundData.sprintResults;
+          sprintQualiResults = roundData.sprintQualiResults;
           drivers = roundData.drivers;
           currentDrivers = roundData.currentDrivers;
           prevDrivers = roundData.prevDrivers;
@@ -1244,7 +1262,18 @@ export default {
               }
             }
 
-            if (isQualiConcluded || isSprintConcluded || isRaceConcluded) {
+            if (isQualiConcluded || isSprintQualiConcluded || isSprintConcluded || isRaceConcluded) {
+              if (race.Sprint && isSprintQualiConcluded && sprintQualiResults && sprintQualiResults.length > 0 && !isGpPageSectionSynced('sprint_qualifying')) {
+                const sprintQualiWikitext = generateSprintQualifyingWikitext(sprintQualiResults);
+                const bestSprintQualiHeader = findBestHeader(updatedContent, ["==== Sprint Qualifying Results ====", "====Sprint Qualifying Results====", "=== Sprint Qualifying ===", "===Sprint Qualifying==="], "==== Sprint Qualifying Results ====");
+                const newContent = replaceSectionWikitext(updatedContent, bestSprintQualiHeader, sprintQualiWikitext);
+                if (newContent !== updatedContent) {
+                  updatedContent = newContent;
+                  changes.push("Sprint Qualifying Results");
+                }
+                await markGpPageSectionSynced('sprint_qualifying');
+              }
+
               if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
                 if (!isGpPageSectionSynced('qualifying')) {
                   const qualifyingWikitext = generateQualifyingWikitext(qualiResults);

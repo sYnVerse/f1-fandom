@@ -9,6 +9,7 @@ export type GpPageSection =
   | 'qualifying'
   | 'grid'
   | 'sprint_results'
+  | 'sprint_qualifying'
   | 'race_results'
   | 'standings'
   | 'infobox'
@@ -78,6 +79,7 @@ export const GP_PAGE_SECTIONS: GpPageSection[] = [
   'qualifying',
   'grid',
   'sprint_results',
+  'sprint_qualifying',
   'race_results',
   'standings',
   'infobox',
@@ -129,6 +131,7 @@ export function gpPageSectionRequired(
   options: {
     hasSprint: boolean;
     isQualiConcluded: boolean;
+    isSprintQualiConcluded?: boolean;
     isSprintConcluded: boolean;
     isRaceConcluded: boolean;
     isFp1Concluded: boolean;
@@ -140,6 +143,7 @@ export function gpPageSectionRequired(
   const {
     hasSprint,
     isQualiConcluded,
+    isSprintQualiConcluded = false,
     isSprintConcluded,
     isRaceConcluded,
     isFp1Concluded,
@@ -156,6 +160,8 @@ export function gpPageSectionRequired(
     case 'q2_report':
     case 'q3_report':
       return isQualiConcluded;
+    case 'sprint_qualifying':
+      return hasSprint && isSprintQualiConcluded;
     case 'sprint_results':
     case 'sprint_report':
       return hasSprint && isSprintConcluded;
@@ -185,6 +191,7 @@ export function allRequiredGpPageSectionsSynced(
   options: {
     hasSprint: boolean;
     isQualiConcluded: boolean;
+    isSprintQualiConcluded?: boolean;
     isSprintConcluded: boolean;
     isRaceConcluded: boolean;
     isFp1Concluded: boolean;
