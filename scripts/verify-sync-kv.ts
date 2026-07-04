@@ -80,7 +80,9 @@ const timing = {
 assert(gpPageSectionRequired('sprint_results', timing), 'Sprint results required on sprint weekend');
 assert(!gpPageSectionRequired('sprint_results', { ...timing, hasSprint: false }), 'No sprint results without sprint');
 assert(gpPageSectionRequired('sprint_qualifying', timing), 'Sprint qualifying results required on sprint weekend when concluded');
+assert(gpPageSectionRequired('sprint_qualifying_report', timing), 'Sprint qualifying report required on sprint weekend when concluded');
 assert(!gpPageSectionRequired('sprint_qualifying', { ...timing, isSprintQualiConcluded: false }), 'Sprint qualifying results not required before conclusion');
+assert(!gpPageSectionRequired('sprint_qualifying_report', { ...timing, isSprintQualiConcluded: false }), 'Sprint qualifying report not required before conclusion');
 
 const allSynced = allRequiredGpPageSectionsSynced(
   {
@@ -88,6 +90,7 @@ const allSynced = allRequiredGpPageSectionsSynced(
     grid: true,
     sprint_results: true,
     sprint_qualifying: true,
+    sprint_qualifying_report: true,
     race_results: true,
     standings: true,
     infobox: true,

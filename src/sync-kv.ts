@@ -17,6 +17,7 @@ export type GpPageSection =
   | 'q1_report'
   | 'q2_report'
   | 'q3_report'
+  | 'sprint_qualifying_report'
   | 'sprint_report'
   | 'race_report'
   | 'practice_results_fp1'
@@ -87,6 +88,7 @@ export const GP_PAGE_SECTIONS: GpPageSection[] = [
   'q1_report',
   'q2_report',
   'q3_report',
+  'sprint_qualifying_report',
   'sprint_report',
   'race_report',
   'practice_results_fp1',
@@ -161,6 +163,7 @@ export function gpPageSectionRequired(
     case 'q3_report':
       return isQualiConcluded;
     case 'sprint_qualifying':
+    case 'sprint_qualifying_report':
       return hasSprint && isSprintQualiConcluded;
     case 'sprint_results':
     case 'sprint_report':

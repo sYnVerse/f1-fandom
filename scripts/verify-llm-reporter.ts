@@ -55,4 +55,28 @@ assert(context.includes('### FP1 Results:'), 'Prompt context includes FP1 sectio
 assert(context.includes('Lando Norris'), 'Prompt context includes driver from practice results');
 assert(context.includes('Austrian Grand Prix'), 'Prompt context includes race name');
 
+const sprintQualiContext = generatePromptContext(
+  race,
+  [],
+  {},
+  [],
+  [],
+  [],
+  undefined,
+  [
+    {
+      number: '1',
+      driver: { givenName: 'Max', familyName: 'Verstappen' },
+      constructor: { name: 'Red Bull Racing' },
+      Q1: '1:24.123',
+      Q2: '1:23.456',
+      Q3: '1:22.789',
+    },
+  ]
+);
+
+assert(sprintQualiContext.includes('### Sprint Qualifying Results:'), 'Prompt context includes Sprint Qualifying section');
+assert(sprintQualiContext.includes('Max Verstappen'), 'Prompt context includes sprint quali pole sitter');
+assert(sprintQualiContext.includes('SQ3: 1:22.789'), 'Prompt context includes SQ3 segment time');
+
 console.log('verify-llm-reporter: all assertions passed');
