@@ -95,9 +95,9 @@ assert(findEntryListHeadingIndex(entryListPage) === 0, 'Should find ==Entry List
 assert(findEntryListHeadingIndex('== Entry List ==\ncontent') === 0, 'Should find spaced variant');
 
 const withTestDriverRows = addTestDriversToEntryList(entryListPage, testDrivers);
-assert(withTestDriverRows.includes('[[Test Driver]]s for [[#FP1|Practice 1]]'), 'Test driver header row');
+assert(withTestDriverRows.includes('!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]'), 'Test driver header row with ! prefix');
 assert(withTestDriverRows.includes('[[Patricio O Ward]]'), 'Test driver name in entry list');
-assert(withTestDriverRows.indexOf('[[Test Driver]]') < withTestDriverRows.indexOf("'''Source'''"), 'Inserted before source row');
+assert(withTestDriverRows.indexOf('!|colspan="8"') < withTestDriverRows.indexOf("'''Source'''"), 'Inserted before source row');
 
 const unchanged = addTestDriversToEntryList(withTestDriverRows, testDrivers);
 assert(unchanged === withTestDriverRows, 'Should not duplicate existing test drivers');
@@ -150,5 +150,27 @@ assert(
   'Practice wikitext without quali should use roster team mapping'
 );
 assert(practiceWithoutQuali.includes('McLaren'), 'Practice table should show McLaren for Norris');
+
+// Non-participating test drivers (no valid time/position) must not appear in practice table
+const fp1WithPhantomTestDriver = {
+  ...fp1WithTestDriver,
+  'Paul Aron': {
+    position: '',
+    number: '0',
+    driverName: 'Paul Aron',
+    teamName: '',
+    time: '',
+  },
+};
+const practiceNoPhantoms = generatePracticeWikitext(
+  mainDrivers as any,
+  null,
+  fp1WithPhantomTestDriver,
+  null,
+  null,
+  { hasSprint: true }
+);
+assert(!practiceNoPhantoms.includes('[[Paul Aron]]'), 'Should exclude test drivers without a classified session time');
+assert(practiceNoPhantoms.includes('[[Patricio O Ward]]'), 'Should still include participating test drivers');
 
 console.log('verify-practice-sessions: all assertions passed');

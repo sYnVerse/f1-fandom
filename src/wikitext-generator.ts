@@ -585,6 +585,9 @@ export function generatePracticeWikitext(
     const testDrivers: PracticeSessionData[] = [];
     for (const data of Object.values(sessionData)) {
       if (isMainDriver(data.driverName)) continue;
+      const pos = data.position?.trim() ?? '';
+      const time = data.time?.trim() ?? '';
+      if (!/^\d+$/.test(pos) || !time || time === 'No Time') continue;
       const key = data.driverName.toLowerCase().replace(/[\s'-]/g, '');
       if (seen.has(key)) continue;
       seen.add(key);
@@ -602,7 +605,9 @@ export function generatePracticeWikitext(
     return arr.findIndex(x => x.driverName.toLowerCase().replace(/[\s'-]/g, '') === key) === idx;
   });
 
-  const tableDrivers: Array<Driver | PracticeSessionData> = [...drivers];
+  const rosterDrivers = drivers.filter(d => DRIVER_TO_CONSTRUCTOR_2026[d.driverId]);
+
+  const tableDrivers: Array<Driver | PracticeSessionData> = [...rosterDrivers];
   for (const td of testDriverRows) {
     tableDrivers.push(td);
   }
@@ -1092,7 +1097,7 @@ export function addTestDriversToEntryList(wikitext: string, testDrivers: TestDri
     insertIndex = headingIndex + closeIdx;
   }
 
-  let rows = '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+  let rows = '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
   for (const td of newDrivers) {
     const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
     const entrant = team ? team.entrant : '';
@@ -1170,14 +1175,23 @@ export function detectTestDriversFromPdf(
     });
     if (isMain) continue;
 
-    let namePresent = false;
-    if (normalizedPdf.includes(cleanName)) {
-      namePresent = true;
-    } else if (lastName.length > 2 && normalizedPdf.includes(lastName)) {
-      namePresent = true;
-    }
+    if (!normalizedPdf.includes(cleanName)) continue;
 
-    if (!namePresent) continue;
+    // Require the driver to appear on an entry-list row (name + car number on same/adjacent line)
+    let hasEntryRow = false;
+    for (let i = 0; i < lines.length; i++) {
+      const lineLower = lines[i].toLowerCase();
+      if (!lineLower.includes(cleanName)) continue;
+      const searchIndices = [i, i - 1, i + 1].filter(idx => idx >= 0 && idx < lines.length);
+      for (const idx of searchIndices) {
+        if (/\b\d{1,2}\b/.test(lines[idx])) {
+          hasEntryRow = true;
+          break;
+        }
+      }
+      if (hasEntryRow) break;
+    }
+    if (!hasEntryRow) continue;
 
     let detectedNumber = fallback.number;
     let detectedConstructorId = fallback.constructorId;
@@ -1336,7 +1350,7 @@ export function updateEntryListTableIfNeeded(
   }
 
   if (combinedTestDrivers.length > 0) {
-    entryListRows += '\n|-\n|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
+    entryListRows += '\n|-\n!|colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]';
     for (const td of combinedTestDrivers) {
       const team = td.constructorId ? getTeamEntryDetails(td.constructorId) : null;
       const entrant = team ? team.entrant : '';
