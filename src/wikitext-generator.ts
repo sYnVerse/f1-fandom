@@ -654,7 +654,7 @@ export function generatePracticeWikitext(
   let output = `===Practice Results===
 The full practice results for the '''{{PAGENAME}}''' are outlined below:
 
-{| class="hidden wikitable sortable" style="width:100%"
+{| class="wikitable sortable" style="width:100%"
 ! rowspan="2" |<span style="cursor:help;" title="Car number">No.</span>!! rowspan="2" class="unsortable" |Driver!! rowspan="2" class="unsortable" |Team!! colspan="2" class="unsortable" |FP1`;
 
   if (!hasSprint) {
