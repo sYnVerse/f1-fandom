@@ -125,7 +125,7 @@ Summary of improvements since the last README update (June 7, 2026):
 - **Automated Practice Scraping**: Cron worker scrapes F1.com FP1/FP2/FP3 results during active race weekends and updates the GP page practice results table incrementally.
 - **LLM Practice Reports**: Generates FP1, FP2, and FP3 section reports using crawled official F1.com session articles, with prompts highlighting incidents, spins, mechanical issues, and driver feedback.
 - **Test Driver Entry List**: Detects test drivers in FP1 results and appends them to the wiki Entry List with team details; unknown nationalities default to `{{FIA}}` and trigger a daily email warning.
-- **Empty Results Retry**: Skips KV sync when F1.com has not yet published results, allowing automatic retry on the next 10-minute cron execution.
+- **Empty Results Retry**: Skips KV sync when F1.com has not yet published results, allowing automatic retry on the next 21-minute cron execution.
 - **2026 Race ID Formula**: Dynamic F1.com race ID resolution (`1278 + round` for Rounds 1–3, `1280 + round` for Rounds 4–22) in both TypeScript worker and Python CLI.
 - **Sprint Weekend Support**: Practice results table shows FP1 only on sprint weekends.
 
