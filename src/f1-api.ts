@@ -658,7 +658,8 @@ export async function fetchRoundJolpicaData(
         race,
         ctx,
         currentDrivers,
-        prevDrivers
+        prevDrivers,
+        drivers
       ).catch(e => {
         console.error("Failed to fetch OpenF1 Sprint Qualifying results:", e);
         return [];
@@ -1020,6 +1021,9 @@ export interface OpenF1Session {
   session_key: number;
   session_name: string;
   date_start: string;
+  circuit_short_name?: string;
+  circuit_key?: number;
+  meeting_key?: number;
 }
 
 export interface OpenF1SessionResult {
@@ -1032,15 +1036,87 @@ export interface OpenF1SessionResult {
   dsq: boolean;
 }
 
+const OPENF1_SESSION_MATCH_WINDOW_DAYS = 4;
+
+function normalizeCircuitToken(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function circuitsMatch(scheduleCircuitId: string, openF1ShortName: string): boolean {
+  const scheduleToken = normalizeCircuitToken(scheduleCircuitId);
+  const openF1Token = normalizeCircuitToken(openF1ShortName);
+  if (!scheduleToken || !openF1Token) return false;
+  if (scheduleToken === openF1Token || scheduleToken.includes(openF1Token) || openF1Token.includes(scheduleToken)) {
+    return true;
+  }
+
+  const aliasGroups = [
+    ['americas', 'austin'],
+    ['spa', 'spafrancorchamps'],
+    ['ricard', 'lecastellet'],
+    ['redbullring', 'spielberg'],
+    ['hungaroring', 'hungaroring'],
+    ['marinabay', 'marinabay', 'singapore'],
+  ];
+  return aliasGroups.some(group =>
+    group.some(token => scheduleToken.includes(token) || token.includes(scheduleToken)) &&
+    group.some(token => openF1Token.includes(token) || token.includes(openF1Token))
+  );
+}
+
+/** Pick the closest Sprint Qualifying session for a race weekend (exported for tests). */
+export function matchOpenF1SprintQualifyingSession(
+  sessions: OpenF1Session[],
+  race: CachedScheduleRace,
+  round: number
+): OpenF1Session | undefined {
+  const targetDateStr = race.SprintQualifying?.date ?? race.date;
+  const targetDate = new Date(`${targetDateStr}T12:00:00Z`);
+  const circuitId = race.Circuit?.circuitId;
+
+  let candidates = sessions;
+  if (circuitId) {
+    const byCircuit = sessions.filter(session =>
+      session.circuit_short_name && circuitsMatch(circuitId, session.circuit_short_name)
+    );
+    if (byCircuit.length > 0) {
+      candidates = byCircuit;
+    }
+  }
+
+  let best: OpenF1Session | undefined;
+  let bestDiffMs = Infinity;
+  for (const session of candidates) {
+    const sessionDate = new Date(session.date_start);
+    const diffMs = Math.abs(sessionDate.getTime() - targetDate.getTime());
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays <= OPENF1_SESSION_MATCH_WINDOW_DAYS && diffMs < bestDiffMs) {
+      best = session;
+      bestDiffMs = diffMs;
+    }
+  }
+
+  if (!best) {
+    const raceName = race.raceName || 'Unknown';
+    console.warn(`No matching OpenF1 Sprint Qualifying session found for round ${round} (${raceName})`);
+  }
+  return best;
+}
+
 export async function fetchOpenF1Json<T>(
   url: string,
   ctx?: F1ApiContext,
   expirationTtl?: number
 ): Promise<T> {
   const cacheKey = `openf1:${url}`;
+  if (ctx?.cache.has(cacheKey)) {
+    return ctx.cache.get(cacheKey) as T;
+  }
+
   if (ctx) {
-    if (ctx.cache.has(cacheKey)) {
-      return ctx.cache.get(cacheKey) as T;
+    const existing = ctx.inFlight.get(cacheKey);
+    if (existing) {
+      return existing as Promise<T>;
     }
   }
 
@@ -1048,32 +1124,46 @@ export async function fetchOpenF1Json<T>(
     const raw = await ctx.kv.get(`f1_api_cache:${cacheKey}`);
     if (raw) {
       const data = JSON.parse(raw);
-      if (ctx) ctx.cache.set(cacheKey, data);
+      ctx.cache.set(cacheKey, data);
       return data;
     }
   }
 
-  console.log(`Fetching from OpenF1: ${url}`);
-  if (ctx) ctx.apiCallCount++;
+  const promise = (async (): Promise<T> => {
+    console.log(`Fetching from OpenF1: ${url}`);
+    if (ctx) ctx.apiCallCount++;
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`OpenF1 API error: ${res.statusText}`);
-  }
-  const rawText = await res.text();
-  const data = JSON.parse(rawText);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`OpenF1 API error: ${res.statusText}`);
+    }
+    const rawText = await res.text();
+    const data = JSON.parse(rawText);
 
-  if (ctx) {
-    ctx.cache.set(cacheKey, data);
-    if (ctx.kv) {
-      if (expirationTtl !== undefined) {
-        await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText, { expirationTtl });
-      } else {
-        await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText);
+    if (ctx) {
+      ctx.cache.set(cacheKey, data);
+      if (ctx.kv) {
+        if (expirationTtl !== undefined) {
+          await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText, { expirationTtl });
+        } else {
+          await trackedKvPut(ctx.kv, `f1_api_cache:${cacheKey}`, rawText);
+        }
       }
     }
+    return data;
+  })();
+
+  if (ctx) {
+    ctx.inFlight.set(cacheKey, promise);
   }
-  return data;
+
+  try {
+    return await promise;
+  } finally {
+    if (ctx) {
+      ctx.inFlight.delete(cacheKey);
+    }
+  }
 }
 
 export function formatOpenF1Time(seconds: number | null | undefined): string {
@@ -1088,6 +1178,56 @@ export function formatOpenF1Time(seconds: number | null | undefined): string {
     return `${minutes}:${secInt}.${secDec}`;
   }
   return `${secInt}.${secDec}`;
+}
+
+/** Format a single SQ segment, handling DNS/DSQ and missing times (exported for tests). */
+export function formatOpenF1SessionSegmentTime(
+  seconds: number | null | undefined,
+  result: Pick<OpenF1SessionResult, 'dns' | 'dsq' | 'dnf'>,
+  segmentIndex: number
+): string {
+  if (result.dns) return segmentIndex === 0 ? 'DNS' : '';
+  if (result.dsq) return segmentIndex === 0 ? 'DSQ' : '';
+  if (seconds === null || seconds === undefined) return '';
+  return formatOpenF1Time(seconds);
+}
+
+function buildConstructorLookup(
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null
+): Map<string, Constructor> {
+  const lookup = new Map<string, Constructor>();
+  for (const standing of currentDrivers ?? []) {
+    if (standing.Constructors?.[0]) {
+      lookup.set(standing.Driver.driverId, standing.Constructors[0]);
+    }
+  }
+  for (const standing of prevDrivers ?? []) {
+    if (!lookup.has(standing.Driver.driverId) && standing.Constructors?.[0]) {
+      lookup.set(standing.Driver.driverId, standing.Constructors[0]);
+    }
+  }
+  return lookup;
+}
+
+async function resolveConstructorsForDrivers(
+  year: number,
+  driverIds: string[],
+  ctx: F1ApiContext | undefined,
+  currentDrivers: DriverStanding[] | undefined,
+  prevDrivers: DriverStanding[] | null | undefined
+): Promise<Map<string, Constructor>> {
+  const lookup = buildConstructorLookup(currentDrivers, prevDrivers);
+  const missingIds = [...new Set(driverIds)].filter(id => !lookup.has(id));
+  if (missingIds.length === 0) return lookup;
+
+  await Promise.all(
+    missingIds.map(async driverId => {
+      const constructor = await getDriverConstructorForSeason(year, driverId, ctx);
+      if (constructor) lookup.set(driverId, constructor);
+    })
+  );
+  return lookup;
 }
 
 export async function getDriverConstructorForSeason(
@@ -1131,7 +1271,8 @@ export async function getOpenF1SprintQualifyingResult(
   race: CachedScheduleRace,
   ctx?: F1ApiContext,
   currentDrivers?: DriverStanding[],
-  prevDrivers?: DriverStanding[] | null
+  prevDrivers?: DriverStanding[] | null,
+  driversForRound?: Driver[]
 ): Promise<QualifyingResult[]> {
   const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=Sprint%20Qualifying&year=${year}`;
   let sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
@@ -1146,18 +1287,10 @@ export async function getOpenF1SprintQualifyingResult(
     return [];
   }
 
-  const raceDate = new Date(`${race.date}T12:00:00Z`);
-  const matchedSession = sessions.find(session => {
-    const sessionDate = new Date(session.date_start);
-    const diffMs = Math.abs(sessionDate.getTime() - raceDate.getTime());
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
-    return diffDays <= 4;
-  });
-
-  const raceName = (race as any).raceName || 'Unknown';
+  const matchedSession = matchOpenF1SprintQualifyingSession(sessions, race, round);
+  const raceName = race.raceName || 'Unknown';
 
   if (!matchedSession) {
-    console.warn(`No matching OpenF1 Sprint Qualifying session found for round ${round} (${raceName})`);
     return [];
   }
 
@@ -1172,12 +1305,11 @@ export async function getOpenF1SprintQualifyingResult(
   }
 
   results.sort((a, b) => a.position - b.position);
-  const drivers = await getDriversForRaceWithFallback(year, round, ctx).catch(() => []);
+  const drivers = driversForRound ?? await getDriversForRaceWithFallback(year, round, ctx).catch(() => []);
 
-  const mappedResults: QualifyingResult[] = [];
+  const resolvedDrivers: Driver[] = [];
   for (const r of results) {
     const driverNumStr = r.driver_number.toString();
-    
     let driver = drivers.find(d => d.permanentNumber === driverNumStr);
     if (!driver && currentDrivers) {
       const standing = currentDrivers.find(s => s.Driver.permanentNumber === driverNumStr);
@@ -1199,30 +1331,38 @@ export async function getOpenF1SprintQualifyingResult(
         nationality: ``,
       };
     }
+    resolvedDrivers.push(driver);
+  }
 
-    const constructor = await getDriverConstructor(year, driver.driverId, ctx, currentDrivers, prevDrivers) || {
-      constructorId: 'unknown',
-      url: '',
-      name: 'Unknown',
-      nationality: ''
-    };
+  const constructorLookup = await resolveConstructorsForDrivers(
+    year,
+    resolvedDrivers.map(driver => driver.driverId),
+    ctx,
+    currentDrivers,
+    prevDrivers
+  );
 
-    const formatSQTime = (sec: number | null | undefined): string => {
-      if (sec === null || sec === undefined) return '';
-      return formatOpenF1Time(sec);
-    };
+  const unknownConstructor: Constructor = {
+    constructorId: 'unknown',
+    url: '',
+    name: 'Unknown',
+    nationality: '',
+  };
 
-    mappedResults.push({
+  return results.map((r, index) => {
+    const driverNumStr = r.driver_number.toString();
+    const driver = resolvedDrivers[index];
+    const constructor = constructorLookup.get(driver.driverId) ?? unknownConstructor;
+
+    return {
       number: driverNumStr,
       position: r.position.toString(),
       driver,
       constructor,
-      Q1: formatSQTime(r.duration?.[0]),
-      Q2: formatSQTime(r.duration?.[1]),
-      Q3: formatSQTime(r.duration?.[2]),
-    });
-  }
-
-  return mappedResults;
+      Q1: formatOpenF1SessionSegmentTime(r.duration?.[0], r, 0),
+      Q2: formatOpenF1SessionSegmentTime(r.duration?.[1], r, 1),
+      Q3: formatOpenF1SessionSegmentTime(r.duration?.[2], r, 2),
+    };
+  });
 }
 

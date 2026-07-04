@@ -819,7 +819,7 @@ export default {
         const needQuali = needGpPage && isQualiConcluded;
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
-        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime);
+        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime || needSprintQuali);
         const needDrivers = needGpPage && (
           isBackgroundTime ||
           isQualiConcluded ||
@@ -1003,6 +1003,7 @@ export default {
 
             let updatedContent = currentContent;
             let changes: string[] = [];
+            const pendingGpPageSections: GpPageSection[] = [];
             const raceResults = gpResults;
             const racingKey = getF1RacingKey(race.raceName);
 
@@ -1265,13 +1266,13 @@ export default {
             if (isQualiConcluded || isSprintQualiConcluded || isSprintConcluded || isRaceConcluded) {
               if (race.Sprint && isSprintQualiConcluded && sprintQualiResults && sprintQualiResults.length > 0 && !isGpPageSectionSynced('sprint_qualifying')) {
                 const sprintQualiWikitext = generateSprintQualifyingWikitext(sprintQualiResults);
-                const bestSprintQualiHeader = findBestHeader(updatedContent, ["==== Sprint Qualifying Results ====", "====Sprint Qualifying Results====", "=== Sprint Qualifying ===", "===Sprint Qualifying==="], "==== Sprint Qualifying Results ====");
+                const bestSprintQualiHeader = findBestHeader(updatedContent, ["====Sprint Qualifying Results====", "==== Sprint Qualifying Results ====", "=== Sprint Qualifying ===", "===Sprint Qualifying==="], "====Sprint Qualifying Results====");
                 const newContent = replaceSectionWikitext(updatedContent, bestSprintQualiHeader, sprintQualiWikitext);
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
                   changes.push("Sprint Qualifying Results");
                 }
-                await markGpPageSectionSynced('sprint_qualifying');
+                pendingGpPageSections.push('sprint_qualifying');
               }
 
               if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
@@ -1539,8 +1540,14 @@ export default {
                 apiEndpoint
               );
               console.log(`  Successfully published ${gpPageTitle}!`);
+              for (const section of pendingGpPageSections) {
+                await markGpPageSectionSynced(section);
+              }
             } else {
               console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
+              for (const section of pendingGpPageSections) {
+                await markGpPageSectionSynced(section);
+              }
             }
           } catch (e: any) {
             console.error(`Error updating GP page sections for round ${round}:`, e.message);
