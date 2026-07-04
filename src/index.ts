@@ -604,7 +604,6 @@ export default {
       }
 
       const apiCtx = createF1ApiContextFromEnv(env);
-      console.log("Fetching 2026 schedule from Jolpi...");
       const year = 2026;
       const schedule = await getSchedule(year, apiCtx);
       console.log(`Loaded schedule with ${schedule.length} rounds.`);
@@ -621,7 +620,7 @@ export default {
         }
       }
 
-      const isHighFrequency = cronTrigger === "*/10 * * * *";
+      const isHighFrequency = cronTrigger === "*/21 * * * *";
       const statsSyncEnabled = isStatsSyncEnabled(env);
       if (!statsSyncEnabled) {
         console.log("STATS_SYNC is not set to TRUE — skipping all Stats template cron tasks.");

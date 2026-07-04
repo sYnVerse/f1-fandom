@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1783143032.7408347,
-    "ast_hash": "0f846dd4fa0a6d84aada2662caab91b6",
+    "mtime": 1783143044.0139613,
+    "ast_hash": "c355ffffe8228ec687f77734633e95d8",
     "semantic_hash": ""
   },
   "pyergast.py": {
@@ -15,8 +15,8 @@
     "semantic_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9"
   },
   "src/f1-api.ts": {
-    "mtime": 1783141135.178831,
-    "ast_hash": "aaec1ffaf8552d81bf79d003e96bcf97",
+    "mtime": 1783147257.9136994,
+    "ast_hash": "8c79bb8cbf39d19cac127ed651fdef90",
     "semantic_hash": ""
   },
   "src/frontend-html.ts": {
@@ -25,8 +25,8 @@
     "semantic_hash": ""
   },
   "src/index.ts": {
-    "mtime": 1783143032.7428274,
-    "ast_hash": "c73b221756f88a242da681dc6a0d49b0",
+    "mtime": 1783147257.9237,
+    "ast_hash": "67444423d10a918a6972c74778670756",
     "semantic_hash": ""
   },
   "src/llm-reporter.ts": {
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "src/wikitext-generator.ts": {
-    "mtime": 1783143032.7458892,
-    "ast_hash": "73446fc85730b76601bfa66f4b57b9a5",
+    "mtime": 1783143044.0189695,
+    "ast_hash": "dbfd31a2f26985b79709152d9b326b80",
     "semantic_hash": ""
   },
   "tsconfig.json": {
@@ -65,8 +65,8 @@
     "semantic_hash": "350e7dc36d57a75a9a2db3a7cd71f78a"
   },
   "README.md": {
-    "mtime": 1782593187.7856348,
-    "ast_hash": "f187c868e86d2e2b766ad929e8c54c60",
+    "mtime": 1783147756.1186383,
+    "ast_hash": "aa486aefe536e3039811732ede5b68e0",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "src/f1-api-cache.ts": {
-    "mtime": 1782706179.4986322,
-    "ast_hash": "e618870deebd23a4efa1c811bd2cc548",
+    "mtime": 1783147257.9031725,
+    "ast_hash": "1b5521034ecc8ccb9c60122e4e5070b2",
     "semantic_hash": ""
   },
   "scripts/verify-sync-kv.ts": {
@@ -105,8 +105,8 @@
     "semantic_hash": ""
   },
   "src/sync-kv.ts": {
-    "mtime": 1783143032.7438307,
-    "ast_hash": "e3c22b086c353c81c5b885a23bddb2c8",
+    "mtime": 1783147252.403635,
+    "ast_hash": "7efd72061da14d449faca5b96bc2e242",
     "semantic_hash": ""
   },
   "src/wikitext-parse.ts": {

@@ -7,11 +7,13 @@ import {
   createF1ApiContext,
   getCacheTtl,
   isResponseEmpty,
+  isRoundDataSessionComplete,
 } from '../src/f1-api-cache';
 import { getSchedule, getRaceResult } from '../src/f1-api';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 const SCHEDULE_URL = `${BASE}/2026.json?limit=1000`;
+const PAST_SCHEDULE_URL = `${BASE}/2025.json?limit=1000`;
 const STANDINGS_URL = `${BASE}/2026/driverStandings.json?limit=1000`;
 
 let fetchCount = 0;
@@ -62,7 +64,7 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     return new Response('throttled', { status: 429, headers: { 'Retry-After': '1' } });
   }
 
-  if (url.includes('/2026.json')) {
+  if (url.includes('/2026.json') || url.includes('/2025.json')) {
     return scheduleResponse();
   }
 
@@ -89,6 +91,10 @@ function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
 }
 
+function assertPermanent(ttl: number | undefined, label: string): void {
+  assert(ttl === undefined, `${label} should be permanent (no TTL)`);
+}
+
 async function testScheduleDedup() {
   fetchCount = 0;
   const ctx = createF1ApiContext();
@@ -112,13 +118,13 @@ async function testRaceResultDedup() {
 
 async function test429Backoff() {
   fetchCount = 0;
-  const ctx = createF1ApiContext();
-  const start = Date.now();
+  const ctx = createF1ApiContext(undefined, undefined);
+  ctx.testBackoffMs = 10;
   const prev = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
     calls++;
-    if (calls <= 2) {
+    if (calls === 1) {
       return new Response('throttled', { status: 429, headers: { 'Retry-After': '1' } });
     }
     return scheduleResponse();
@@ -126,10 +132,8 @@ async function test429Backoff() {
 
   try {
     await getSchedule(2026, ctx);
-    const elapsed = Date.now() - start;
-    assert(calls >= 3, `Expected at least 3 attempts on 429, got ${calls}`);
-    assert(elapsed >= 1000, `Expected backoff delay >= 1s, got ${elapsed}ms`);
-    console.log(`PASS: 429 backoff (${calls} attempts, ${elapsed}ms elapsed)`);
+    assert(calls === 2, `Expected 2 attempts on 429 (1 retry), got ${calls}`);
+    console.log(`PASS: 429 backoff (${calls} attempts with single retry)`);
   } finally {
     globalThis.fetch = prev;
   }
@@ -155,7 +159,11 @@ function testIsResponseEmpty() {
 
 function testGetCacheTtl() {
   const scheduleData = { MRData: { RaceTable: { Races: [{ season: '2026' }] } } };
-  assert(getCacheTtl(SCHEDULE_URL, scheduleData) === 604_800, 'schedule TTL 7 days');
+  assert(getCacheTtl(SCHEDULE_URL, scheduleData) === 604_800, 'current-season schedule TTL 7 days');
+  assertPermanent(
+    getCacheTtl(PAST_SCHEDULE_URL, scheduleData, undefined, new Date('2026-06-01T00:00:00Z')),
+    'past-season schedule'
+  );
 
   const staleStandings = {
     MRData: { StandingsTable: { StandingsLists: [{ round: '3', DriverStandings: [{}] }] } },
@@ -166,13 +174,44 @@ function testGetCacheTtl() {
   const ctx = createF1ApiContext();
   ctx.latestConcludedRound = 5;
 
-  assert(getCacheTtl(STANDINGS_URL, staleStandings, ctx) === 1_200, 'stale standings TTL 20m');
+  assertPermanent(getCacheTtl(STANDINGS_URL, staleStandings, ctx), 'stale season standings');
   assert(getCacheTtl(STANDINGS_URL, freshStandings, ctx) === 86_400, 'fresh standings TTL 24h');
 
   const constructorUrl = `${BASE}/2026/constructorStandings.json?limit=1000`;
-  assert(getCacheTtl(constructorUrl, freshStandings, ctx) === 86_400, 'constructor standings TTL');
+  assert(getCacheTtl(constructorUrl, freshStandings, ctx) === 86_400, 'fresh constructor standings TTL');
 
-  console.log('PASS: getCacheTtl (schedule, stale/fresh standings)');
+  const pastRoundUrl = `${BASE}/2026/3/results.json?limit=1000`;
+  const roundResults = {
+    MRData: { RaceTable: { Races: [{ Results: [{ position: '1' }] }] } },
+  };
+  ctx.schedule = [{ round: '3', date: '2026-06-01', time: '12:00:00Z' }];
+  assertPermanent(getCacheTtl(pastRoundUrl, roundResults, ctx), 'past concluded round data');
+
+  const qualiUrl = `${BASE}/2026/5/qualifying.json?limit=1000`;
+  const qualiData = {
+    MRData: { RaceTable: { Races: [{ QualifyingResults: [{ position: '1' }] }] } },
+  };
+  ctx.schedule = [{
+    round: '5',
+    date: '2026-07-10',
+    time: '12:00:00Z',
+    Qualifying: { date: '2026-07-09', time: '14:00:00Z' },
+  }];
+  assert(
+    isRoundDataSessionComplete(
+      qualiUrl,
+      5,
+      ctx.schedule,
+      new Date('2026-07-09T16:00:00Z')
+    ),
+    'qualifying session should be complete after quali end'
+  );
+  assertPermanent(
+    getCacheTtl(qualiUrl, qualiData, ctx, new Date('2026-07-09T16:00:00Z')),
+    'session-complete qualifying'
+  );
+
+  console.log('PASS: getCacheTtl (schedule, standings, session-complete, past round)');
 }
 
 function createMockKv(store = new Map<string, string>()) {
@@ -224,8 +263,22 @@ async function testKvMissWrite() {
 
   const cacheKey = `f1_api_cache:${SCHEDULE_URL}`;
   assert(kv.store.has(cacheKey), 'Should write schedule to KV on miss');
-  assert(kv.putOptions.get(cacheKey)?.expirationTtl === 604_800, 'Schedule KV TTL should be 7 days');
+  assert(kv.putOptions.get(cacheKey)?.expirationTtl === 604_800, 'Current-season schedule KV TTL should be 7 days');
   console.log('PASS: KV cache miss write with TTL');
+}
+
+async function testPastSeasonSchedulePermanent() {
+  fetchCount = 0;
+  const kv = createMockKv();
+  const ctx = createF1ApiContext(kv);
+  const { cachedJolpicaJson } = await import('../src/f1-api-cache');
+  const url = PAST_SCHEDULE_URL;
+  await cachedJolpicaJson(url, ctx, (data: any) => data);
+
+  const cacheKey = `f1_api_cache:${url}`;
+  assert(kv.store.has(cacheKey), 'Should write past-season schedule to KV');
+  assert(kv.putOptions.get(cacheKey) === undefined, 'Past-season schedule should be permanent KV');
+  console.log('PASS: past-season schedule permanent KV');
 }
 
 async function testRateLimitSpacing() {
@@ -277,14 +330,14 @@ async function testStandingsTtlOnFetch() {
   await cachedJolpicaJson(freshUrl, ctx, (data: any) => data);
 
   assert(
-    kv.putOptions.get(`f1_api_cache:${staleUrl}`)?.expirationTtl === 1_200,
-    'Stale standings should get 20m KV TTL'
+    kv.putOptions.get(`f1_api_cache:${staleUrl}`) === undefined,
+    'Stale standings should be permanent KV'
   );
   assert(
     kv.putOptions.get(`f1_api_cache:${freshUrl}`)?.expirationTtl === 86_400,
     'Fresh standings should get 24h KV TTL'
   );
-  console.log('PASS: standings TTL on KV write (stale 20m, fresh 24h)');
+  console.log('PASS: standings TTL on KV write (stale permanent, fresh 24h)');
 }
 
 async function main() {
@@ -296,6 +349,7 @@ async function main() {
   await test429Backoff();
   await testKvHit();
   await testKvMissWrite();
+  await testPastSeasonSchedulePermanent();
   await testRateLimitSpacing();
   await testApiKeyHeader();
   await testStandingsTtlOnFetch();

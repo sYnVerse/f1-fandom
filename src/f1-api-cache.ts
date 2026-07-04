@@ -5,16 +5,27 @@
 
 import { trackedKvPut } from './kv-ops';
 
-const MAX_RETRIES = 4;
-const BASE_BACKOFF_MS = 2000;
+const MAX_ATTEMPTS = 2;
+const RATE_LIMIT_BACKOFF_MS = 15_000;
 const MIN_FETCH_INTERVAL_MS = 300;
 const KV_CACHE_PREFIX = 'f1_api_cache:';
 
-const TTL_SCHEDULE = 604_800;
+const TTL_SCHEDULE_CURRENT = 604_800;
 const TTL_STANDINGS_FRESH = 86_400;
-const TTL_STANDINGS_STALE = 1_200;
 const TTL_ROUND_DATA = 86_400;
 const TTL_DEFAULT = 1_200;
+
+/** `undefined` means no expiration (permanent KV entry). */
+export type CacheTtl = number | undefined;
+
+export interface CachedScheduleRace {
+  round: string;
+  date: string;
+  time?: string;
+  Qualifying?: { date: string; time?: string };
+  Sprint?: { date: string; time?: string };
+  FirstPractice?: { date: string; time?: string };
+}
 
 export interface F1ApiContext {
   readonly cache: Map<string, unknown>;
@@ -24,8 +35,12 @@ export interface F1ApiContext {
   /** Optional secret: wrangler secret put JOLPICA_API_KEY */
   apiKey?: string;
   latestConcludedRound?: number;
+  /** Populated by getSchedule(); used for session/settled TTL decisions. */
+  schedule?: CachedScheduleRace[];
   lastFetchTime?: number;
   fetchQueuePromise?: Promise<void>;
+  /** Test override for 429 backoff delay (ms). */
+  testBackoffMs?: number;
 }
 
 export function createF1ApiContext(kv?: any, apiKey?: string): F1ApiContext {
@@ -78,6 +93,8 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
     if ((race.Laps as unknown[] | undefined)?.length) return false;
     const drivers = (mr.DriverTable as { Drivers?: unknown[] } | undefined)?.Drivers;
     if (drivers?.length) return false;
+    const lists = (mr.StandingsTable as { StandingsLists?: unknown[] } | undefined)?.StandingsLists;
+    if (lists?.length) return false;
     return true;
   }
 
@@ -87,24 +104,164 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
   return false;
 }
 
-export function getCacheTtl(url: string, data: unknown, ctx?: F1ApiContext): number {
+export function parseYearFromJolpicaUrl(url: string): number | null {
+  const match = new URL(url).pathname.match(/\/(\d{4})(?:\/|\.json)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+export function parseRoundFromJolpicaUrl(url: string): number | null {
+  const match = new URL(url).pathname.match(/\/(\d{4})\/(\d+)\//);
+  return match ? parseInt(match[2], 10) : null;
+}
+
+type RoundEndpoint =
+  | 'results'
+  | 'sprint'
+  | 'qualifying'
+  | 'laps'
+  | 'drivers'
+  | 'driverStandings'
+  | 'constructorStandings'
+  | 'other';
+
+function parseRoundEndpoint(url: string): RoundEndpoint {
+  const match = new URL(url).pathname.match(/\/\d{4}\/\d+\/([^/.]+)\.json/);
+  if (!match) return 'other';
+  const endpoint = match[1];
+  if (
+    endpoint === 'results' ||
+    endpoint === 'sprint' ||
+    endpoint === 'qualifying' ||
+    endpoint === 'laps' ||
+    endpoint === 'drivers' ||
+    endpoint === 'driverStandings' ||
+    endpoint === 'constructorStandings'
+  ) {
+    return endpoint;
+  }
+  return 'other';
+}
+
+function getRaceStartDate(race: CachedScheduleRace): string {
+  if (race.FirstPractice?.date) {
+    return race.FirstPractice.date;
+  }
+  const raceDate = new Date(race.date);
+  raceDate.setUTCDate(raceDate.getUTCDate() - 2);
+  const y = raceDate.getUTCFullYear();
+  const m = String(raceDate.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(raceDate.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getQualifyingEndTime(race: CachedScheduleRace): Date {
+  if (race.Qualifying?.date) {
+    const start = new Date(`${race.Qualifying.date}T${race.Qualifying.time || '00:00:00Z'}`);
+    return new Date(start.getTime() + 60 * 60 * 1000);
+  }
+  const fallback = new Date(`${race.date}T00:00:00Z`);
+  fallback.setUTCDate(fallback.getUTCDate() - 1);
+  return new Date(fallback.getTime() + 18 * 60 * 60 * 1000);
+}
+
+function getRaceEndTime(race: CachedScheduleRace): Date {
+  const start = new Date(`${race.date}T${race.time || '12:00:00Z'}`);
+  return new Date(start.getTime() + 2 * 60 * 60 * 1000);
+}
+
+function getSprintEndTime(race: CachedScheduleRace): Date | null {
+  if (!race.Sprint?.date) return null;
+  const start = new Date(`${race.Sprint.date}T${race.Sprint.time || '00:00:00Z'}`);
+  return new Date(start.getTime() + 45 * 60 * 1000);
+}
+
+function getFirstPracticeEndTime(race: CachedScheduleRace): Date | null {
+  if (!race.FirstPractice?.date) return null;
+  const start = new Date(`${getRaceStartDate(race)}T${race.FirstPractice.time || '00:00:00Z'}`);
+  return new Date(start.getTime() + 60 * 60 * 1000);
+}
+
+function getSessionEndTimeForEndpoint(
+  endpoint: RoundEndpoint,
+  race: CachedScheduleRace
+): Date | null {
+  switch (endpoint) {
+    case 'qualifying':
+      return getQualifyingEndTime(race);
+    case 'sprint':
+      return getSprintEndTime(race);
+    case 'results':
+    case 'laps':
+    case 'driverStandings':
+    case 'constructorStandings':
+      return getRaceEndTime(race);
+    case 'drivers': {
+      const fp1End = getFirstPracticeEndTime(race);
+      return fp1End ?? getQualifyingEndTime(race);
+    }
+    default:
+      return null;
+  }
+}
+
+export function isRoundDataSessionComplete(
+  url: string,
+  round: number,
+  schedule?: CachedScheduleRace[],
+  now = new Date()
+): boolean {
+  const race = schedule?.find(r => parseInt(r.round, 10) === round);
+  if (!race) return false;
+  const sessionEnd = getSessionEndTimeForEndpoint(parseRoundEndpoint(url), race);
+  if (!sessionEnd) return false;
+  return now >= sessionEnd;
+}
+
+export function getCacheTtl(
+  url: string,
+  data: unknown,
+  ctx?: F1ApiContext,
+  now = new Date()
+): CacheTtl {
   if (isResponseEmpty(url, data)) {
     return TTL_DEFAULT;
   }
 
+  const year = parseYearFromJolpicaUrl(url);
+  const round = parseRoundFromJolpicaUrl(url);
+  const currentYear = now.getUTCFullYear();
+  const latestConcluded = ctx?.latestConcludedRound ?? 0;
+
+  if (year !== null && year < currentYear) {
+    return undefined;
+  }
+
   const urlClass = classifyJolpicaUrl(url);
-  if (urlClass === 'schedule') return TTL_SCHEDULE;
-  if (urlClass === 'roundData') return TTL_ROUND_DATA;
+
+  if (urlClass === 'schedule') {
+    return TTL_SCHEDULE_CURRENT;
+  }
+
   if (urlClass === 'seasonStandings') {
     const lists = (data as { MRData?: { StandingsTable?: { StandingsLists?: Array<{ round?: string }> } } })
       ?.MRData?.StandingsTable?.StandingsLists;
     const standingsRound = lists?.[0]?.round ? parseInt(lists[0].round, 10) : 0;
-    const latestConcluded = ctx?.latestConcludedRound ?? 0;
     if (latestConcluded > 0 && standingsRound >= latestConcluded) {
       return TTL_STANDINGS_FRESH;
     }
-    return TTL_STANDINGS_STALE;
+    return undefined;
   }
+
+  if (urlClass === 'roundData' && round !== null) {
+    if (latestConcluded > 0 && round < latestConcluded) {
+      return undefined;
+    }
+    if (isRoundDataSessionComplete(url, round, ctx?.schedule, now)) {
+      return undefined;
+    }
+    return TTL_ROUND_DATA;
+  }
+
   return TTL_DEFAULT;
 }
 
@@ -112,25 +269,12 @@ function kvCacheKey(url: string): string {
   return `${KV_CACHE_PREFIX}${url}`;
 }
 
-function parseRetryAfterMs(retryAfter: string | null): number | null {
-  if (!retryAfter) return null;
-  const asSeconds = Number(retryAfter);
-  if (!Number.isNaN(asSeconds) && asSeconds >= 0) {
-    return asSeconds * 1000;
-  }
-  const asDate = Date.parse(retryAfter);
-  if (!Number.isNaN(asDate)) {
-    return Math.max(0, asDate - Date.now());
-  }
-  return null;
-}
-
-function backoffDelayMs(attempt: number, retryAfter: string | null): number {
-  const fromHeader = parseRetryAfterMs(retryAfter);
-  if (fromHeader !== null) {
-    return Math.min(fromHeader, 60_000);
-  }
-  return Math.min(BASE_BACKOFF_MS * 2 ** (attempt - 1), 30_000);
+/** True when URL is already in the per-run memory cache or KV store. */
+export async function isJolpicaUrlCached(url: string, ctx: F1ApiContext): Promise<boolean> {
+  if (ctx.cache.has(url)) return true;
+  if (!ctx.kv) return false;
+  const raw = await ctx.kv.get(kvCacheKey(url));
+  return raw !== null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -209,7 +353,7 @@ async function fetchJolpicaUncached(
   let lastError: Error | null = null;
   const fetchInit = buildFetchInit(ctx, init);
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (ctx) ctx.apiCallCount++;
 
     const res = ctx
@@ -217,13 +361,10 @@ async function fetchJolpicaUncached(
       : await fetch(url, fetchInit);
 
     if (res.status === 429) {
-      const retryAfter = res.headers.get('Retry-After');
       lastError = new Error('Jolpica API error: Too Many Requests');
-      if (attempt < MAX_RETRIES) {
-        const delay = backoffDelayMs(attempt, retryAfter);
-        console.warn(
-          `Jolpica 429 on ${url} (attempt ${attempt}/${MAX_RETRIES}), backing off ${delay}ms...`
-        );
+      if (attempt < MAX_ATTEMPTS) {
+        const delay = ctx?.testBackoffMs ?? RATE_LIMIT_BACKOFF_MS;
+        console.warn(`Jolpica 429 on ${url}, backing off ${delay}ms before one retry...`);
         await sleep(delay);
         continue;
       }
@@ -291,7 +432,11 @@ export async function cachedJolpicaJson<T>(
         ctx.cache.set(url, parsed);
         if (ctx.kv && !isResponseEmpty(url, data)) {
           const ttl = getCacheTtl(url, data, ctx);
-          await trackedKvPut(ctx.kv, kvCacheKey(url), rawText, { expirationTtl: ttl });
+          if (ttl === undefined) {
+            await trackedKvPut(ctx.kv, kvCacheKey(url), rawText);
+          } else {
+            await trackedKvPut(ctx.kv, kvCacheKey(url), rawText, { expirationTtl: ttl });
+          }
         }
       }
       resolve(parsed);

@@ -19,7 +19,7 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 - **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with the latest standings from the Jolpi API.
 - **Concluded Sessions Polling**: Automatically checks KV caches and conclusion status for completed Grand Prix and Sprint sessions, polling results and deploying them to wiki templates as soon as they become available.
 - **Practice Session Automation**: Scrapes F1.com practice results (FP1, FP2, FP3) during active race weekends, updates the GP page practice results table incrementally, and retries automatically when results are not yet published.
-- **Test Driver Entry List Updates**: Detects rookie test drivers appearing in FP1 who are not on the main entry list and appends them to the wiki Entry List section with team details from `TEAM_DETAILS_2026`.
+- **Entry List Synchronization & Test Drivers**: Automatically updates and maintains the Grand Prix page's main Entry List table using FIA Entry List PDF data, detects rookie/test drivers appearing in FP1, validates them against the PDF, and appends them to a dedicated "Test Drivers for Practice 1" subsection with team details from `TEAM_DETAILS_2026`.
 - **Scheduled Stats Sync**: Automatically computes and synchronizes career stats templates once a race weekend's Grand Prix results are published.
 - **Automated Infobox Updates**: Dynamically populates parameters in race infoboxes (`Infobox_Race` or `Infobox Sprint Race`) for qualifying pole, sprint standings, race winners, podium finishes, and fastest laps as sessions conclude.
 - **LLM-Powered Section Reports**: Automatically drafts and publishes factual, neutral, encyclopedia-style reports for section headings (`Background`, `FP1`, `FP2`, `FP3`, `Q1`, `Q2`, `Q3`, `Sprint Report`, and `Race Report`) using an LLM. Practice reports crawl official F1.com session articles for richer context. Features native **Cloudflare Workers AI** (Llama 3) support with failover to **Google Gemini** or **OpenAI** APIs. Checks and safeguards sections to ensure human edits are never overwritten.
@@ -83,6 +83,7 @@ f1-fandom/
 │   ├── f1-api.ts             # Jolpi API integration and F1.com helpers
 │   ├── f1-api-cache.ts       # Within-run API deduplication and 429 backoff
 │   ├── sync-kv.ts            # Per-target KV sync flag helpers
+│   ├── kv-ops.ts             # KV daily write count, log buffering, and edit failure locks
 │   ├── wiki.ts               # MediaWiki API integration
 │   ├── wikitext-generator.ts # WikiTable formatting and test driver helpers
 │   ├── wikitext-parse.ts     # CodeQL-safe line-based wikitext parsing
@@ -95,7 +96,10 @@ f1-fandom/
 │   ├── verify-infobox-update.ts    # Infobox parameter read/update tests
 │   ├── verify-jolpica-cache.ts     # API cache dedup and backoff tests
 │   ├── verify-practice-sessions.ts # Practice scraping and test driver tests
-│   └── verify-llm-reporter.ts      # HTML sanitization and prompt context tests
+│   ├── verify-llm-reporter.ts      # HTML sanitization and prompt context tests
+│   ├── verify-entry-list-sync.ts   # Entry list table sync and PDF parser tests
+│   ├── verify-kv-ops.ts            # KV daily write count and edit failure block tests
+│   └── verify-stats-sync.ts        # Career stats template calculations verification
 ├── f1.py                     # Python wiki table generator
 ├── pyergast.py               # Python Ergast API wrapper
 └── README.md
@@ -104,7 +108,7 @@ f1-fandom/
 ## Getting Started
 
 1. Set up wiki authentication credentials (bot account on f1.fandom.com)
-2. Configure environment variables for wiki domain, bot password, and LLM configuration (`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `LLM_PROVIDER`)
+2. Configure environment variables for wiki domain, bot password, LLM configuration (`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `LLM_PROVIDER`), and the optional `STATS_SYNC` gate.
 3. Deploy Cloudflare Worker to enable automated table and report generation
 4. Use the web dashboard or API endpoints to trigger updates
 5. Verify generated wikitext before publishing to wiki
@@ -119,13 +123,33 @@ This runs the TypeScript compiler (`tsc --noEmit`) and all verification scripts 
 
 ## Recent Updates & Changelog
 
-Summary of improvements since the last README update (June 7, 2026):
+Summary of improvements (updated July 4, 2026):
+
+### Entry List Syncing & Team Details (July 2026)
+- **Automated Entry List Syncing**: Cron worker automatically updates and maintains Grand Prix Entry List tables, detecting rookie/test drivers in FP1 results, validating them against the FIA Entry List PDF, and appending them to the "Test Drivers for Practice 1" subsection.
+- **2026 Team Details finalization**: Updated `TEAM_DETAILS_2026` with finalized chassis designations (e.g., Cadillac MAC-26) and engine models (e.g., Red Bull Ford DM01, Audi AFR 26, Honda RA626H) for the 2026 season.
+- **FIA Source References**: Automates formatting of source references pointing directly to official FIA entry list decision PDFs.
+
+### Caching, Rate-Limiting & Performance Tuning (June–July 2026)
+- **Permanent KV Caching**: Concluded session data (results, qualifying, sprint, standings, schedules) is cached permanently once finalized, eliminating unnecessary Jolpica API fetches and worker subrequests.
+- **429 Rate-Limit Tuning**: Replaced multi-step exponential backoffs with a single 15-second retry to prevent execution wall-time timeouts and stay under Cloudflare Worker limits.
+- **Cron Frequency Optimization**: Adjusted high-frequency cron execution interval from 10 minutes to 21 minutes to stay within free-tier KV write and request quotas.
+- **Concurrent Promise Pooling**: Implemented parallel execution for career standings and stats template updates using a concurrent pool helper (`runInPool` with concurrency limit of 7).
+
+### Stats Sync Gates & KV Safeguards (July 2026)
+- **Stats Sync Environment Gate**: Introduced the `STATS_SYNC` environment gate variable; when not set to `TRUE`, the scheduled worker skips all KV checks, Jolpica fetches, and edits to the 21 career stats templates.
+- **Edit Failure Safety Buffer**: Implemented consecutive edit failure monitoring (`src/kv-ops.ts`) with a threshold (`MAX_EDIT_FAILURES = 3`) to block wiki edits to pages experiencing persistent issues, preventing API token locking or quota depletion.
+- **Additional Stats Categories**: Expanded career stats tracking to compute and update `Doubles`, `HatTricks`, and `Grand Chelems` templates automatically.
+
+### UI & Refactoring Improvements (July 2026)
+- **Dynamic Race Slug Generation**: Unified slug and ID generation helpers (`getF1RacingKey`, `getF1comRaceId`) across frontend and backend, resolving Japan and Abu Dhabi slug inconsistencies.
+- **Frontend Regex Patch**: Resolved backslash regex escaping bugs inside frontend template strings.
 
 ### Practice Sessions & Test Drivers (June 2026)
 - **Automated Practice Scraping**: Cron worker scrapes F1.com FP1/FP2/FP3 results during active race weekends and updates the GP page practice results table incrementally.
 - **LLM Practice Reports**: Generates FP1, FP2, and FP3 section reports using crawled official F1.com session articles, with prompts highlighting incidents, spins, mechanical issues, and driver feedback.
 - **Test Driver Entry List**: Detects test drivers in FP1 results and appends them to the wiki Entry List with team details; unknown nationalities default to `{{FIA}}` and trigger a daily email warning.
-- **Empty Results Retry**: Skips KV sync when F1.com has not yet published results, allowing automatic retry on the next 10-minute cron execution.
+- **Empty Results Retry**: Skips KV sync when F1.com has not yet published results, allowing automatic retry on the next 21-minute cron execution.
 - **2026 Race ID Formula**: Dynamic F1.com race ID resolution (`1278 + round` for Rounds 1–3, `1280 + round` for Rounds 4–22) in both TypeScript worker and Python CLI.
 - **Sprint Weekend Support**: Practice results table shows FP1 only on sprint weekends.
 
