@@ -618,6 +618,7 @@ export const frontendHtml = `<!DOCTYPE html>
           </div>
           <div style="display: flex; align-items: center; gap: 15px;">
             <button id="create-page-btn" class="btn btn-accent" style="display: none; width: auto; font-size: 0.85rem; padding: 6px 15px;" onclick="loadBlankGPPageTemplate()">Initialize Page Template</button>
+            <button id="regenerate-page-btn" class="btn btn-secondary" style="display: none; width: auto; font-size: 0.85rem; padding: 6px 15px; border-color: var(--accent-secondary); color: var(--accent-secondary);" onclick="loadBlankGPPageTemplate()">Regenerate Template</button>
             <div class="status-badge missing" id="wiki-status-badge">Missing</div>
           </div>
         </section>
@@ -1111,6 +1112,8 @@ export const frontendHtml = `<!DOCTYPE html>
 
       const createBtn = document.getElementById('create-page-btn');
       if (createBtn) createBtn.style.display = 'none';
+      const regenerateBtn = document.getElementById('regenerate-page-btn');
+      if (regenerateBtn) regenerateBtn.style.display = 'none';
 
       try {
         const res = await fetch('/api/wiki-status', {
@@ -1126,15 +1129,18 @@ export const frontendHtml = `<!DOCTYPE html>
           badge.className = 'status-badge exists';
           badge.textContent = 'Exists';
           if (createBtn) createBtn.style.display = 'none';
+          if (regenerateBtn) regenerateBtn.style.display = 'inline-flex';
         } else {
           badge.className = 'status-badge missing';
           badge.textContent = 'Missing';
           if (createBtn) createBtn.style.display = 'inline-flex';
+          if (regenerateBtn) regenerateBtn.style.display = 'none';
         }
       } catch (e) {
         badge.className = 'status-badge missing';
         badge.textContent = 'Unknown';
         if (createBtn) createBtn.style.display = 'none';
+        if (regenerateBtn) regenerateBtn.style.display = 'none';
       }
     }
 
