@@ -724,18 +724,9 @@ export function generatePracticeWikitext(
     ? buildDriverNameLookup(parseFiaEntryListPdf(options.pdfText, drivers).fp1TestDrivers)
     : null;
 
-  const mainDriverKeys = new Set<string>();
-  for (const driver of drivers) {
-    mainDriverKeys.add(driver.driverId.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
-  }
+  const raceDriverKeys = buildRaceDriverKeys(drivers);
 
-  const isMainDriver = (name: string): boolean => {
-    const lower = name.toLowerCase();
-    const clean = lower.replace(/[\s'-]/g, '');
-    return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
-  };
+  const isMainDriver = (name: string): boolean => isRaceDriver(name, raceDriverKeys);
 
   const enrichTestDriverData = (data: PracticeSessionData): PracticeSessionData => {
     if (!pdfTestDriverLookup) return data;
@@ -997,6 +988,24 @@ const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
   "perez": "cadillac"
 };
 
+/** Name keys for the 22 race entrants (excludes FP1-only drivers Jolpica may list). */
+export function buildRaceDriverKeys(drivers: Driver[]): Set<string> {
+  const keys = new Set<string>();
+  for (const driver of drivers) {
+    if (!DRIVER_TO_CONSTRUCTOR_2026[driver.driverId]) continue;
+    keys.add(driver.driverId.toLowerCase());
+    keys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
+    keys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
+  }
+  return keys;
+}
+
+export function isRaceDriver(driverName: string, raceDriverKeys: Set<string>): boolean {
+  const lower = driverName.toLowerCase();
+  const clean = lower.replace(/[\s'-]/g, '');
+  return raceDriverKeys.has(lower) || raceDriverKeys.has(clean);
+}
+
 /** Resolve a driver's team wikitext, preferring quali data then the season roster map. */
 export function resolveDriverTeamTemplate(
   driverId: string,
@@ -1200,12 +1209,7 @@ export function detectTestDriversFromFp1(
     ? buildDriverNameLookup(parseFiaEntryListPdf(pdfText, mainDrivers).fp1TestDrivers)
     : null;
 
-  const mainDriverKeys = new Set<string>();
-  for (const driver of mainDrivers) {
-    mainDriverKeys.add(driver.driverId.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
-    mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
-  }
+  const raceDriverKeys = buildRaceDriverKeys(mainDrivers);
 
   const testDrivers: TestDriverEntry[] = [];
   const seen = new Set<string>();
@@ -1213,7 +1217,7 @@ export function detectTestDriversFromFp1(
   for (const data of Object.values(fp1)) {
     const name = data.driverName;
     const cleanName = name.toLowerCase().replace(/[\s'-]/g, '');
-    if (mainDriverKeys.has(name.toLowerCase()) || mainDriverKeys.has(cleanName)) {
+    if (isRaceDriver(name, raceDriverKeys)) {
       continue;
     }
     if (seen.has(cleanName)) continue;
@@ -1412,8 +1416,11 @@ export function updateEntryListTableIfNeeded(
   }
 
   const combinedTestDriversMap = new Map<string, TestDriverEntry>();
-  parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
-  testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  if (testDrivers.length > 0) {
+    testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  } else {
+    parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  }
   const combinedTestDrivers = Array.from(combinedTestDriversMap.values())
     .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
 

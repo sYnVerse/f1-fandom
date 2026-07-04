@@ -43,6 +43,8 @@ import {
   lookupTestDriverNationality,
   detectTestDriversFromPdf,
   updateEntryListTableIfNeeded,
+  buildRaceDriverKeys,
+  isRaceDriver,
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -1092,27 +1094,13 @@ export default {
               fp3Results = fp3;
 
               if (pdfText) {
-                const mainDriverKeys = new Set<string>();
-                for (const driver of drivers) {
-                  mainDriverKeys.add(driver.driverId.toLowerCase());
-                  mainDriverKeys.add(`${driver.givenName} ${driver.familyName}`.toLowerCase());
-                  mainDriverKeys.add(`${driver.givenName}${driver.familyName}`.toLowerCase().replace(/[\s'-]/g, ''));
-                }
-
-                const isMainDriver = (name: string): boolean => {
-                  const lower = name.toLowerCase();
-                  const clean = lower.replace(/[\s'-]/g, '');
-                  return mainDriverKeys.has(lower) || mainDriverKeys.has(clean);
-                };
-
-                const isDriverInEntryList = (driverName: string): boolean =>
-                  isDriverListedInFiaPdf(driverName, pdfText!, drivers);
+                const raceDriverKeys = buildRaceDriverKeys(drivers);
 
                 const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
                   if (!sessionData) return;
                   for (const driverName of Object.keys(sessionData)) {
-                    if (!isMainDriver(driverName)) {
-                      if (!isDriverInEntryList(driverName)) {
+                    if (!isRaceDriver(driverName, raceDriverKeys)) {
+                      if (!isDriverListedInFiaPdf(driverName, pdfText!, drivers)) {
                         console.log(`Filtering out test driver ${driverName} from practice results because they are not on the FIA Entry List.`);
                         delete sessionData[driverName];
                       }

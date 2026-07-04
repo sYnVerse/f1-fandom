@@ -171,7 +171,7 @@ const testDrivers2 = [{
 
 const updateWithBoth = updateEntryListTableIfNeeded(wikiPageWithTestDrivers, mainDrivers, testDrivers2);
 assert(updateWithBoth.changed === true, 'Should update to add Felipe Drugovich');
-assert(updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should have preserved Patricio O\'Ward');
+assert(!updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should remove wiki-only test drivers when PDF list is authoritative');
 assert(updateWithBoth.updatedWikitext.includes('Felipe Drugovich'), 'Should have added Felipe Drugovich');
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');
