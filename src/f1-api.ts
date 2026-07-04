@@ -523,10 +523,7 @@ export function getF1RacingKey(raceName: string): string {
   return nameLower.replace(" grand prix", "").trim().replace(/\s+/g, "-");
 }
 
-/** Slug used in F1.com results URLs (e.g. austrian-grand-prix). */
-export function getF1RaceNameSlug(raceName: string): string {
-  return raceName.toLowerCase().replace(/\s+/g, '-');
-}
+
 
 /** Dynamic F1.com race ID for 2026 season (2-ID gap after Round 3). */
 export function getF1comRaceId(year: number, round: number): string {
