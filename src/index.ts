@@ -38,6 +38,7 @@ import {
   getTeamTemplate,
   detectTestDriversFromFp1,
   lookupTestDriverNationality,
+  detectTestDriversFromPdf,
   updateEntryListTableIfNeeded,
 } from './wikitext-generator';
 import { 
@@ -1018,8 +1019,9 @@ export default {
               if (drivers.length === 0) {
                 drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
               }
+              const pdfTestDrivers = pdfText ? detectTestDriversFromPdf(pdfText, drivers) : [];
               console.log(`Verifying/updating Entry List table for ${gpPageTitle}...`);
-              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, []);
+              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, pdfTestDrivers);
               if (entryListUpdate.changed) {
                 updatedContent = entryListUpdate.updatedWikitext;
                 changes.push("Entry List");

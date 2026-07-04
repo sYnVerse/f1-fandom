@@ -151,4 +151,26 @@ assert(
 );
 assert(practiceWithoutQuali.includes('McLaren'), 'Practice table should show McLaren for Norris');
 
+// Non-participating test drivers (no valid time/position) must not appear in practice table
+const fp1WithPhantomTestDriver = {
+  ...fp1WithTestDriver,
+  'Paul Aron': {
+    position: '',
+    number: '0',
+    driverName: 'Paul Aron',
+    teamName: '',
+    time: '',
+  },
+};
+const practiceNoPhantoms = generatePracticeWikitext(
+  mainDrivers as any,
+  null,
+  fp1WithPhantomTestDriver,
+  null,
+  null,
+  { hasSprint: true }
+);
+assert(!practiceNoPhantoms.includes('[[Paul Aron]]'), 'Should exclude test drivers without a classified session time');
+assert(practiceNoPhantoms.includes('[[Patricio O Ward]]'), 'Should still include participating test drivers');
+
 console.log('verify-practice-sessions: all assertions passed');

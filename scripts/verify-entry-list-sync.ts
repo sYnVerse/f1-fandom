@@ -66,12 +66,6 @@ const pdfTestDriversOward = detectTestDriversFromPdf(mockPdfTextOwardMentionOnly
 assert(pdfTestDriversOward.length === 0, `Expected 0 test drivers for O'Ward mention without entry row, got ${pdfTestDriversOward.length}`);
 
 // --- 3. Test Entry List Update (New or Modified details) ---
-const fp1TestDrivers = [{
-  number: '34',
-  name: 'Felipe Drugovich',
-  flag: '{{BRA}}',
-  constructorId: 'aston_martin'
-}];
 const existingWikiPage = `
 ==Background==
 ===Entry List===
@@ -109,7 +103,7 @@ The full entry list:
 ==Practice Overview==
 `;
 
-const updateResult = updateEntryListTableIfNeeded(existingWikiPage, mainDrivers, fp1TestDrivers);
+const updateResult = updateEntryListTableIfNeeded(existingWikiPage, mainDrivers, pdfTestDrivers);
 assert(updateResult.changed === true, 'Entry list table should have been updated because Norris team name differed');
 assert(updateResult.updatedWikitext.includes('McLaren Mastercard F1 Team'), 'Should have corrected Lando Norris entrant');
 assert(updateResult.updatedWikitext.includes('[[Felipe Drugovich]]'), 'Should have added Felipe Drugovich');
@@ -117,10 +111,10 @@ assert(updateResult.updatedWikitext.includes('!|colspan="8" | [[Test Driver]]s f
 assert(updateResult.updatedWikitext.includes('Source: [https://fia.com source.pdf]'), 'Should have preserved original source row');
 
 // Verify we don't change it if we run it again
-const runAgain = updateEntryListTableIfNeeded(updateResult.updatedWikitext, mainDrivers, fp1TestDrivers);
+const runAgain = updateEntryListTableIfNeeded(updateResult.updatedWikitext, mainDrivers, pdfTestDrivers);
 assert(runAgain.changed === false, 'Running it again should detect no changes');
 
-// --- 4. Test that stale wiki test drivers are removed when not in FP1 list ---
+// --- 4. Test Preserving Existing Test Drivers ---
 const wikiPageWithTestDrivers = `
 ==Background==
 ===Entry List===
@@ -175,8 +169,8 @@ const testDrivers2 = [{
 }];
 
 const updateWithBoth = updateEntryListTableIfNeeded(wikiPageWithTestDrivers, mainDrivers, testDrivers2);
-assert(updateWithBoth.changed === true, 'Should update to add Felipe Drugovich and remove stale O\'Ward');
-assert(!updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should have removed Patricio O\'Ward not in FP1 list');
+assert(updateWithBoth.changed === true, 'Should update to add Felipe Drugovich');
+assert(updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should have preserved Patricio O\'Ward');
 assert(updateWithBoth.updatedWikitext.includes('Felipe Drugovich'), 'Should have added Felipe Drugovich');
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');

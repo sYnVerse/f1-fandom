@@ -585,6 +585,9 @@ export function generatePracticeWikitext(
     const testDrivers: PracticeSessionData[] = [];
     for (const data of Object.values(sessionData)) {
       if (isMainDriver(data.driverName)) continue;
+      const pos = data.position?.trim() ?? '';
+      const time = data.time?.trim() ?? '';
+      if (!/^\d+$/.test(pos) || !time || time === 'No Time') continue;
       const key = data.driverName.toLowerCase().replace(/[\s'-]/g, '');
       if (seen.has(key)) continue;
       seen.add(key);
@@ -602,7 +605,9 @@ export function generatePracticeWikitext(
     return arr.findIndex(x => x.driverName.toLowerCase().replace(/[\s'-]/g, '') === key) === idx;
   });
 
-  const tableDrivers: Array<Driver | PracticeSessionData> = [...drivers];
+  const rosterDrivers = drivers.filter(d => DRIVER_TO_CONSTRUCTOR_2026[d.driverId]);
+
+  const tableDrivers: Array<Driver | PracticeSessionData> = [...rosterDrivers];
   for (const td of testDriverRows) {
     tableDrivers.push(td);
   }
@@ -1259,13 +1264,65 @@ export function updateEntryListTableIfNeeded(
     return { updatedWikitext: currentWikitext, changed: false };
   }
 
-  // Test drivers are authoritative from FP1 participation only — do not preserve
-  // stale wiki rows that may have been added by overly broad PDF name matching.
-  const combinedTestDrivers = [...testDrivers]
-    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
-
+  const parsedTestDrivers: TestDriverEntry[] = [];
   const cleanContent = tableInfo.content.replace(/\|\}/g, '').trim();
   const rows = cleanContent.split(/\r?\n\|-\r?\n/);
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    
+    if (row.includes('colspan') || row.includes('Source') || row.includes('No.') || row.includes('Driver')) {
+      continue;
+    }
+
+    const lines = row.split('\n');
+    let number = '';
+    let name = '';
+
+    for (const line of lines) {
+      if (line.startsWith('!')) {
+        number = line.slice(1).trim();
+      } else if (line.startsWith('|')) {
+        if (!name) {
+          const linkMatch = line.match(/\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/);
+          if (linkMatch) {
+            name = linkMatch[1].trim();
+          }
+        }
+      }
+    }
+
+    if (number && name) {
+      const isMain = expectedDrivers.some(d => {
+        const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
+        return mainName === name.toLowerCase();
+      });
+      if (!isMain) {
+        let constructorId = '';
+        for (const line of lines) {
+          const matchedId = teamNameToConstructorId(line.toLowerCase());
+          if (matchedId) {
+            constructorId = matchedId;
+            break;
+          }
+        }
+        const nationality = lookupTestDriverNationality(name);
+        const flag = nationality ? getFlag(nationality) : '{{FIA}}';
+        parsedTestDrivers.push({
+          number,
+          name,
+          flag,
+          constructorId,
+        });
+      }
+    }
+  }
+
+  const combinedTestDriversMap = new Map<string, TestDriverEntry>();
+  parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+  const combinedTestDrivers = Array.from(combinedTestDriversMap.values())
+    .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
 
   let entryListRows = "";
   const sortedDrivers = [...expectedDrivers].sort((a, b) => {
