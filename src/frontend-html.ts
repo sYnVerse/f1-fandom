@@ -1054,7 +1054,7 @@ export const frontendHtml = `<!DOCTYPE html>
           return val;
         }
       }
-      return nameLower.replace(" grand prix", "").trim().replace(/[\\\\s_]+/g, "-");
+      return nameLower.replace(" grand prix", "").trim().replace(/[\\s_]+/g, "-");
     }
 
     function getF1comRaceId(year, round) {
