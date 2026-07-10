@@ -1006,6 +1006,120 @@ export function isRaceDriver(driverName: string, raceDriverKeys: Set<string>): b
   return raceDriverKeys.has(lower) || raceDriverKeys.has(clean);
 }
 
+export function buildTestDriverNameKeys(testDrivers: TestDriverEntry[]): Set<string> {
+  const keys = new Set<string>();
+  for (const td of testDrivers) {
+    keys.add(td.name.toLowerCase());
+    keys.add(td.name.toLowerCase().replace(/[\s'-]/g, ''));
+  }
+  return keys;
+}
+
+export function isKnownTestDriver(driverName: string, testDriverKeys: Set<string>): boolean {
+  const lower = driverName.toLowerCase();
+  const clean = lower.replace(/[\s'-]/g, '');
+  return testDriverKeys.has(lower) || testDriverKeys.has(clean);
+}
+
+function driverNameKeys(name: string): string[] {
+  const lower = name.toLowerCase();
+  return [lower, lower.replace(/[\s'-]/g, '')];
+}
+
+function lookupFp1PracticeData(
+  name: string,
+  fp1: Record<string, PracticeSessionData> | null | undefined
+): PracticeSessionData | undefined {
+  if (!fp1) return undefined;
+  const keys = new Set(driverNameKeys(name));
+  for (const data of Object.values(fp1)) {
+    for (const key of driverNameKeys(data.driverName)) {
+      if (keys.has(key)) return data;
+    }
+  }
+  return undefined;
+}
+
+/** Test drivers listed in Jolpica round entry but not in the season race roster. */
+export function detectTestDriversFromJolpica(drivers: Driver[]): TestDriverEntry[] {
+  return drivers
+    .filter(driver => !DRIVER_TO_CONSTRUCTOR_2026[driver.driverId])
+    .map(driver => {
+      const name = `${driver.givenName} ${driver.familyName}`;
+      const nationality = driver.nationality || lookupTestDriverNationality(name);
+      return {
+        number: driver.permanentNumber || '',
+        name,
+        flag: nationality ? getFlag(nationality) : '{{FIA}}',
+        constructorId: '',
+      };
+    })
+    .sort((a, b) => parseInt(a.number || '999', 10) - parseInt(b.number || '999', 10));
+}
+
+function enrichTestDriverEntry(
+  entry: TestDriverEntry,
+  pdfLookup: Map<string, FiaDriverRow> | null,
+  fp1?: Record<string, PracticeSessionData> | null
+): TestDriverEntry {
+  let number = entry.number;
+  let flag = entry.flag;
+  let constructorId = entry.constructorId;
+
+  for (const key of driverNameKeys(entry.name)) {
+    const pdfRow = pdfLookup?.get(key);
+    if (pdfRow) {
+      number = pdfRow.number || number;
+      flag = getFlagFromNatCode(pdfRow.natCode) || flag;
+      constructorId =
+        teamNameToConstructorId(pdfRow.team) ||
+        teamNameToConstructorId(pdfRow.constructor) ||
+        constructorId;
+      break;
+    }
+  }
+
+  const fp1Data = lookupFp1PracticeData(entry.name, fp1);
+  if (fp1Data) {
+    number = number || fp1Data.number;
+    constructorId = constructorId || teamNameToConstructorId(fp1Data.teamName) || '';
+  }
+
+  if (flag === '{{FIA}}') {
+    const nationality = lookupTestDriverNationality(entry.name);
+    if (nationality) flag = getFlag(nationality);
+  }
+
+  return { ...entry, number, flag, constructorId };
+}
+
+/**
+ * Resolve FP1 test drivers: Jolpica round entry first, FIA PDF fallback, enriched by PDF/FP1 metadata.
+ */
+export function resolveTestDriversForRace(
+  drivers: Driver[],
+  options?: {
+    pdfText?: string | null;
+    fp1?: Record<string, PracticeSessionData> | null;
+  }
+): TestDriverEntry[] {
+  const pdfLookup = options?.pdfText
+    ? buildDriverNameLookup(parseFiaEntryListPdf(options.pdfText, drivers).fp1TestDrivers)
+    : null;
+
+  const jolpicaTestDrivers = detectTestDriversFromJolpica(drivers);
+  const base =
+    jolpicaTestDrivers.length > 0
+      ? jolpicaTestDrivers
+      : options?.pdfText
+        ? detectTestDriversFromPdf(options.pdfText, drivers)
+        : [];
+
+  return base
+    .map(entry => enrichTestDriverEntry(entry, pdfLookup, options?.fp1))
+    .sort((a, b) => parseInt(a.number || '999', 10) - parseInt(b.number || '999', 10));
+}
+
 /** Resolve a driver's team wikitext, preferring quali data then the season roster map. */
 export function resolveDriverTeamTemplate(
   driverId: string,
@@ -1364,6 +1478,8 @@ export function updateEntryListTableIfNeeded(
   const parsedTestDrivers: TestDriverEntry[] = [];
   const cleanContent = tableInfo.content.replace(/\|\}/g, '').trim();
   const rows = cleanContent.split(/\r?\n\|-\r?\n/);
+  const raceDrivers = expectedDrivers.filter(d => DRIVER_TO_CONSTRUCTOR_2026[d.driverId]);
+  const raceDriverKeys = buildRaceDriverKeys(raceDrivers);
   
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -1390,10 +1506,7 @@ export function updateEntryListTableIfNeeded(
     }
 
     if (number && name) {
-      const isMain = expectedDrivers.some(d => {
-        const mainName = `${d.givenName} ${d.familyName}`.toLowerCase();
-        return mainName === name.toLowerCase();
-      });
+      const isMain = isRaceDriver(name, raceDriverKeys);
       if (!isMain) {
         let constructorId = '';
         for (const line of lines) {
@@ -1425,7 +1538,7 @@ export function updateEntryListTableIfNeeded(
     .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
 
   let entryListRows = "";
-  const sortedDrivers = [...expectedDrivers].sort((a, b) => {
+  const sortedDrivers = [...raceDrivers].sort((a, b) => {
     const numA = parseInt(a.permanentNumber || '0', 10);
     const numB = parseInt(b.permanentNumber || '0', 10);
     return numA - numB;

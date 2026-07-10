@@ -1088,3 +1088,201 @@ export async function getOpenF1SprintQualifyingResult(
   });
 }
 
+export interface OpenF1PracticeSessionResult {
+  position: number;
+  driver_number: number;
+  duration?: number | null;
+  gap_to_leader?: number | null;
+  dns: boolean;
+  dnf: boolean;
+  dsq: boolean;
+}
+
+export interface OpenF1SessionDriver {
+  driver_number: number;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  team_name: string;
+  name_acronym: string;
+}
+
+function getPracticeSessionTargetDate(
+  race: CachedScheduleRace,
+  sessionNumber: 1 | 2 | 3
+): string {
+  if (sessionNumber === 1 && race.FirstPractice?.date) return race.FirstPractice.date;
+  if (sessionNumber === 2 && race.SecondPractice?.date) return race.SecondPractice.date;
+  if (sessionNumber === 3 && race.ThirdPractice?.date) return race.ThirdPractice.date;
+  return race.date;
+}
+
+/** Pick the closest OpenF1 Practice session for a race weekend (exported for tests). */
+export function matchOpenF1PracticeSession(
+  sessions: OpenF1Session[],
+  race: CachedScheduleRace,
+  round: number,
+  sessionNumber: 1 | 2 | 3
+): OpenF1Session | undefined {
+  const sessionName = `Practice ${sessionNumber}`;
+  const namedSessions = sessions.filter(s => s.session_name === sessionName);
+  if (namedSessions.length === 0) return undefined;
+
+  const targetDateStr = getPracticeSessionTargetDate(race, sessionNumber);
+  const targetDate = new Date(`${targetDateStr}T12:00:00Z`);
+  const circuitId = race.Circuit?.circuitId;
+
+  let candidates = namedSessions;
+  if (circuitId) {
+    const byCircuit = namedSessions.filter(session =>
+      session.circuit_short_name && circuitsMatch(circuitId, session.circuit_short_name)
+    );
+    if (byCircuit.length > 0) {
+      candidates = byCircuit;
+    }
+  }
+
+  let best: OpenF1Session | undefined;
+  let bestDiffMs = Infinity;
+  for (const session of candidates) {
+    const sessionDate = new Date(session.date_start);
+    const diffMs = Math.abs(sessionDate.getTime() - targetDate.getTime());
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays <= OPENF1_SESSION_MATCH_WINDOW_DAYS && diffMs < bestDiffMs) {
+      best = session;
+      bestDiffMs = diffMs;
+    }
+  }
+
+  if (!best) {
+    const raceName = race.raceName || 'Unknown';
+    console.warn(`No matching OpenF1 ${sessionName} session found for round ${round} (${raceName})`);
+  }
+  return best;
+}
+
+export function formatOpenF1PracticeTime(result: Pick<OpenF1PracticeSessionResult, 'duration' | 'dns' | 'dsq'>): string {
+  if (result.dns) return 'DNS';
+  if (result.dsq) return 'DSQ';
+  if (result.duration === null || result.duration === undefined) return '';
+  return formatOpenF1Time(result.duration);
+}
+
+function titleCaseWord(word: string): string {
+  if (!word) return word;
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function resolveOpenF1DriverName(
+  driverNumber: number,
+  sessionDriver: OpenF1SessionDriver | undefined,
+  drivers: Driver[]
+): string {
+  const numStr = driverNumber.toString();
+  const jolpicaDriver = drivers.find(d => d.permanentNumber === numStr);
+  if (jolpicaDriver) {
+    return `${jolpicaDriver.givenName} ${jolpicaDriver.familyName}`;
+  }
+  if (sessionDriver) {
+    return `${titleCaseWord(sessionDriver.first_name)} ${titleCaseWord(sessionDriver.last_name)}`;
+  }
+  return `Driver #${numStr}`;
+}
+
+export function convertOpenF1PracticeResults(
+  results: OpenF1PracticeSessionResult[],
+  sessionDrivers: OpenF1SessionDriver[],
+  drivers: Driver[]
+): Record<string, PracticeSessionData> {
+  const driverByNumber = new Map(sessionDrivers.map(d => [d.driver_number, d]));
+  const parsed: Record<string, PracticeSessionData> = {};
+
+  for (const result of results) {
+    const sessionDriver = driverByNumber.get(result.driver_number);
+    const driverName = resolveOpenF1DriverName(result.driver_number, sessionDriver, drivers);
+    parsed[driverName] = {
+      position: result.position.toString(),
+      number: result.driver_number.toString(),
+      driverName,
+      teamName: sessionDriver?.team_name || '',
+      time: formatOpenF1PracticeTime(result),
+    };
+  }
+
+  return mapDriverNames(parsed, drivers);
+}
+
+export async function getOpenF1PracticeSessionResult(
+  year: number,
+  round: number,
+  race: CachedScheduleRace,
+  sessionNumber: 1 | 2 | 3,
+  drivers: Driver[],
+  ctx?: F1ApiContext
+): Promise<Record<string, PracticeSessionData> | null> {
+  const sessionName = encodeURIComponent(`Practice ${sessionNumber}`);
+  const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=${sessionName}&year=${year}`;
+  const sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
+
+  if (!sessions || sessions.length === 0) {
+    console.warn(`No OpenF1 ${sessionName} sessions found for year ${year}`);
+    return null;
+  }
+
+  const matchedSession = matchOpenF1PracticeSession(sessions, race, round, sessionNumber);
+  if (!matchedSession) return null;
+
+  const raceName = race.raceName || 'Unknown';
+  console.log(`Matched OpenF1 ${sessionName} session_key ${matchedSession.session_key} for ${raceName}`);
+
+  const [results, sessionDrivers] = await Promise.all([
+    fetchOpenF1Json<OpenF1PracticeSessionResult[]>(
+      `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`,
+      ctx,
+      86400
+    ),
+    fetchOpenF1Json<OpenF1SessionDriver[]>(
+      `https://api.openf1.org/v1/drivers?session_key=${matchedSession.session_key}`,
+      ctx,
+      86400
+    ),
+  ]);
+
+  if (!results || results.length === 0) {
+    console.warn(`No OpenF1 practice results found for session_key ${matchedSession.session_key}`);
+    return null;
+  }
+
+  results.sort((a, b) => a.position - b.position);
+  return convertOpenF1PracticeResults(results, sessionDrivers ?? [], drivers);
+}
+
+/** Fetch practice results from OpenF1, falling back to F1.com scraping when unavailable. */
+export async function getPracticeSessionWithFallback(
+  year: number,
+  round: number,
+  raceName: string,
+  race: CachedScheduleRace,
+  sessionNumber: 1 | 2 | 3,
+  drivers: Driver[],
+  ctx?: F1ApiContext
+): Promise<Record<string, PracticeSessionData> | null> {
+  try {
+    const openF1Results = await getOpenF1PracticeSessionResult(year, round, race, sessionNumber, drivers, ctx);
+    if (openF1Results && Object.keys(openF1Results).length > 0) {
+      return openF1Results;
+    }
+  } catch (e: any) {
+    console.warn(`OpenF1 Practice ${sessionNumber} fetch failed for round ${round}: ${e.message}`);
+  }
+
+  const url = buildPracticeSessionUrl(year, round, raceName, sessionNumber);
+  console.log(`Falling back to F1.com scrape for Practice ${sessionNumber}: ${url}`);
+  try {
+    return await scrapePracticeSession(url, drivers);
+  } catch (e: any) {
+    console.warn(`F1.com Practice ${sessionNumber} scrape failed for round ${round}: ${e.message}`);
+    return null;
+  }
+}
+

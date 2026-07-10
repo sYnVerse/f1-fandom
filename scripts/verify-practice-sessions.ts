@@ -9,6 +9,7 @@ import {
   findEntryListHeadingIndex,
   generatePracticeWikitext,
   resolveDriverTeamTemplate,
+  resolveTestDriversForRace,
 } from '../src/wikitext-generator';
 import { gpPageSectionRequired } from '../src/sync-kv';
 
@@ -206,5 +207,9 @@ const practiceWithJolpicaTestDriver = generatePracticeWikitext(
 );
 assert(practiceWithJolpicaTestDriver.includes('[[Ayumu Iwasa]]'), 'FP1 test driver should appear even when listed in Jolpica drivers');
 assert(practiceWithJolpicaTestDriver.includes('1:09.637'), 'FP1 test driver should keep classified session time');
+
+const resolvedAustriaStyle = resolveTestDriversForRace(driversWithJolpicaTestDriver as any, { fp1: fp1WithIwasa });
+assert(resolvedAustriaStyle.some(td => td.name === 'Ayumu Iwasa'), 'Jolpica-first resolver should include Iwasa');
+assert(!resolvedAustriaStyle.some(td => td.name === 'Patricio O Ward'), 'FP1-only drivers not on Jolpica should not be added to entry list');
 
 console.log('verify-practice-sessions: all assertions passed');

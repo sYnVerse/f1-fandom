@@ -9,6 +9,7 @@ import {
   getConstructorStandings,
   getDriversForRaceWithFallback,
   scrapePracticeSession,
+  getPracticeSessionWithFallback,
   parsePracticeHTML,
   mapDriverNames,
   fetchOfficialRaceName,
@@ -41,10 +42,13 @@ import {
   getTeamTemplate,
   detectTestDriversFromFp1,
   lookupTestDriverNationality,
-  detectTestDriversFromPdf,
-  updateEntryListTableIfNeeded,
+  detectTestDriversFromJolpica,
+  resolveTestDriversForRace,
   buildRaceDriverKeys,
   isRaceDriver,
+  buildTestDriverNameKeys,
+  isKnownTestDriver,
+  updateEntryListTableIfNeeded,
 } from './wikitext-generator';
 import { 
   loginToWiki, 
@@ -308,18 +312,32 @@ export default {
           return corsResponse({ wikitext, fp1: mapped });
         }
 
-        // Auto Scraping
-        if (!fp1Url) return corsResponse({ error: 'Practice URL required' }, 400);
+        // Auto fetch: OpenF1 primary, F1.com URL scrape fallback
+        const schedule = await getSchedule(yr, apiCtx).catch(() => []);
+        const race = schedule.find(r => parseInt(r.round, 10) === rd);
+        const raceName = race?.raceName || 'Grand Prix';
 
-        const fp2Url = fp1Url.replace('/practice/1', '/practice/2');
-        const fp3Url = fp1Url.replace('/practice/1', '/practice/3');
+        let fp1: Record<string, PracticeSessionData> | null = null;
+        let fp2: Record<string, PracticeSessionData> | null = null;
+        let fp3: Record<string, PracticeSessionData> | null = null;
 
-        // Scrape sessions concurrently but catch individual failures gracefully
-        const [fp1, fp2, fp3] = await Promise.all([
-          scrapePracticeSession(fp1Url, drivers).catch(() => null),
-          scrapePracticeSession(fp2Url, drivers).catch(() => null),
-          scrapePracticeSession(fp3Url, drivers).catch(() => null),
-        ]);
+        if (race) {
+          [fp1, fp2, fp3] = await Promise.all([
+            getPracticeSessionWithFallback(yr, rd, raceName, race, 1, drivers, apiCtx).catch(() => null),
+            getPracticeSessionWithFallback(yr, rd, raceName, race, 2, drivers, apiCtx).catch(() => null),
+            getPracticeSessionWithFallback(yr, rd, raceName, race, 3, drivers, apiCtx).catch(() => null),
+          ]);
+        } else if (fp1Url) {
+          const fp2Url = fp1Url.replace('/practice/1', '/practice/2');
+          const fp3Url = fp1Url.replace('/practice/1', '/practice/3');
+          [fp1, fp2, fp3] = await Promise.all([
+            scrapePracticeSession(fp1Url, drivers).catch(() => null),
+            scrapePracticeSession(fp2Url, drivers).catch(() => null),
+            scrapePracticeSession(fp3Url, drivers).catch(() => null),
+          ]);
+        } else {
+          return corsResponse({ error: 'Practice URL required when race schedule is unavailable' }, 400);
+        }
 
         const wikitext = generatePracticeWikitext(drivers, qualiResults, fp1, fp2, fp3);
 
@@ -1038,9 +1056,15 @@ export default {
             let fp2Results: Record<string, PracticeSessionData> | null = null;
             let fp3Results: Record<string, PracticeSessionData> | null = null;
 
-            // Fetch and parse the FIA entry list PDF if available (shared between entry list sync and practice filtering)
+            // Fetch and parse the FIA entry list PDF when Jolpica has no test drivers or metadata needs enrichment
             let pdfText: string | null = null;
-            if (needPracticeScrape || needEntryList) {
+            const fetchPdfIfNeeded = async (driversForPdf: typeof drivers) => {
+              if (pdfText !== null) return pdfText;
+              const jolpicaTestDrivers = detectTestDriversFromJolpica(driversForPdf);
+              const needsPdf =
+                jolpicaTestDrivers.length === 0 ||
+                jolpicaTestDrivers.some(td => !td.number || td.flag === '{{FIA}}' || !td.constructorId);
+              if (!needsPdf) return null;
               try {
                 console.log(`Fetching FIA entry list PDF for ${year} ${raceName}...`);
                 pdfText = await fetchFiaEntryListText(year, raceName);
@@ -1052,16 +1076,18 @@ export default {
               } catch (e: any) {
                 console.error(`Error parsing FIA entry list PDF: ${e.message}`);
               }
-            }
+              return pdfText;
+            };
 
             // --- 1. Verify and Sync Entry List ---
             if (needEntryList && !isNewPage) {
               if (drivers.length === 0) {
                 drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
               }
-              const pdfTestDrivers = pdfText ? detectTestDriversFromPdf(pdfText, drivers) : [];
+              await fetchPdfIfNeeded(drivers);
+              const resolvedTestDrivers = resolveTestDriversForRace(drivers, { pdfText });
               console.log(`Verifying/updating Entry List table for ${gpPageTitle}...`);
-              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, pdfTestDrivers);
+              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, resolvedTestDrivers);
               if (entryListUpdate.changed) {
                 updatedContent = entryListUpdate.updatedWikitext;
                 changes.push("Entry List");
@@ -1079,13 +1105,13 @@ export default {
 
               const [fp1, fp2, fp3] = await Promise.all([
                 needFp1
-                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 1), drivers).catch(() => null)
+                  ? getPracticeSessionWithFallback(year, round, raceName, race, 1, drivers, apiCtx).catch(() => null)
                   : Promise.resolve(null),
                 needFp2
-                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 2), drivers).catch(() => null)
+                  ? getPracticeSessionWithFallback(year, round, raceName, race, 2, drivers, apiCtx).catch(() => null)
                   : Promise.resolve(null),
                 needFp3
-                  ? scrapePracticeSession(buildPracticeSessionUrl(year, round, raceName, 3), drivers).catch(() => null)
+                  ? getPracticeSessionWithFallback(year, round, raceName, race, 3, drivers, apiCtx).catch(() => null)
                   : Promise.resolve(null),
               ]);
 
@@ -1093,25 +1119,29 @@ export default {
               fp2Results = fp2;
               fp3Results = fp3;
 
-              if (pdfText) {
-                const raceDriverKeys = buildRaceDriverKeys(drivers);
+              await fetchPdfIfNeeded(drivers);
+              const resolvedTestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
+              const testDriverKeys = buildTestDriverNameKeys(resolvedTestDrivers);
+              const raceDriverKeys = buildRaceDriverKeys(drivers);
 
-                const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
-                  if (!sessionData) return;
-                  for (const driverName of Object.keys(sessionData)) {
-                    if (!isRaceDriver(driverName, raceDriverKeys)) {
-                      if (!isDriverListedInFiaPdf(driverName, pdfText!, drivers)) {
-                        console.log(`Filtering out test driver ${driverName} from practice results because they are not on the FIA Entry List.`);
-                        delete sessionData[driverName];
-                      }
+              const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
+                if (!sessionData) return;
+                for (const driverName of Object.keys(sessionData)) {
+                  if (!isRaceDriver(driverName, raceDriverKeys)) {
+                    const knownTestDriver =
+                      isKnownTestDriver(driverName, testDriverKeys) ||
+                      (pdfText ? isDriverListedInFiaPdf(driverName, pdfText, drivers) : false);
+                    if (!knownTestDriver) {
+                      console.log(`Filtering out test driver ${driverName} from practice results because they are not on the entry list.`);
+                      delete sessionData[driverName];
                     }
                   }
-                };
+                }
+              };
 
-                filterSessionResults(fp1Results);
-                filterSessionResults(fp2Results);
-                filterSessionResults(fp3Results);
-              }
+              filterSessionResults(fp1Results);
+              filterSessionResults(fp2Results);
+              filterSessionResults(fp3Results);
 
               const hasAnyPracticeData =
                 (fp1Results && Object.keys(fp1Results).length > 0) ||
@@ -1156,9 +1186,9 @@ export default {
               }
 
               if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0) {
-                const testDrivers = detectTestDriversFromFp1(drivers, fp1Results, pdfText);
-                if (testDrivers.length > 0) {
-                  for (const td of testDrivers) {
+                const fp1TestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
+                if (fp1TestDrivers.length > 0) {
+                  for (const td of fp1TestDrivers) {
                     if (!lookupTestDriverNationality(td.name)) {
                       await appendKvWarning(
                         env.F1_WIKI_STATE,
@@ -1168,7 +1198,7 @@ export default {
                     }
                   }
                   console.log(`Safely merging FP1 test drivers into Entry List table for ${gpPageTitle}...`);
-                  const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, testDrivers);
+                  const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, fp1TestDrivers);
                   if (entryListUpdate.changed) {
                     updatedContent = entryListUpdate.updatedWikitext;
                     changes.push("Entry List (Test Drivers)");

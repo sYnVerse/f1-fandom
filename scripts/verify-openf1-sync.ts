@@ -2,10 +2,13 @@ import {
   createF1ApiContext,
   fetchOpenF1Json,
   fetchRoundJolpicaData,
+  formatOpenF1PracticeTime,
   formatOpenF1SessionSegmentTime,
   formatOpenF1Time,
   getDriverStandings,
+  getOpenF1PracticeSessionResult,
   getOpenF1SprintQualifyingResult,
+  matchOpenF1PracticeSession,
   matchOpenF1SprintQualifyingSession,
   OpenF1Session,
 } from '../src/f1-api';
@@ -87,6 +90,41 @@ async function main(): Promise<void> {
     matchOpenF1SprintQualifyingSession(sampleSessions, miamiRace, 6)?.session_key === 10024,
     'Miami GP matches Miami session'
   );
+
+  // 3b. Practice session matching
+  console.log('Testing matchOpenF1PracticeSession...');
+  const practiceSessions: OpenF1Session[] = [
+    {
+      session_key: 11308,
+      session_name: 'Practice 1',
+      date_start: '2026-06-26T11:30:00+00:00',
+      circuit_short_name: 'Spielberg',
+    },
+    {
+      session_key: 11309,
+      session_name: 'Practice 2',
+      date_start: '2026-06-26T15:30:00+00:00',
+      circuit_short_name: 'Spielberg',
+    },
+  ];
+  const austriaRace = {
+    round: '8',
+    date: '2026-06-28',
+    raceName: 'Austrian Grand Prix',
+    Circuit: { circuitId: 'red_bull_ring' },
+    FirstPractice: { date: '2026-06-26', time: '11:30:00Z' },
+    SecondPractice: { date: '2026-06-26', time: '15:30:00Z' },
+  };
+  assert(
+    matchOpenF1PracticeSession(practiceSessions, austriaRace, 8, 1)?.session_key === 11308,
+    'Austria FP1 matches Spielberg session'
+  );
+  assert(
+    matchOpenF1PracticeSession(practiceSessions, austriaRace, 8, 2)?.session_key === 11309,
+    'Austria FP2 matches Spielberg session'
+  );
+  assert(formatOpenF1PracticeTime({ duration: 67.796, dns: false, dsq: false }) === '1:07.796', 'Practice time format');
+  assert(formatOpenF1PracticeTime({ duration: null, dns: true, dsq: false }) === 'DNS', 'Practice DNS format');
 
   // 4. Test generateSprintQualifyingWikitext
   console.log('Testing generateSprintQualifyingWikitext...');
@@ -197,6 +235,24 @@ async function main(): Promise<void> {
     assert(
       integrationCtx.apiCallCount <= 8,
       'Reusing ctx cache does not add network calls for session/results'
+    );
+
+    const austriaFp1 = await getOpenF1PracticeSessionResult(
+      2026,
+      8,
+      austriaRace,
+      1,
+      roundData.drivers,
+      integrationCtx
+    );
+    assert(austriaFp1 !== null && Object.keys(austriaFp1).length >= 20, 'Austria 2026 FP1 returns practice results');
+    assert(
+      Object.values(austriaFp1!).some(r => r.driverName.includes('Iwasa')),
+      'Austria FP1 includes test driver Ayumu Iwasa'
+    );
+    assert(
+      Object.values(austriaFp1!).some(r => r.time === '1:07.796'),
+      'Austria FP1 pole time formatted from OpenF1 duration'
     );
   } catch (error: any) {
     console.log(`SKIP: OpenF1 live integration tests (${error?.message || error})`);
