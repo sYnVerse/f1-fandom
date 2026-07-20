@@ -1,122 +1,92 @@
 {
   "f1.py": {
-    "mtime": 1782592440.0988286,
-    "ast_hash": "bc6958eb00282f758332ca2995514a95",
+    "mtime": 1784526436.3701055,
+    "ast_hash": "73188197bd0c481ab138dfcf612978cf",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1783154775.8466358,
-    "ast_hash": "ebde82e03ab0540919e97642ac9e3123",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "dc3fb20d919f28170a5816dc1387a0e6",
     "semantic_hash": ""
   },
   "pyergast.py": {
-    "mtime": 1780861190.0701988,
-    "ast_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9",
-    "semantic_hash": "0c40a8d93b8cf790aeaa9b6e52ce9fb9"
+    "mtime": 1784526436.3741055,
+    "ast_hash": "a1d0dd4a4cb6e32ad8cde361b8ad3375",
+    "semantic_hash": ""
   },
   "src/f1-api.ts": {
-    "mtime": 1783180419.4853692,
-    "ast_hash": "c3d5d792f36e7066579e7375b7e81c2c",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "33dfb3be5eab45a9f4e130a84636a0ad",
     "semantic_hash": ""
   },
   "src/frontend-html.ts": {
-    "mtime": 1783151620.8829985,
-    "ast_hash": "4da70a6f66aec71210f16572d9e6c6d7",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "5f15506a83220b6529521d9fed88f335",
     "semantic_hash": ""
   },
   "src/index.ts": {
-    "mtime": 1783180419.4969242,
-    "ast_hash": "96fef9d9e3ffc0b8e5b50b2b8eba167e",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "0cf635d5a1da77ceb8ecfb050c9d24f4",
     "semantic_hash": ""
   },
   "src/llm-reporter.ts": {
-    "mtime": 1782676662.3515801,
-    "ast_hash": "4318eeca5a109a35ec059c21de7c3347",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "879326945f5b7ffb1f86789969c9b74c",
     "semantic_hash": ""
   },
   "src/stats.ts": {
-    "mtime": 1782796377.5147684,
-    "ast_hash": "55f429fcef2391b4681b26f6a6b9e488",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "fc360db5bd44261305d8e00328659b1a",
     "semantic_hash": ""
   },
   "src/statsf1.ts": {
-    "mtime": 1780699321.9604466,
+    "mtime": 1784526436.3741055,
     "ast_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb",
     "semantic_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb"
   },
   "src/wiki.ts": {
-    "mtime": 1782676662.386632,
-    "ast_hash": "96918686ebec72fe17777edb44ee3006",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "ff984a106e992e05fa800a7b5f2044cb",
     "semantic_hash": ""
   },
   "src/wikitext-generator.ts": {
-    "mtime": 1783154455.5159478,
-    "ast_hash": "7c7c93aba10862d548c83121c45b192e",
+    "mtime": 1784526436.3781056,
+    "ast_hash": "6885fe87b94fbd6be2560ca3015cc49c",
     "semantic_hash": ""
   },
   "tsconfig.json": {
-    "mtime": 1780175692.3351696,
+    "mtime": 1784526436.3781056,
     "ast_hash": "fe3f28b7328d6170e1e9801beadc1073",
     "semantic_hash": "fe3f28b7328d6170e1e9801beadc1073"
   },
-  ".github/dependabot.yml": {
-    "mtime": 1781982355.6259725,
-    "ast_hash": "350e7dc36d57a75a9a2db3a7cd71f78a",
-    "semantic_hash": "350e7dc36d57a75a9a2db3a7cd71f78a"
-  },
   "README.md": {
-    "mtime": 1783155000.038616,
-    "ast_hash": "b3cf19f8b8bf56917aa7bca66bb6fc04",
-    "semantic_hash": ""
-  },
-  ".claude/settings.json": {
-    "mtime": 1782530453.9940012,
-    "ast_hash": "7bf81dca0376bde3a32244b82bc7cbc0",
-    "semantic_hash": ""
-  },
-  "CLAUDE.md": {
-    "mtime": 1782530453.9919808,
-    "ast_hash": "8a6643a420fdad6bfb583523bc6cef16",
-    "semantic_hash": ""
-  },
-  "scripts/verify-infobox-update.ts": {
-    "mtime": 1782580286.5726051,
-    "ast_hash": "376de37089ae14bf4a61e5c3f7dfa04d",
-    "semantic_hash": ""
-  },
-  "scripts/verify-jolpica-cache.ts": {
-    "mtime": 1782579164.6885,
-    "ast_hash": "bff0cf6cb04f5eac5474c7ff33bf88e1",
+    "mtime": 1784526436.3701055,
+    "ast_hash": "e19fbe95556195db1b3429d6c91fc39a",
     "semantic_hash": ""
   },
   "src/f1-api-cache.ts": {
-    "mtime": 1783180419.4743612,
-    "ast_hash": "344dfa1b315e1185e7eb52df59a35495",
-    "semantic_hash": ""
-  },
-  "scripts/verify-sync-kv.ts": {
-    "mtime": 1782584162.7478974,
-    "ast_hash": "4551d999014820be64a093b269431b68",
-    "semantic_hash": ""
-  },
-  "scripts/verify-wikitext-parse.ts": {
-    "mtime": 1782582799.958257,
-    "ast_hash": "bc01445e46e72df809c67ae5c47e0403",
+    "mtime": 1784526621.3906758,
+    "ast_hash": "421caf47aa74f31a6ed6448f0cba04ea",
     "semantic_hash": ""
   },
   "src/sync-kv.ts": {
-    "mtime": 1783154463.740357,
-    "ast_hash": "bffa8259fcc86d35cae27f09637351f3",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "5ca69ff9da90e6d5e6ee3e0b722c832c",
     "semantic_hash": ""
   },
   "src/wikitext-parse.ts": {
-    "mtime": 1783138507.7207694,
-    "ast_hash": "6cf1d089e258132f0d42d607654ebf04",
+    "mtime": 1784526436.3781056,
+    "ast_hash": "ad677c1ac586d15581ecc2ba7fa45d0d",
     "semantic_hash": ""
   },
   "src/kv-ops.ts": {
-    "mtime": 1783180419.510936,
-    "ast_hash": "84ba06cc5db76db528296ab596f0ad14",
+    "mtime": 1784526436.3741055,
+    "ast_hash": "b07e9fd2a046392cb773714b0b885846",
+    "semantic_hash": ""
+  },
+  "src/fia-pdf-parser.ts": {
+    "mtime": 1784526436.3741055,
+    "ast_hash": "2fcee5c66ab03140fc27af9529ef5cfc",
     "semantic_hash": ""
   }
 }
