@@ -12,6 +12,8 @@ const KV_CACHE_PREFIX = 'f1_api_cache:';
 
 const TTL_SCHEDULE_CURRENT = 604_800;
 const TTL_STANDINGS_FRESH = 86_400;
+/** Short TTL while Jolpi standings lag behind the latest concluded race. */
+const TTL_STANDINGS_STALE = 1_200;
 const TTL_ROUND_DATA = 86_400;
 const TTL_DEFAULT = 1_200;
 
@@ -79,6 +81,32 @@ export function classifyJolpicaUrl(url: string): JolpicaUrlClass {
   if (/\/\d{4}\/(driver|constructor)Standings\.json$/.test(path)) return 'seasonStandings';
   if (/\/\d{4}\/\d+\//.test(path)) return 'roundData';
   return 'other';
+}
+
+/** Round reported in a season standings payload, or 0 when missing. */
+export function getSeasonStandingsRound(data: unknown): number {
+  const lists = (data as { MRData?: { StandingsTable?: { StandingsLists?: Array<{ round?: string }> } } })
+    ?.MRData?.StandingsTable?.StandingsLists;
+  return lists?.[0]?.round ? parseInt(lists[0].round, 10) : 0;
+}
+
+/**
+ * True when cached active-season standings are behind the latest concluded race.
+ * Used to bust permanent/stale KV entries that would otherwise block Career Results updates.
+ */
+export function shouldRevalidateSeasonStandings(
+  url: string,
+  data: unknown,
+  ctx?: F1ApiContext
+): boolean {
+  if (classifyJolpicaUrl(url) !== 'seasonStandings') return false;
+  const year = parseYearFromJolpicaUrl(url);
+  if (year === null) return false;
+  const activeYear = ctx?.activeSeasonYear ?? ACTIVE_F1_SEASON;
+  if (year !== activeYear) return false;
+  const latestConcluded = ctx?.latestConcludedRound ?? 0;
+  if (latestConcluded <= 0) return false;
+  return getSeasonStandingsRound(data) < latestConcluded;
 }
 
 export function isResponseEmpty(url: string, data: unknown): boolean {
@@ -254,13 +282,13 @@ export function getCacheTtl(
   }
 
   if (urlClass === 'seasonStandings') {
-    const lists = (data as { MRData?: { StandingsTable?: { StandingsLists?: Array<{ round?: string }> } } })
-      ?.MRData?.StandingsTable?.StandingsLists;
-    const standingsRound = lists?.[0]?.round ? parseInt(lists[0].round, 10) : 0;
+    const standingsRound = getSeasonStandingsRound(data);
     if (latestConcluded > 0 && standingsRound >= latestConcluded) {
       return TTL_STANDINGS_FRESH;
     }
-    return undefined;
+    // Behind the latest concluded race (or unknown progress): short TTL so we keep polling.
+    // Never permanently cache active-season standings — that froze Career Results templates.
+    return TTL_STANDINGS_STALE;
   }
 
   if (urlClass === 'roundData' && round !== null) {
@@ -427,10 +455,17 @@ export async function cachedJolpicaJson<T>(
         const raw = await ctx.kv.get(kvCacheKey(url));
         if (raw) {
           const data = JSON.parse(raw);
-          const parsed = parse(data);
-          if (ctx) ctx.cache.set(url, parsed);
-          resolve(parsed);
-          return;
+          if (shouldRevalidateSeasonStandings(url, data, ctx)) {
+            console.log(
+              `Revalidating stale season standings cache (round ${getSeasonStandingsRound(data)} < concluded ${ctx.latestConcludedRound}): ${url}`
+            );
+            // Fall through to network fetch and overwrite the stale KV entry.
+          } else {
+            const parsed = parse(data);
+            if (ctx) ctx.cache.set(url, parsed);
+            resolve(parsed);
+            return;
+          }
         }
       }
 

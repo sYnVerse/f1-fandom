@@ -204,8 +204,17 @@ function testGetCacheTtl() {
   const ctx = createF1ApiContext();
   ctx.latestConcludedRound = 5;
 
-  assertPermanent(getCacheTtl(STANDINGS_URL, staleStandings, ctx), 'stale season standings');
+  assert(
+    getCacheTtl(STANDINGS_URL, staleStandings, ctx) === 1_200,
+    'stale season standings should use short TTL (not permanent)'
+  );
   assert(getCacheTtl(STANDINGS_URL, freshStandings, ctx) === 86_400, 'fresh standings TTL 24h');
+
+  // Without latestConcluded context, still avoid permanent cache for current-season standings.
+  assert(
+    getCacheTtl(STANDINGS_URL, freshStandings, createF1ApiContext()) === 1_200,
+    'current-season standings without latestConcluded should use short TTL'
+  );
 
   const constructorUrl = `${BASE}/2026/constructorStandings.json?limit=1000`;
   assert(getCacheTtl(constructorUrl, freshStandings, ctx) === 86_400, 'fresh constructor standings TTL');
@@ -360,14 +369,46 @@ async function testStandingsTtlOnFetch() {
   await cachedJolpicaJson(freshUrl, ctx, (data: any) => data);
 
   assert(
-    kv.putOptions.get(`f1_api_cache:${staleUrl}`) === undefined,
-    'Stale standings should be permanent KV'
+    kv.putOptions.get(`f1_api_cache:${staleUrl}`)?.expirationTtl === 1_200,
+    'Stale standings should get short KV TTL (not permanent)'
   );
   assert(
     kv.putOptions.get(`f1_api_cache:${freshUrl}`)?.expirationTtl === 86_400,
     'Fresh standings should get 24h KV TTL'
   );
-  console.log('PASS: standings TTL on KV write (stale permanent, fresh 24h)');
+  console.log('PASS: standings TTL on KV write (stale 20m, fresh 24h)');
+}
+
+async function testStaleStandingsKvRevalidation() {
+  fetchCount = 0;
+  const kv = createMockKv();
+  const stalePayload = {
+    MRData: {
+      StandingsTable: {
+        StandingsLists: [{ round: '3', DriverStandings: [{ position: '1', points: '10' }] }],
+      },
+    },
+  };
+  const cacheKey = `f1_api_cache:${STANDINGS_URL}`;
+  kv.store.set(cacheKey, JSON.stringify(stalePayload));
+
+  const ctx = createF1ApiContext(kv);
+  // Cached standings are from round 3; latest concluded is 5 → must refetch.
+  ctx.latestConcludedRound = 5;
+
+  const { cachedJolpicaJson } = await import('../src/f1-api-cache');
+  const data: any = await cachedJolpicaJson(STANDINGS_URL, ctx, (d: any) => d);
+
+  assert(fetchCount === 1, `Expected refetch of stale standings, got ${fetchCount}`);
+  assert(
+    data?.MRData?.StandingsTable?.StandingsLists?.[0]?.round === '5',
+    'Should use freshly fetched standings after revalidation'
+  );
+  assert(
+    kv.putOptions.get(cacheKey)?.expirationTtl === 86_400,
+    'Revalidated fresh standings should be written with 24h TTL'
+  );
+  console.log('PASS: stale season standings KV revalidation');
 }
 
 async function testActiveScheduleNotOverwrittenByOtherYears() {
@@ -396,6 +437,7 @@ async function main() {
   await testRateLimitSpacing();
   await testApiKeyHeader();
   await testStandingsTtlOnFetch();
+  await testStaleStandingsKvRevalidation();
   await testActiveScheduleNotOverwrittenByOtherYears();
   console.log('All Jolpica cache verification tests passed.');
 }
