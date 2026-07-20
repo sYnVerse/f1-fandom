@@ -7,12 +7,15 @@ import {
   formatOpenF1Time,
   getDriverStandings,
   getOpenF1PracticeSessionResult,
+  getOpenF1QualifyingResult,
   getOpenF1SprintQualifyingResult,
+  hasQualifyingSessionTimes,
   matchOpenF1PracticeSession,
+  matchOpenF1QualifyingSession,
   matchOpenF1SprintQualifyingSession,
   OpenF1Session,
 } from '../src/f1-api';
-import { generateSprintQualifyingWikitext } from '../src/wikitext-generator';
+import { generateSprintQualifyingWikitext, qualifyingWikitextHasLapTimes } from '../src/wikitext-generator';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(message);
@@ -89,6 +92,35 @@ async function main(): Promise<void> {
   assert(
     matchOpenF1SprintQualifyingSession(sampleSessions, miamiRace, 6)?.session_key === 10024,
     'Miami GP matches Miami session'
+  );
+
+  // 3a. Regular qualifying session matching + blank-times helpers
+  console.log('Testing matchOpenF1QualifyingSession / hasQualifyingSessionTimes...');
+  const qualiSessions: OpenF1Session[] = [
+    {
+      session_key: 11330,
+      session_name: 'Qualifying',
+      date_start: '2026-07-18T14:00:00+00:00',
+      circuit_short_name: 'Spa-Francorchamps',
+    },
+  ];
+  const belgianRace = {
+    round: '10',
+    date: '2026-07-19',
+    raceName: 'Belgian Grand Prix',
+    Circuit: { circuitId: 'spa' },
+    Qualifying: { date: '2026-07-18', time: '14:00:00Z' },
+  };
+  assert(
+    matchOpenF1QualifyingSession(qualiSessions, belgianRace, 10)?.session_key === 11330,
+    'Belgian GP matches Spa Qualifying session'
+  );
+  assert(!hasQualifyingSessionTimes([{ Q1: '', Q2: undefined }]), 'blank Q fields lack times');
+  assert(hasQualifyingSessionTimes([{ Q1: '1:44.361' }]), 'Q1 time counts');
+  assert(!qualifyingWikitextHasLapTimes('|  |\n|  |'), 'blank wikitext has no lap times');
+  assert(
+    qualifyingWikitextHasLapTimes("| '''1:44.361'''"),
+    'wikitext with lap time is detected'
   );
 
   // 3b. Practice session matching

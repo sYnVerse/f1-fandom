@@ -67,6 +67,15 @@ export interface QualifyingResult {
   Q3?: string;
 }
 
+/** True when at least one driver has a real Q1/Q2/Q3 time (not blank/nan). */
+export function hasQualifyingSessionTimes(
+  results: Array<{ Q1?: string; Q2?: string; Q3?: string }>
+): boolean {
+  return results.some(q =>
+    [q.Q1, q.Q2, q.Q3].some(t => typeof t === 'string' && t.trim() !== '' && t !== 'nan')
+  );
+}
+
 export interface DriverStanding {
   position: string;
   positionText: string;
@@ -642,7 +651,7 @@ export async function fetchRoundJolpicaData(
   } = options;
 
   const [
-    qualiResults,
+    jolpicaQualiResults,
     gpResults,
     sprintResults,
     currentDrivers,
@@ -658,8 +667,39 @@ export async function fetchRoundJolpicaData(
     needStandings && round > 1 ? getDriverStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
     needStandings ? getConstructorStandings(year, round, ctx).catch(() => []) : Promise.resolve([]),
     needStandings && round > 1 ? getConstructorStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
-    needDrivers || needSprintQuali ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
+    needDrivers || needSprintQuali || needQuali ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
   ]);
+
+  let qualiResults = jolpicaQualiResults;
+  if (needQuali && !hasQualifyingSessionTimes(qualiResults)) {
+    const race = raceForRound ?? ctx?.schedule?.find(r => parseInt(r.round, 10) === round);
+    if (race) {
+      const openF1Quali = await getOpenF1QualifyingResult(
+        year,
+        round,
+        race,
+        ctx,
+        currentDrivers,
+        prevDrivers,
+        drivers
+      ).catch(e => {
+        console.error("Failed to fetch OpenF1 Qualifying results:", e);
+        return [] as QualifyingResult[];
+      });
+      if (hasQualifyingSessionTimes(openF1Quali)) {
+        console.log(
+          qualiResults.length > 0
+            ? `Jolpica qualifying for round ${round} lacked times; using OpenF1 fallback (${openF1Quali.length} drivers).`
+            : `Jolpica qualifying empty for round ${round}; using OpenF1 fallback (${openF1Quali.length} drivers).`
+        );
+        qualiResults = openF1Quali;
+      } else if (qualiResults.length > 0) {
+        console.log(
+          `Qualifying results for round ${round} have driver order but no session times yet; will retry later.`
+        );
+      }
+    }
+  }
 
   let sprintQualiResults: QualifyingResult[] = [];
   if (needSprintQuali && hasSprint) {
@@ -776,13 +816,11 @@ function circuitsMatch(scheduleCircuitId: string, openF1ShortName: string): bool
   );
 }
 
-/** Pick the closest Sprint Qualifying session for a race weekend (exported for tests). */
-export function matchOpenF1SprintQualifyingSession(
+function matchOpenF1SessionNearDate(
   sessions: OpenF1Session[],
   race: CachedScheduleRace,
-  round: number
+  targetDateStr: string
 ): OpenF1Session | undefined {
-  const targetDateStr = race.SprintQualifying?.date ?? race.date;
   const targetDate = new Date(`${targetDateStr}T12:00:00Z`);
   const circuitId = race.Circuit?.circuitId;
 
@@ -807,10 +845,35 @@ export function matchOpenF1SprintQualifyingSession(
       bestDiffMs = diffMs;
     }
   }
+  return best;
+}
 
+/** Pick the closest Sprint Qualifying session for a race weekend (exported for tests). */
+export function matchOpenF1SprintQualifyingSession(
+  sessions: OpenF1Session[],
+  race: CachedScheduleRace,
+  round: number
+): OpenF1Session | undefined {
+  const targetDateStr = race.SprintQualifying?.date ?? race.date;
+  const best = matchOpenF1SessionNearDate(sessions, race, targetDateStr);
   if (!best) {
     const raceName = race.raceName || 'Unknown';
     console.warn(`No matching OpenF1 Sprint Qualifying session found for round ${round} (${raceName})`);
+  }
+  return best;
+}
+
+/** Pick the closest Qualifying session for a race weekend (exported for tests). */
+export function matchOpenF1QualifyingSession(
+  sessions: OpenF1Session[],
+  race: CachedScheduleRace,
+  round: number
+): OpenF1Session | undefined {
+  const targetDateStr = race.Qualifying?.date ?? race.date;
+  const best = matchOpenF1SessionNearDate(sessions, race, targetDateStr);
+  if (!best) {
+    const raceName = race.raceName || 'Unknown';
+    console.warn(`No matching OpenF1 Qualifying session found for round ${round} (${raceName})`);
   }
   return best;
 }
@@ -987,45 +1050,15 @@ export async function getDriverConstructor(
   return getDriverConstructorForSeason(year, driverId, ctx);
 }
 
-export async function getOpenF1SprintQualifyingResult(
+async function mapOpenF1SessionResultsToQualifying(
   year: number,
   round: number,
-  race: CachedScheduleRace,
-  ctx?: F1ApiContext,
+  results: OpenF1SessionResult[],
+  ctx: F1ApiContext | undefined,
   currentDrivers?: DriverStanding[],
   prevDrivers?: DriverStanding[] | null,
   driversForRound?: Driver[]
 ): Promise<QualifyingResult[]> {
-  const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=Sprint%20Qualifying&year=${year}`;
-  let sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
-  
-  if ((!sessions || sessions.length === 0) && sessionsUrl.includes('session_name=Sprint%20Qualifying')) {
-    const fallbackUrl = sessionsUrl.replace('session_name=Sprint%20Qualifying', 'session_name=Sprint%20Shootout');
-    sessions = await fetchOpenF1Json<OpenF1Session[]>(fallbackUrl, ctx, 86400 * 7);
-  }
-
-  if (!sessions || sessions.length === 0) {
-    console.warn(`No OpenF1 Sprint Qualifying sessions found for year ${year}`);
-    return [];
-  }
-
-  const matchedSession = matchOpenF1SprintQualifyingSession(sessions, race, round);
-  const raceName = race.raceName || 'Unknown';
-
-  if (!matchedSession) {
-    return [];
-  }
-
-  console.log(`Matched OpenF1 session_key ${matchedSession.session_key} for ${raceName}`);
-
-  const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
-  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
-
-  if (!results || results.length === 0) {
-    console.warn(`No OpenF1 session results found for session_key ${matchedSession.session_key}`);
-    return [];
-  }
-
   results.sort((a, b) => a.position - b.position);
   const drivers = driversForRound ?? await getDriversForRaceWithFallback(year, round, ctx).catch(() => []);
 
@@ -1086,6 +1119,101 @@ export async function getOpenF1SprintQualifyingResult(
       Q3: formatOpenF1SessionSegmentTime(r.duration?.[2], r, 2),
     };
   });
+}
+
+export async function getOpenF1SprintQualifyingResult(
+  year: number,
+  round: number,
+  race: CachedScheduleRace,
+  ctx?: F1ApiContext,
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null,
+  driversForRound?: Driver[]
+): Promise<QualifyingResult[]> {
+  const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=Sprint%20Qualifying&year=${year}`;
+  let sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
+  
+  if ((!sessions || sessions.length === 0) && sessionsUrl.includes('session_name=Sprint%20Qualifying')) {
+    const fallbackUrl = sessionsUrl.replace('session_name=Sprint%20Qualifying', 'session_name=Sprint%20Shootout');
+    sessions = await fetchOpenF1Json<OpenF1Session[]>(fallbackUrl, ctx, 86400 * 7);
+  }
+
+  if (!sessions || sessions.length === 0) {
+    console.warn(`No OpenF1 Sprint Qualifying sessions found for year ${year}`);
+    return [];
+  }
+
+  const matchedSession = matchOpenF1SprintQualifyingSession(sessions, race, round);
+  const raceName = race.raceName || 'Unknown';
+
+  if (!matchedSession) {
+    return [];
+  }
+
+  console.log(`Matched OpenF1 session_key ${matchedSession.session_key} for ${raceName}`);
+
+  const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
+  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
+
+  if (!results || results.length === 0) {
+    console.warn(`No OpenF1 session results found for session_key ${matchedSession.session_key}`);
+    return [];
+  }
+
+  return mapOpenF1SessionResultsToQualifying(
+    year,
+    round,
+    results,
+    ctx,
+    currentDrivers,
+    prevDrivers,
+    driversForRound
+  );
+}
+
+export async function getOpenF1QualifyingResult(
+  year: number,
+  round: number,
+  race: CachedScheduleRace,
+  ctx?: F1ApiContext,
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null,
+  driversForRound?: Driver[]
+): Promise<QualifyingResult[]> {
+  const sessionsUrl = `https://api.openf1.org/v1/sessions?session_name=Qualifying&year=${year}`;
+  const sessions = await fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, ctx, 86400 * 7);
+
+  if (!sessions || sessions.length === 0) {
+    console.warn(`No OpenF1 Qualifying sessions found for year ${year}`);
+    return [];
+  }
+
+  const matchedSession = matchOpenF1QualifyingSession(sessions, race, round);
+  const raceName = race.raceName || 'Unknown';
+
+  if (!matchedSession) {
+    return [];
+  }
+
+  console.log(`Matched OpenF1 Qualifying session_key ${matchedSession.session_key} for ${raceName}`);
+
+  const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
+  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
+
+  if (!results || results.length === 0) {
+    console.warn(`No OpenF1 Qualifying results found for session_key ${matchedSession.session_key}`);
+    return [];
+  }
+
+  return mapOpenF1SessionResultsToQualifying(
+    year,
+    round,
+    results,
+    ctx,
+    currentDrivers,
+    prevDrivers,
+    driversForRound
+  );
 }
 
 export interface OpenF1PracticeSessionResult {

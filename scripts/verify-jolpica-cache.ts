@@ -8,8 +8,9 @@ import {
   getCacheTtl,
   isResponseEmpty,
   isRoundDataSessionComplete,
+  shouldRevalidateIncompleteQualifying,
 } from '../src/f1-api-cache';
-import { getSchedule, getRaceResult } from '../src/f1-api';
+import { getSchedule, getRaceResult, hasQualifyingSessionTimes } from '../src/f1-api';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 const SCHEDULE_URL = `${BASE}/2026.json?limit=1000`;
@@ -184,6 +185,33 @@ function testIsResponseEmpty() {
   const fullSchedule = { MRData: { RaceTable: { Races: [{ season: '2026' }] } } };
   assert(isResponseEmpty(SCHEDULE_URL, emptySchedule), 'empty schedule');
   assert(!isResponseEmpty(SCHEDULE_URL, fullSchedule), 'non-empty schedule');
+
+  const qualiUrl = `${BASE}/2026/10/qualifying.json?limit=1000`;
+  const orderOnlyQuali = {
+    MRData: { RaceTable: { Races: [{ QualifyingResults: [{ position: '1', number: '1' }] }] } },
+  };
+  const timedQuali = {
+    MRData: {
+      RaceTable: {
+        Races: [{ QualifyingResults: [{ position: '1', number: '1', Q1: '1:44.361' }] }],
+      },
+    },
+  };
+  assert(isResponseEmpty(qualiUrl, orderOnlyQuali), 'order-only qualifying is incomplete/empty');
+  assert(!isResponseEmpty(qualiUrl, timedQuali), 'timed qualifying is not empty');
+  assert(
+    shouldRevalidateIncompleteQualifying(qualiUrl, orderOnlyQuali),
+    'order-only qualifying should be revalidated'
+  );
+  assert(
+    !shouldRevalidateIncompleteQualifying(qualiUrl, timedQuali),
+    'timed qualifying should not be revalidated as incomplete'
+  );
+  assert(!hasQualifyingSessionTimes([{ position: '1' } as any]), 'hasQualifyingSessionTimes false without times');
+  assert(
+    hasQualifyingSessionTimes([{ Q1: '1:44.361' }]),
+    'hasQualifyingSessionTimes true with Q1'
+  );
   console.log('PASS: isResponseEmpty');
 }
 
@@ -227,8 +255,15 @@ function testGetCacheTtl() {
   assertPermanent(getCacheTtl(pastRoundUrl, roundResults, ctx), 'past concluded round data');
 
   const qualiUrl = `${BASE}/2026/5/qualifying.json?limit=1000`;
-  const qualiData = {
+  const orderOnlyQuali = {
     MRData: { RaceTable: { Races: [{ QualifyingResults: [{ position: '1' }] }] } },
+  };
+  const timedQuali = {
+    MRData: {
+      RaceTable: {
+        Races: [{ QualifyingResults: [{ position: '1', Q1: '1:20.000', Q2: '1:19.500', Q3: '1:19.000' }] }],
+      },
+    },
   };
   ctx.schedule = [{
     round: '5',
@@ -245,9 +280,13 @@ function testGetCacheTtl() {
     ),
     'qualifying session should be complete after quali end'
   );
+  assert(
+    getCacheTtl(qualiUrl, orderOnlyQuali, ctx, new Date('2026-07-09T16:00:00Z')) === 1_200,
+    'order-only qualifying must not be permanently cached'
+  );
   assertPermanent(
-    getCacheTtl(qualiUrl, qualiData, ctx, new Date('2026-07-09T16:00:00Z')),
-    'session-complete qualifying'
+    getCacheTtl(qualiUrl, timedQuali, ctx, new Date('2026-07-09T16:00:00Z')),
+    'session-complete qualifying with times'
   );
 
   console.log('PASS: getCacheTtl (schedule, standings, session-complete, past round)');
