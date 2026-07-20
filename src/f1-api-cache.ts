@@ -126,6 +126,15 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
     const races = (mr.RaceTable as { Races?: Array<Record<string, unknown>> } | undefined)?.Races;
     if (!races || races.length === 0) return true;
     const race = races[0];
+
+    // Order-only qualifying payloads (positions without Q1/Q2/Q3) are incomplete — treat as empty
+    // so we do not permanently cache them or skip retries (Belgian GP 2026 round 10).
+    if (parseRoundEndpoint(url) === 'qualifying') {
+      const qualiResults = race.QualifyingResults as Array<Record<string, unknown>> | undefined;
+      if (!qualiResults?.length) return true;
+      return !qualifyingRawResultsHaveTimes(qualiResults);
+    }
+
     if ((race.Results as unknown[] | undefined)?.length) return false;
     if ((race.SprintResults as unknown[] | undefined)?.length) return false;
     if ((race.QualifyingResults as unknown[] | undefined)?.length) return false;
@@ -141,6 +150,33 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
   if (lapsRaces?.length && lapsRaces[0]?.Laps?.length) return false;
 
   return false;
+}
+
+function qualifyingRawResultsHaveTimes(
+  results: Array<Record<string, unknown>>
+): boolean {
+  return results.some(q =>
+    ['Q1', 'Q2', 'Q3'].some(key => {
+      const t = q[key];
+      return typeof t === 'string' && t.trim() !== '' && t !== 'nan';
+    })
+  );
+}
+
+/**
+ * True when cached qualifying data has driver order but no session times.
+ * Busts permanent KV entries that would otherwise freeze blank Q1/Q2/Q3 columns.
+ */
+export function shouldRevalidateIncompleteQualifying(
+  url: string,
+  data: unknown
+): boolean {
+  if (classifyJolpicaUrl(url) !== 'roundData') return false;
+  if (parseRoundEndpoint(url) !== 'qualifying') return false;
+  const races = (data as { MRData?: { RaceTable?: { Races?: Array<Record<string, unknown>> } } })
+    ?.MRData?.RaceTable?.Races;
+  const qualiResults = races?.[0]?.QualifyingResults as Array<Record<string, unknown>> | undefined;
+  return !!qualiResults?.length && !qualifyingRawResultsHaveTimes(qualiResults);
 }
 
 export function parseYearFromJolpicaUrl(url: string): number | null {
@@ -460,6 +496,11 @@ export async function cachedJolpicaJson<T>(
               `Revalidating stale season standings cache (round ${getSeasonStandingsRound(data)} < concluded ${ctx.latestConcludedRound}): ${url}`
             );
             // Fall through to network fetch and overwrite the stale KV entry.
+          } else if (shouldRevalidateIncompleteQualifying(url, data)) {
+            console.log(
+              `Revalidating incomplete qualifying cache (driver order without session times): ${url}`
+            );
+            // Fall through to network fetch and overwrite the incomplete KV entry.
           } else {
             const parsed = parse(data);
             if (ctx) ctx.cache.set(url, parsed);

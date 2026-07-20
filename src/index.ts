@@ -4,7 +4,8 @@ import {
   getSchedule,
   setActiveSeasonSchedule,
   getRaceResult, 
-  getQualifyingResult, 
+  getQualifyingResult,
+  hasQualifyingSessionTimes,
   getDriverStandings, 
   getConstructorStandings,
   getDriversForRaceWithFallback,
@@ -14,7 +15,6 @@ import {
   mapDriverNames,
   fetchOfficialRaceName,
   getF1RacingKey,
-  buildPracticeSessionUrl,
   createF1ApiContextFromEnv,
   fetchRoundJolpicaData,
   F1ApiContext,
@@ -32,6 +32,7 @@ import {
   generatePracticeWikitext,
   generateBlankGPWikitext,
   generateLatestEventsWikitext,
+  qualifyingWikitextHasLapTimes,
   EventInfo,
   formatDesktopDate,
   formatMobileDate,
@@ -40,7 +41,6 @@ import {
   generateCareerTeamPositionWikitext,
   getNationalityCode,
   getTeamTemplate,
-  detectTestDriversFromFp1,
   lookupTestDriverNationality,
   detectTestDriversFromJolpica,
   resolveTestDriversForRace,
@@ -835,7 +835,12 @@ export default {
           (!isRaceConcluded || statsTemplatesSynced) &&
           gpPageFullySynced;
 
-        if (roundFullySynced) {
+        // Order-only qualifying can be marked synced with blank Q times. Keep processing the
+        // weekend for a grace period so we can re-sync once Jolpica/OpenF1 publish times.
+        const weekendRepairUntil = new Date(raceEndTime.getTime() + 48 * 60 * 60 * 1000);
+        const allowQualiTimesRepair = now < weekendRepairUntil;
+
+        if (roundFullySynced && !allowQualiTimesRepair) {
           console.log(`Round ${round} (${raceName}) fully synced in KV. Skipping all Jolpica fetches.`);
           continue;
         }
@@ -843,7 +848,13 @@ export default {
         const needGpCareerTemplate = gpSessionCompleted && !gpCareerTemplateSynced;
         const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
         const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
-        const needGpPage = !gpPageFullySynced;
+        const needGpPage = !gpPageFullySynced || (allowQualiTimesRepair && isQualiConcluded);
+
+        if (roundFullySynced && needGpPage) {
+          console.log(
+            `Round ${round} (${raceName}) KV-synced but still in weekend repair window — checking qualifying times.`
+          );
+        }
 
         const markGpPageSectionSynced = async (section: GpPageSection) => {
           gpPageSectionState[section] = true;
@@ -857,7 +868,7 @@ export default {
         const needQuali = needGpPage && isQualiConcluded;
         const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
-        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime || needSprintQuali);
+        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime || needSprintQuali || needQuali);
         const needDrivers = needGpPage && (
           isBackgroundTime ||
           isQualiConcluded ||
@@ -1016,7 +1027,7 @@ export default {
         }
 
         // --- 4. Smart Check for GP Page Sections ---
-        if (gpPageFullySynced) {
+        if (gpPageFullySynced && !allowQualiTimesRepair) {
           console.log(`Round ${round} GP page sections already synced (KV cache). Skipping.`);
         } else {
           try {
@@ -1309,19 +1320,34 @@ export default {
                 pendingGpPageSections.push('sprint_qualifying');
               }
 
-              if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
-                if (!isGpPageSectionSynced('qualifying')) {
+              if (isQualiConcluded && qualiResults && hasQualifyingSessionTimes(qualiResults)) {
+                const qualiHeaderCandidates = [
+                  "=== Qualifying Results ===",
+                  "==== Qualifying Results ====",
+                  "=== Qualifying ===",
+                  "==== Qualifying ===",
+                  "===Qualifying Results===",
+                  "===Qualifying===",
+                ];
+                const bestQualiHeader = findBestHeader(updatedContent, qualiHeaderCandidates, "=== Qualifying Results ===");
+                const existingQualiSection = getSectionContent(updatedContent, bestQualiHeader);
+                const qualiTimesOnWiki = qualifyingWikitextHasLapTimes(existingQualiSection);
+                const needsQualiSync = !isGpPageSectionSynced('qualifying') || !qualiTimesOnWiki;
+
+                if (needsQualiSync) {
+                  if (isGpPageSectionSynced('qualifying') && !qualiTimesOnWiki) {
+                    console.log('  Qualifying KV flag set but session times missing on wiki; re-syncing...');
+                  }
                   const qualifyingWikitext = generateQualifyingWikitext(qualiResults);
-                  const bestQualiHeader = findBestHeader(updatedContent, ["=== Qualifying Results ===", "==== Qualifying Results ====", "=== Qualifying ===", "==== Qualifying ===", "===Qualifying Results===", "===Qualifying==="], "=== Qualifying Results ===");
                   const newContent = replaceSectionWikitext(updatedContent, bestQualiHeader, qualifyingWikitext);
                   if (newContent !== updatedContent) {
                     updatedContent = newContent;
                     changes.push("Qualifying Results");
                   }
-                  await markGpPageSectionSynced('qualifying');
+                  pendingGpPageSections.push('qualifying');
                 }
 
-                if (!isGpPageSectionSynced('grid')) {
+                if (!isGpPageSectionSynced('grid') || needsQualiSync) {
                   const gridWikitext = generateGridWikitext(qualiResults);
                   const bestGridHeader = findBestHeader(updatedContent, ["==== Starting Grid ====", "=== Starting Grid ===", "==== Race Grid ====", "=== Race Grid ===", "===Grid===", "==== Grid ====", "=== Grid ==="], "==== Starting Grid ====");
                   const newGridContent = replaceSectionWikitext(updatedContent, bestGridHeader, gridWikitext);
@@ -1329,8 +1355,10 @@ export default {
                     updatedContent = newGridContent;
                     changes.push("Starting Grid");
                   }
-                  await markGpPageSectionSynced('grid');
+                  pendingGpPageSections.push('grid');
                 }
+              } else if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
+                console.log('  Qualifying results present without session times — skipping wiki sync until times are available.');
               }
 
               if (race.Sprint && isSprintConcluded && sprintResults && sprintResults.length > 0 && !isGpPageSectionSynced('sprint_results')) {
@@ -1385,7 +1413,7 @@ export default {
               if (shouldUpdateInfobox) {
                 const infoboxUpdates: Record<string, string> = {};
 
-                if (isQualiConcluded && qualiResults && qualiResults.length > 0) {
+                if (isQualiConcluded && qualiResults && hasQualifyingSessionTimes(qualiResults)) {
                   const poleSitter = qualiResults[0];
                   if (poleSitter) {
                     const poleName = `${poleSitter.driver.givenName} ${poleSitter.driver.familyName}`;
@@ -1493,7 +1521,7 @@ export default {
                 }
 
                 if (isRaceConcluded) {
-                  const hasQualiData = !!(qualiResults && qualiResults.length > 0);
+                  const hasQualiData = !!(qualiResults && hasQualifyingSessionTimes(qualiResults));
                   const hasSprintData = !!(race.Sprint && sprintResults && sprintResults.length > 0);
                   const hasRaceData = !!(raceResults && raceResults.length > 0);
 
@@ -1514,9 +1542,9 @@ export default {
               }> = [
                 { header: "==Background==", title: "Background", section: 'background_report', check: () => isBackgroundTime },
                 { header: "=== Sprint Qualifying ===", title: "Sprint Qualifying", section: 'sprint_qualifying_report', sessionName: 'Sprint Qualifying', check: () => !!race.Sprint && isSprintQualiConcluded && !!sprintQualiResults && sprintQualiResults.length > 0 },
-                { header: "=== Q1 ===", title: "Q1", section: 'q1_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
-                { header: "=== Q2 ===", title: "Q2", section: 'q2_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
-                { header: "=== Q3 ===", title: "Q3", section: 'q3_report', check: () => isQualiConcluded && !!qualiResults && qualiResults.length > 0 },
+                { header: "=== Q1 ===", title: "Q1", section: 'q1_report', check: () => isQualiConcluded && !!qualiResults && hasQualifyingSessionTimes(qualiResults) },
+                { header: "=== Q2 ===", title: "Q2", section: 'q2_report', check: () => isQualiConcluded && !!qualiResults && hasQualifyingSessionTimes(qualiResults) },
+                { header: "=== Q3 ===", title: "Q3", section: 'q3_report', check: () => isQualiConcluded && !!qualiResults && hasQualifyingSessionTimes(qualiResults) },
                 { header: "=== Sprint Report ===", title: "Sprint Report", section: 'sprint_report', check: () => !!race.Sprint && isSprintConcluded && !!sprintResults && sprintResults.length > 0 },
                 { header: "== Race == ", title: "Race Report", section: 'race_report', check: () => isRaceConcluded && !!raceResults && raceResults.length > 0 },
               ];

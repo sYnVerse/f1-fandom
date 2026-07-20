@@ -320,6 +320,12 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
   return output;
 }
 
+/** True when qualifying wikitext includes at least one lap time (m:ss.mmm). */
+export function qualifyingWikitextHasLapTimes(wikitext: string | null | undefined): boolean {
+  if (!wikitext) return false;
+  return /\d+:\d{2}\.\d{3}/.test(wikitext);
+}
+
 // Generate SPRINT QUALIFYING results wikitext
 export function generateSprintQualifyingWikitext(qualifyingResults: QualifyingResult[]): string {
   if (qualifyingResults.length === 0) return 'No sprint qualifying data available.';
