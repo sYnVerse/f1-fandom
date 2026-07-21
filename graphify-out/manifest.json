@@ -1,92 +1,97 @@
 {
   "f1.py": {
-    "mtime": 1784552008.6359298,
+    "mtime": 1784602508.3710654,
     "ast_hash": "73188197bd0c481ab138dfcf612978cf",
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1784552008.6359298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "dc3fb20d919f28170a5816dc1387a0e6",
     "semantic_hash": ""
   },
   "pyergast.py": {
-    "mtime": 1784552008.6359298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "a1d0dd4a4cb6e32ad8cde361b8ad3375",
     "semantic_hash": ""
   },
   "src/f1-api.ts": {
-    "mtime": 1784552335.8270307,
-    "ast_hash": "7be54148b383e391e1fd8c73436c6054",
+    "mtime": 1784602508.3750653,
+    "ast_hash": "26362bd14d2fda0d36176dd82dd4db71",
     "semantic_hash": ""
   },
   "src/frontend-html.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "5f15506a83220b6529521d9fed88f335",
     "semantic_hash": ""
   },
   "src/index.ts": {
-    "mtime": 1784552412.350732,
-    "ast_hash": "e026a93de9a7b37cfb4e23e46919dc46",
+    "mtime": 1784602842.1666934,
+    "ast_hash": "85b3aba5bfb36c949276fb23d79404f2",
     "semantic_hash": ""
   },
   "src/llm-reporter.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "879326945f5b7ffb1f86789969c9b74c",
     "semantic_hash": ""
   },
   "src/stats.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "fc360db5bd44261305d8e00328659b1a",
     "semantic_hash": ""
   },
   "src/statsf1.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb",
     "semantic_hash": "634aaba7115f2a5d55ea0c70b7fe3fbb"
   },
   "src/wiki.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "ff984a106e992e05fa800a7b5f2044cb",
     "semantic_hash": ""
   },
   "src/wikitext-generator.ts": {
-    "mtime": 1784552335.8270307,
-    "ast_hash": "29c6ede946081ec52efa4fbf843e6a0e",
+    "mtime": 1784602862.10268,
+    "ast_hash": "257ceb449871c24b07ff5110817ab151",
     "semantic_hash": ""
   },
   "tsconfig.json": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "fe3f28b7328d6170e1e9801beadc1073",
     "semantic_hash": "fe3f28b7328d6170e1e9801beadc1073"
   },
   "README.md": {
-    "mtime": 1784552008.6359298,
+    "mtime": 1784602508.3710654,
     "ast_hash": "e19fbe95556195db1b3429d6c91fc39a",
     "semantic_hash": ""
   },
   "src/f1-api-cache.ts": {
-    "mtime": 1784552335.8230307,
-    "ast_hash": "3c6640f2b63b5f14eea613df9fd86057",
+    "mtime": 1784602508.3750653,
+    "ast_hash": "fd8f7ff692f0bbf774c805cfef4a09a4",
     "semantic_hash": ""
   },
   "src/sync-kv.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "5ca69ff9da90e6d5e6ee3e0b722c832c",
     "semantic_hash": ""
   },
   "src/wikitext-parse.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "ad677c1ac586d15581ecc2ba7fa45d0d",
     "semantic_hash": ""
   },
   "src/kv-ops.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "b07e9fd2a046392cb773714b0b885846",
     "semantic_hash": ""
   },
   "src/fia-pdf-parser.ts": {
-    "mtime": 1784552008.6399298,
+    "mtime": 1784602508.3750653,
     "ast_hash": "2fcee5c66ab03140fc27af9529ef5cfc",
+    "semantic_hash": ""
+  },
+  "src/season-roster-2026.ts": {
+    "mtime": 1784602508.3750653,
+    "ast_hash": "03f8150a8522b40c6d01520df9a6d7c1",
     "semantic_hash": ""
   }
 }

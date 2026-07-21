@@ -7,7 +7,9 @@ import {
   detectTestDriversFromJolpica,
   resolveTestDriversForRace,
   updateEntryListTableIfNeeded,
-  extractEntryListTable
+  extractEntryListTable,
+  isWeakTestDriverList,
+  testDriverEntryCompleteness,
 } from '../src/wikitext-generator';
 import { Driver } from '../src/f1-api';
 
@@ -176,7 +178,7 @@ assert(updateWithBoth.changed === true, 'Should update to add Felipe Drugovich')
 assert(!updateWithBoth.updatedWikitext.includes('Patricio O\'Ward'), 'Should remove wiki-only test drivers when authoritative list is provided');
 assert(updateWithBoth.updatedWikitext.includes('Felipe Drugovich'), 'Should have added Felipe Drugovich');
 
-// --- 5. Jolpica-first test driver detection ---
+// --- 5. Test driver resolution: PDF/FP1 beat Jolpica membership ---
 const jolpicaDrivers: Driver[] = [
   ...mainDrivers,
   {
@@ -196,13 +198,117 @@ assert(jolpicaTestDrivers.length === 2, `Expected 2 Jolpica test drivers, got ${
 assert(jolpicaTestDrivers.some(td => td.name === 'Felipe Drugovich'), 'Should detect Drugovich from Jolpica');
 assert(jolpicaTestDrivers.some(td => td.name === 'Ayumu Iwasa'), 'Should detect Iwasa from Jolpica');
 
-const resolvedFromJolpica = resolveTestDriversForRace(jolpicaDrivers, { pdfText: mockPdfText });
-assert(resolvedFromJolpica.length === 2, 'Jolpica should win over PDF-only rows');
-assert(resolvedFromJolpica.find(td => td.name === 'Felipe Drugovich')?.number === '34', 'PDF should enrich Jolpica test driver number');
-assert(resolvedFromJolpica.find(td => td.name === 'Felipe Drugovich')?.constructorId === 'aston_martin', 'PDF should enrich Jolpica test driver team');
+// PDF is authoritative for membership when present (ignores Jolpica-only Iwasa).
+const resolvedFromPdf = resolveTestDriversForRace(jolpicaDrivers, { pdfText: mockPdfText });
+assert(resolvedFromPdf.length === 1, `PDF membership should win over Jolpica extras, got ${resolvedFromPdf.length}`);
+assert(resolvedFromPdf[0].name === 'Felipe Drugovich', 'PDF should return Drugovich');
+assert(resolvedFromPdf[0].number === '34', 'PDF should provide test driver number');
+assert(resolvedFromPdf[0].constructorId === 'aston_martin', 'PDF should provide test driver team');
 
 const resolvedPdfFallback = resolveTestDriversForRace(mainDrivers, { pdfText: mockPdfText });
-assert(resolvedPdfFallback.length === 1, 'Should fall back to PDF when Jolpica has no extra drivers');
+assert(resolvedPdfFallback.length === 1, 'Should use PDF when Jolpica has no extra drivers');
 assert(resolvedPdfFallback[0].name === 'Felipe Drugovich', 'PDF fallback should return Drugovich');
+
+// Jolpica-only (no PDF/FP1) remains available before documents are published.
+const resolvedJolpicaOnly = resolveTestDriversForRace(jolpicaDrivers, {});
+assert(resolvedJolpicaOnly.length === 2, 'Jolpica-only fallback should keep both extras');
+
+// --- 6. Belgian-style flip-flop: previous-round Jolpica juniors must not wipe Crawford ---
+const previousRoundJuniors: Driver[] = [
+  ...mainDrivers,
+  { driverId: 'paul_aron', givenName: 'Paul', familyName: 'Aron' } as Driver,
+  { driverId: 'dino_beganovic', givenName: 'Dino', familyName: 'Beganovic' } as Driver,
+  { driverId: 'luke_browning', givenName: 'Luke', familyName: 'Browning' } as Driver,
+];
+const polluted = detectTestDriversFromJolpica(previousRoundJuniors);
+assert(isWeakTestDriverList(polluted), 'Previous-round juniors without metadata should be weak');
+
+const belgianPdf = `
+In addition to the list of cars and drivers eligible to take part in the event the following drivers may also take part in FP1
+134 CRA Jak Crawford USA Aston Martin Aramco F1 Team Aston Martin Aramco Honda
+`;
+const crawfordResolved = resolveTestDriversForRace(previousRoundJuniors, { pdfText: belgianPdf });
+assert(crawfordResolved.length === 1, 'Belgian PDF should yield only Crawford, not Barcelona juniors');
+assert(crawfordResolved[0].name === 'Jak Crawford', 'Should resolve Jak Crawford from PDF');
+assert(crawfordResolved[0].number === '34', 'Crawford number from PDF');
+assert(crawfordResolved[0].constructorId === 'aston_martin', 'Crawford team from PDF');
+assert(testDriverEntryCompleteness(crawfordResolved[0]) >= 4, 'Crawford entry should be complete');
+
+const wikiWithCrawford = `
+===Entry List===
+{| class="wikitable"
+!<span title="Car number">No.</span>
+!Driver
+!Entrant
+!Constructor
+!Chassis
+!Engine
+!Model
+!Tyre
+|-
+!4
+|{{GBR}} [[Lando Norris]]
+|{{GBR}} [[McLaren|McLaren Mastercard F1 Team]]
+|{{McLaren-CON}}
+|[[McLaren MCL40|MCL40]]
+|{{Mercedes-ENG}}
+|[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+!81
+|{{AUS}} [[Oscar Piastri]]
+|{{GBR}} [[McLaren|McLaren Mastercard F1 Team]]
+|{{McLaren-CON}}
+|[[McLaren MCL40|MCL40]]
+|{{Mercedes-ENG}}
+|[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]
+|-
+!34
+|{{USA}} [[Jak Crawford]]
+|{{GBR}} [[Aston Martin|Aston Martin Aramco F1 Team]]
+|{{Aston Martin-CON}}
+|[[Aston Martin AMR26|AMR26]]
+|{{Honda-ENG}}
+|[[Honda RA626H|RA626H]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+! colspan="8" align="center" |Source: [https://fia.com source.pdf]
+|}
+`;
+
+const pollutedUpdate = updateEntryListTableIfNeeded(wikiWithCrawford, mainDrivers, polluted);
+assert(pollutedUpdate.changed === false, 'Weak Jolpica list must not overwrite complete Crawford entry');
+assert(pollutedUpdate.updatedWikitext.includes('[[Jak Crawford]]'), 'Crawford must remain on wiki');
+assert(!pollutedUpdate.updatedWikitext.includes('[[Paul Aron]]'), 'Must not inject Paul Aron');
+
+const goodUpdate = updateEntryListTableIfNeeded(wikiWithCrawford, mainDrivers, crawfordResolved);
+assert(goodUpdate.changed === false, 'Identical complete Crawford entry should be a no-op');
+
+// --- 7. FP1 participants kept when PDF resolves Crawford (practice filter allowlist) ---
+const fp1WithCrawford = {
+  'Lando Norris': {
+    position: '1',
+    number: '4',
+    driverName: 'Lando Norris',
+    teamName: 'McLaren',
+    time: '1:23.456',
+  },
+  'Jak Crawford': {
+    position: '22',
+    number: '34',
+    driverName: 'Jak Crawford',
+    teamName: 'Aston Martin',
+    time: '1:53.199',
+  },
+};
+const resolvedWithFp1 = resolveTestDriversForRace(previousRoundJuniors, {
+  pdfText: belgianPdf,
+  fp1: fp1WithCrawford,
+});
+assert(resolvedWithFp1.some(td => td.name === 'Jak Crawford'), 'FP1+PDF must keep Crawford');
+assert(!resolvedWithFp1.some(td => td.name === 'Paul Aron'), 'FP1+PDF must not keep Barcelona juniors');
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');

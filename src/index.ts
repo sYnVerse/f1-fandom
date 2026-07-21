@@ -43,7 +43,9 @@ import {
   getTeamTemplate,
   lookupTestDriverNationality,
   detectTestDriversFromJolpica,
+  detectTestDriversFromFp1,
   resolveTestDriversForRace,
+  isWeakTestDriverList,
   buildRaceDriverKeys,
   isRaceDriver,
   buildTestDriverNameKeys,
@@ -1106,11 +1108,23 @@ export default {
               }
               await fetchPdfIfNeeded(drivers);
               const resolvedTestDrivers = resolveTestDriversForRace(drivers, { pdfText });
-              console.log(`Verifying/updating Entry List table for ${gpPageTitle}...`);
-              const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, resolvedTestDrivers);
-              if (entryListUpdate.changed) {
-                updatedContent = entryListUpdate.updatedWikitext;
-                changes.push("Entry List");
+              // Avoid writing previous-round Jolpica juniors before PDF/FP1 corroboration.
+              if (isWeakTestDriverList(resolvedTestDrivers)) {
+                console.log(
+                  `Entry List sync for ${gpPageTitle}: ignoring weak Jolpica-only test drivers (${resolvedTestDrivers.map(td => td.name).join(', ')})`
+                );
+                const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, []);
+                if (entryListUpdate.changed) {
+                  updatedContent = entryListUpdate.updatedWikitext;
+                  changes.push("Entry List");
+                }
+              } else {
+                console.log(`Verifying/updating Entry List table for ${gpPageTitle}...`);
+                const entryListUpdate = updateEntryListTableIfNeeded(updatedContent, drivers, resolvedTestDrivers);
+                if (entryListUpdate.changed) {
+                  updatedContent = entryListUpdate.updatedWikitext;
+                  changes.push("Entry List");
+                }
               }
               await markGpPageSectionSynced('entry_list');
             } else if (isNewPage) {
@@ -1140,8 +1154,14 @@ export default {
               fp3Results = fp3;
 
               await fetchPdfIfNeeded(drivers);
+              // Allowlist from PDF + FP1 participants + resolved list. Do not trust Jolpica-only
+              // names from previous-round driver fallback (drops real FP1 times like Jak Crawford).
+              const fp1Detected = detectTestDriversFromFp1(drivers, fp1Results, pdfText);
               const resolvedTestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
-              const testDriverKeys = buildTestDriverNameKeys(resolvedTestDrivers);
+              const testDriverKeys = buildTestDriverNameKeys([
+                ...resolvedTestDrivers,
+                ...fp1Detected,
+              ]);
               const raceDriverKeys = buildRaceDriverKeys(drivers);
 
               const filterSessionResults = (sessionData: Record<string, PracticeSessionData> | null) => {
@@ -1207,7 +1227,8 @@ export default {
 
               if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0) {
                 const fp1TestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
-                if (fp1TestDrivers.length > 0) {
+                // Skip weak Jolpica-only lists so cron does not flip-flop the entry list every run.
+                if (fp1TestDrivers.length > 0 && !isWeakTestDriverList(fp1TestDrivers)) {
                   for (const td of fp1TestDrivers) {
                     if (!lookupTestDriverNationality(td.name)) {
                       await appendKvWarning(
@@ -1223,6 +1244,10 @@ export default {
                     updatedContent = entryListUpdate.updatedWikitext;
                     changes.push("Entry List (Test Drivers)");
                   }
+                } else if (isWeakTestDriverList(fp1TestDrivers)) {
+                  console.log(
+                    `Skipping Entry List test-driver update for ${gpPageTitle}: unresolved Jolpica-only list (${fp1TestDrivers.map(td => td.name).join(', ')})`
+                  );
                 }
               }
 

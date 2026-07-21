@@ -1096,8 +1096,29 @@ function enrichTestDriverEntry(
   return { ...entry, number, flag, constructorId };
 }
 
+/** Higher is better: number + team matter most; FIA-only flags score lowest. */
+export function testDriverEntryCompleteness(td: TestDriverEntry): number {
+  let score = 0;
+  if (String(td.number || '').trim()) score += 2;
+  if (td.constructorId) score += 2;
+  if (td.flag && td.flag !== '{{FIA}}') score += 1;
+  return score;
+}
+
+/** True when every entry lacks car number and team — typical previous-round Jolpica pollution. */
+export function isWeakTestDriverList(testDrivers: TestDriverEntry[]): boolean {
+  return (
+    testDrivers.length > 0 &&
+    testDrivers.every(td => !String(td.number || '').trim() && !td.constructorId)
+  );
+}
+
 /**
- * Resolve FP1 test drivers: Jolpica round entry first, FIA PDF fallback, enriched by PDF/FP1 metadata.
+ * Resolve FP1 test drivers.
+ *
+ * Priority: FIA PDF (authoritative membership) → FP1 session participants → Jolpica extras.
+ * Jolpica-first caused Belgian GP 2026 entry-list flip-flops when round-driver fallback
+ * returned prior races' juniors (Barcelona/Austria) instead of the current PDF entry.
  */
 export function resolveTestDriversForRace(
   drivers: Driver[],
@@ -1110,13 +1131,25 @@ export function resolveTestDriversForRace(
     ? buildDriverNameLookup(parseFiaEntryListPdf(options.pdfText, drivers).fp1TestDrivers)
     : null;
 
+  const pdfTestDrivers = options?.pdfText
+    ? detectTestDriversFromPdf(options.pdfText, drivers)
+    : [];
+  const fp1TestDrivers = detectTestDriversFromFp1(
+    drivers,
+    options?.fp1 ?? null,
+    options?.pdfText
+  );
   const jolpicaTestDrivers = detectTestDriversFromJolpica(drivers);
-  const base =
-    jolpicaTestDrivers.length > 0
-      ? jolpicaTestDrivers
-      : options?.pdfText
-        ? detectTestDriversFromPdf(options.pdfText, drivers)
-        : [];
+
+  let base: TestDriverEntry[];
+  if (pdfTestDrivers.length > 0) {
+    // PDF membership is authoritative — do not merge Jolpica/FP1-only names.
+    base = pdfTestDrivers;
+  } else if (fp1TestDrivers.length > 0) {
+    base = fp1TestDrivers;
+  } else {
+    base = jolpicaTestDrivers;
+  }
 
   return base
     .map(entry => enrichTestDriverEntry(entry, pdfLookup, options?.fp1))
@@ -1293,6 +1326,7 @@ const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
   'franco colapinto': 'Argentine',
   'andrea kimi antonelli': 'Italian',
   'liam lawson': 'New Zealander',
+  'jak crawford': 'American',
 };
 
 export function lookupTestDriverNationality(driverName: string): string | null {
@@ -1534,7 +1568,16 @@ export function updateEntryListTableIfNeeded(
 
   const combinedTestDriversMap = new Map<string, TestDriverEntry>();
   if (testDrivers.length > 0) {
-    testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+    // Never replace a complete on-wiki test driver block with an uncorroborated
+    // Jolpica-only list (empty numbers/teams) — that caused Belgian GP flip-flops.
+    const wikiHasCompleteTestDrivers = parsedTestDrivers.some(
+      td => testDriverEntryCompleteness(td) >= 4
+    );
+    if (isWeakTestDriverList(testDrivers) && wikiHasCompleteTestDrivers) {
+      parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+    } else {
+      testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+    }
   } else {
     parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
   }

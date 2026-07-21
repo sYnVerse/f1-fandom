@@ -245,7 +245,19 @@ assert(practiceWithJolpicaTestDriver.includes('[[Ayumu Iwasa]]'), 'FP1 test driv
 assert(practiceWithJolpicaTestDriver.includes('1:09.637'), 'FP1 test driver should keep classified session time');
 
 const resolvedAustriaStyle = resolveTestDriversForRace(driversWithJolpicaTestDriver as any, { fp1: fp1WithIwasa });
-assert(resolvedAustriaStyle.some(td => td.name === 'Ayumu Iwasa'), 'Jolpica-first resolver should include Iwasa');
-assert(!resolvedAustriaStyle.some(td => td.name === 'Patricio O Ward'), 'FP1-only drivers not on Jolpica should not be added to entry list');
+assert(resolvedAustriaStyle.some(td => td.name === 'Ayumu Iwasa'), 'FP1 resolver should include Iwasa');
+assert(resolvedAustriaStyle.some(td => td.name === 'Patricio O Ward'), 'Without PDF, FP1 participants should be included');
+
+// With PDF present, membership follows the PDF (not prior-round Jolpica / extra FP1 names)
+const austriaPdf = `
+In addition to the list of cars and drivers eligible to take part in the event the following drivers may also take part in FP1
+190 IWA Ayumu Iwasa JPN Visa Cash App Racing Bulls F1 Team Racing Bulls Red Bull Ford
+`;
+const resolvedWithPdf = resolveTestDriversForRace(driversWithJolpicaTestDriver as any, {
+  pdfText: austriaPdf,
+  fp1: fp1WithIwasa,
+});
+assert(resolvedWithPdf.length === 1 && resolvedWithPdf[0].name === 'Ayumu Iwasa', 'PDF membership should exclude FP1-only O Ward');
+assert(resolvedWithPdf[0].number === '90', 'PDF should normalize FP1 car number');
 
 console.log('verify-practice-sessions: all assertions passed');
