@@ -109,6 +109,23 @@ export function shouldRevalidateSeasonStandings(
   return getSeasonStandingsRound(data) < latestConcluded;
 }
 
+/**
+ * True when a round-specific standings payload reports a different round than the URL.
+ * Busts permanent KV entries that froze prior-round points onto a later GP page.
+ */
+export function shouldRevalidateMismatchedRoundStandings(
+  url: string,
+  data: unknown
+): boolean {
+  if (classifyJolpicaUrl(url) !== 'roundData') return false;
+  const endpoint = parseRoundEndpoint(url);
+  if (endpoint !== 'driverStandings' && endpoint !== 'constructorStandings') return false;
+  const urlRound = parseRoundFromJolpicaUrl(url);
+  if (urlRound === null) return false;
+  const dataRound = getSeasonStandingsRound(data);
+  return dataRound > 0 && dataRound !== urlRound;
+}
+
 export function isResponseEmpty(url: string, data: unknown): boolean {
   const mr = (data as { MRData?: Record<string, unknown> })?.MRData;
   if (!mr) return true;
@@ -124,25 +141,48 @@ export function isResponseEmpty(url: string, data: unknown): boolean {
   }
   if (urlClass === 'roundData') {
     const races = (mr.RaceTable as { Races?: Array<Record<string, unknown>> } | undefined)?.Races;
-    if (!races || races.length === 0) return true;
-    const race = races[0];
+    if (!races || races.length === 0) {
+      // Round-specific standings endpoints use StandingsTable, not RaceTable.
+      const lists = (mr.StandingsTable as { StandingsLists?: unknown[] } | undefined)?.StandingsLists;
+      if (lists?.length) {
+        const endpoint = parseRoundEndpoint(url);
+        if (endpoint === 'driverStandings' || endpoint === 'constructorStandings') {
+          const urlRound = parseRoundFromJolpicaUrl(url);
+          const dataRound = getSeasonStandingsRound(data);
+          // Prior-round payloads under a later round URL are incomplete for our purposes.
+          if (urlRound !== null && dataRound !== urlRound) return true;
+          return false;
+        }
+      }
+      // Fall through to other table checks below when RaceTable is empty.
+    } else {
+      const race = races[0];
 
-    // Order-only qualifying payloads (positions without Q1/Q2/Q3) are incomplete — treat as empty
-    // so we do not permanently cache them or skip retries (Belgian GP 2026 round 10).
-    if (parseRoundEndpoint(url) === 'qualifying') {
-      const qualiResults = race.QualifyingResults as Array<Record<string, unknown>> | undefined;
-      if (!qualiResults?.length) return true;
-      return !qualifyingRawResultsHaveTimes(qualiResults);
+      // Order-only qualifying payloads (positions without Q1/Q2/Q3) are incomplete — treat as empty
+      // so we do not permanently cache them or skip retries (Belgian GP 2026 round 10).
+      if (parseRoundEndpoint(url) === 'qualifying') {
+        const qualiResults = race.QualifyingResults as Array<Record<string, unknown>> | undefined;
+        if (!qualiResults?.length) return true;
+        return !qualifyingRawResultsHaveTimes(qualiResults);
+      }
+
+      if ((race.Results as unknown[] | undefined)?.length) return false;
+      if ((race.SprintResults as unknown[] | undefined)?.length) return false;
+      if ((race.QualifyingResults as unknown[] | undefined)?.length) return false;
+      if ((race.Laps as unknown[] | undefined)?.length) return false;
     }
-
-    if ((race.Results as unknown[] | undefined)?.length) return false;
-    if ((race.SprintResults as unknown[] | undefined)?.length) return false;
-    if ((race.QualifyingResults as unknown[] | undefined)?.length) return false;
-    if ((race.Laps as unknown[] | undefined)?.length) return false;
     const drivers = (mr.DriverTable as { Drivers?: unknown[] } | undefined)?.Drivers;
     if (drivers?.length) return false;
     const lists = (mr.StandingsTable as { StandingsLists?: unknown[] } | undefined)?.StandingsLists;
-    if (lists?.length) return false;
+    if (lists?.length) {
+      const endpoint = parseRoundEndpoint(url);
+      if (endpoint === 'driverStandings' || endpoint === 'constructorStandings') {
+        const urlRound = parseRoundFromJolpicaUrl(url);
+        const dataRound = getSeasonStandingsRound(data);
+        if (urlRound !== null && dataRound !== urlRound) return true;
+      }
+      return false;
+    }
     return true;
   }
 
@@ -494,6 +534,11 @@ export async function cachedJolpicaJson<T>(
           if (shouldRevalidateSeasonStandings(url, data, ctx)) {
             console.log(
               `Revalidating stale season standings cache (round ${getSeasonStandingsRound(data)} < concluded ${ctx.latestConcludedRound}): ${url}`
+            );
+            // Fall through to network fetch and overwrite the stale KV entry.
+          } else if (shouldRevalidateMismatchedRoundStandings(url, data)) {
+            console.log(
+              `Revalidating mismatched round standings cache (payload round ${getSeasonStandingsRound(data)} != url round ${parseRoundFromJolpicaUrl(url)}): ${url}`
             );
             // Fall through to network fetch and overwrite the stale KV entry.
           } else if (shouldRevalidateIncompleteQualifying(url, data)) {

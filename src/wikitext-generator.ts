@@ -13,6 +13,7 @@ import {
   getFlagFromNatCode,
   parseFiaEntryListPdf,
 } from './fia-pdf-parser';
+import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 
 const FLAGS: Record<string, string> = {
   "British": "{{GBR}}",
@@ -80,7 +81,25 @@ export function getTeamTemplate(constructorId: string, constructorName: string):
   if (CONSTRUCTORS[constructorId]) {
     return CONSTRUCTORS[constructorId];
   }
+  // OpenF1 fallback uses constructorId/name "unknown" when standings are unavailable —
+  // never emit {{Unknown-CON}} onto wiki pages.
+  if (
+    !constructorId ||
+    constructorId === 'unknown' ||
+    !constructorName ||
+    constructorName === 'Unknown'
+  ) {
+    return '{{Team-Placeholder}}';
+  }
   return `{{${constructorName}-CON}}`;
+}
+
+/** True when a team template is usable (not a placeholder / Unknown-CON). */
+export function isUsableTeamTemplate(template: string | undefined | null): boolean {
+  if (!template) return false;
+  if (template.includes('Unknown-CON')) return false;
+  if (template.includes('Team-Placeholder')) return false;
+  return true;
 }
 
 // Convert time differential (e.g. +0.087s) to absolute based on a base time
@@ -798,7 +817,10 @@ export function generatePracticeWikitext(
   const driverToConstructorTemplate: Record<string, string> = {};
   if (qualiResults) {
     qualiResults.forEach(q => {
-      driverToConstructorTemplate[q.driver.driverId] = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
+      const template = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
+      if (isUsableTeamTemplate(template)) {
+        driverToConstructorTemplate[q.driver.driverId] = template;
+      }
     });
   }
 
@@ -969,31 +991,6 @@ const COUNTRY_FLAGS: Record<string, string> = {
   "UAE": "ARE"
 };
 
-const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
-  "max_verstappen": "red_bull",
-  "hadjar": "red_bull",
-  "leclerc": "ferrari",
-  "hamilton": "ferrari",
-  "russell": "mercedes",
-  "antonelli": "mercedes",
-  "gasly": "alpine",
-  "colapinto": "alpine",
-  "norris": "mclaren",
-  "piastri": "mclaren",
-  "sainz": "williams",
-  "albon": "williams",
-  "lawson": "rb",
-  "arvid_lindblad": "rb",
-  "stroll": "aston_martin",
-  "alonso": "aston_martin",
-  "hulkenberg": "sauber",
-  "bortoleto": "sauber",
-  "ocon": "haas",
-  "bearman": "haas",
-  "bottas": "cadillac",
-  "perez": "cadillac"
-};
-
 /** Name keys for the 22 race entrants (excludes FP1-only drivers Jolpica may list). */
 export function buildRaceDriverKeys(drivers: Driver[]): Set<string> {
   const keys = new Set<string>();
@@ -1126,13 +1123,14 @@ export function resolveTestDriversForRace(
     .sort((a, b) => parseInt(a.number || '999', 10) - parseInt(b.number || '999', 10));
 }
 
-/** Resolve a driver's team wikitext, preferring quali data then the season roster map. */
+/** Resolve a driver's team wikitext, preferring valid quali data then the season roster map. */
 export function resolveDriverTeamTemplate(
   driverId: string,
   qualiTeamMap: Record<string, string>
 ): string {
-  if (qualiTeamMap[driverId]) {
-    return qualiTeamMap[driverId];
+  const fromQuali = qualiTeamMap[driverId];
+  if (isUsableTeamTemplate(fromQuali)) {
+    return fromQuali;
   }
   const constructorId = DRIVER_TO_CONSTRUCTOR_2026[driverId];
   if (constructorId) {

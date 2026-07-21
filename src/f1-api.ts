@@ -9,6 +9,7 @@ import {
 } from './f1-api-cache';
 import { trackedKvPut } from './kv-ops';
 import { extractPdfText } from './fia-pdf-parser';
+import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 
 export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext, ACTIVE_F1_SEASON };
 
@@ -320,6 +321,12 @@ export async function getDriverStandings(
   return cachedJolpicaJson(url, ctx, (data: any) => {
     const lists = data.MRData.StandingsTable.StandingsLists;
     if (!lists || lists.length === 0) return [];
+    // Reject payloads whose reported round does not match the requested round
+    // (avoids publishing prior-round points onto a GP page after race end).
+    if (round !== undefined) {
+      const reported = lists[0].round ? parseInt(lists[0].round, 10) : 0;
+      if (reported !== round) return [];
+    }
     return lists[0].DriverStandings || [];
   });
 }
@@ -335,6 +342,10 @@ export async function getConstructorStandings(
   return cachedJolpicaJson(url, ctx, (data: any) => {
     const lists = data.MRData.StandingsTable.StandingsLists;
     if (!lists || lists.length === 0) return [];
+    if (round !== undefined) {
+      const reported = lists[0].round ? parseInt(lists[0].round, 10) : 0;
+      if (reported !== round) return [];
+    }
     return lists[0].ConstructorStandings || [];
   });
 }
@@ -1097,6 +1108,7 @@ async function mapOpenF1SessionResultsToQualifying(
     prevDrivers
   );
 
+  // Season roster fallback when Jolpica standings are unavailable (avoids {{Unknown-CON}}).
   const unknownConstructor: Constructor = {
     constructorId: 'unknown',
     url: '',
@@ -1107,7 +1119,12 @@ async function mapOpenF1SessionResultsToQualifying(
   return results.map((r, index) => {
     const driverNumStr = r.driver_number.toString();
     const driver = resolvedDrivers[index];
-    const constructor = constructorLookup.get(driver.driverId) ?? unknownConstructor;
+    const rosterConstructorId = DRIVER_TO_CONSTRUCTOR_2026[driver.driverId];
+    const constructor =
+      constructorLookup.get(driver.driverId) ??
+      (rosterConstructorId
+        ? { constructorId: rosterConstructorId, url: '', name: rosterConstructorId, nationality: '' }
+        : unknownConstructor);
 
     return {
       number: driverNumStr,

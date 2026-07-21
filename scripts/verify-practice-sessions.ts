@@ -139,6 +139,42 @@ assert(
   'Quali map takes precedence over roster fallback'
 );
 
+// OpenF1 unknown constructors must not override the season roster (Belgian GP 2026).
+const unknownQualiMap = { norris: '{{Unknown-CON}}', antonelli: '{{Team-Placeholder}}' };
+assert(
+  resolveDriverTeamTemplate('norris', unknownQualiMap).includes('McLaren'),
+  'Unknown-CON from quali must fall back to roster'
+);
+assert(
+  resolveDriverTeamTemplate('antonelli', unknownQualiMap).includes('Mercedes'),
+  'Team-Placeholder from quali must fall back to roster'
+);
+
+const practiceWithUnknownQuali = generatePracticeWikitext(
+  mainDrivers as any,
+  [
+    {
+      number: '4',
+      position: '1',
+      driver: mainDrivers[0],
+      constructor: { constructorId: 'unknown', name: 'Unknown', url: '', nationality: '' },
+      Q1: '1:10.000',
+    },
+  ] as any,
+  fp1WithTestDriver,
+  null,
+  null,
+  { hasSprint: true }
+);
+assert(
+  !practiceWithUnknownQuali.includes('{{Unknown-CON}}'),
+  'Practice table must not emit Unknown-CON when quali constructors are unknown'
+);
+assert(
+  practiceWithUnknownQuali.includes('McLaren'),
+  'Practice table should use roster team when quali constructor is unknown'
+);
+
 const practiceWithoutQuali = generatePracticeWikitext(
   mainDrivers as any,
   null,

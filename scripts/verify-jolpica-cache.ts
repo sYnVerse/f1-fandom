@@ -9,6 +9,7 @@ import {
   isResponseEmpty,
   isRoundDataSessionComplete,
   shouldRevalidateIncompleteQualifying,
+  shouldRevalidateMismatchedRoundStandings,
 } from '../src/f1-api-cache';
 import { getSchedule, getRaceResult, hasQualifyingSessionTimes } from '../src/f1-api';
 
@@ -212,6 +213,31 @@ function testIsResponseEmpty() {
     hasQualifyingSessionTimes([{ Q1: '1:44.361' }]),
     'hasQualifyingSessionTimes true with Q1'
   );
+
+  const roundStandingsUrl = `${BASE}/2026/10/driverStandings.json?limit=1000`;
+  const mismatchedStandings = {
+    MRData: { StandingsTable: { StandingsLists: [{ round: '9', DriverStandings: [{ position: '1' }] }] } },
+  };
+  const matchingStandings = {
+    MRData: { StandingsTable: { StandingsLists: [{ round: '10', DriverStandings: [{ position: '1' }] }] } },
+  };
+  assert(
+    isResponseEmpty(roundStandingsUrl, mismatchedStandings),
+    'prior-round standings under round 10 URL should be treated as empty'
+  );
+  assert(
+    !isResponseEmpty(roundStandingsUrl, matchingStandings),
+    'matching round standings should not be empty'
+  );
+  assert(
+    shouldRevalidateMismatchedRoundStandings(roundStandingsUrl, mismatchedStandings),
+    'mismatched round standings should be revalidated'
+  );
+  assert(
+    !shouldRevalidateMismatchedRoundStandings(roundStandingsUrl, matchingStandings),
+    'matching round standings should not be revalidated as mismatched'
+  );
+
   console.log('PASS: isResponseEmpty');
 }
 
