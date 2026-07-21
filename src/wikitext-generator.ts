@@ -13,6 +13,7 @@ import {
   getFlagFromNatCode,
   parseFiaEntryListPdf,
 } from './fia-pdf-parser';
+import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 
 const FLAGS: Record<string, string> = {
   "British": "{{GBR}}",
@@ -988,31 +989,6 @@ const COUNTRY_FLAGS: Record<string, string> = {
   "Qatar": "QAT",
   "Abu Dhabi": "ARE",
   "UAE": "ARE"
-};
-
-const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
-  "max_verstappen": "red_bull",
-  "hadjar": "red_bull",
-  "leclerc": "ferrari",
-  "hamilton": "ferrari",
-  "russell": "mercedes",
-  "antonelli": "mercedes",
-  "gasly": "alpine",
-  "colapinto": "alpine",
-  "norris": "mclaren",
-  "piastri": "mclaren",
-  "sainz": "williams",
-  "albon": "williams",
-  "lawson": "rb",
-  "arvid_lindblad": "rb",
-  "stroll": "aston_martin",
-  "alonso": "aston_martin",
-  "hulkenberg": "sauber",
-  "bortoleto": "sauber",
-  "ocon": "haas",
-  "bearman": "haas",
-  "bottas": "cadillac",
-  "perez": "cadillac"
 };
 
 /** Name keys for the 22 race entrants (excludes FP1-only drivers Jolpica may list). */

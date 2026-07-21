@@ -9,6 +9,7 @@ import {
 } from './f1-api-cache';
 import { trackedKvPut } from './kv-ops';
 import { extractPdfText } from './fia-pdf-parser';
+import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 
 export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext, ACTIVE_F1_SEASON };
 
@@ -151,35 +152,6 @@ export interface PracticeResults {
 }
 
 const BASE_URL = 'https://api.jolpi.ca/ergast/f1';
-
-/** 2026 season roster used when OpenF1 results lack Jolpica constructor standings. */
-const SEASON_2026_DRIVER_CONSTRUCTOR: Record<
-  string,
-  { constructorId: string; name: string; nationality: string }
-> = {
-  max_verstappen: { constructorId: 'red_bull', name: 'Red Bull', nationality: 'Austrian' },
-  hadjar: { constructorId: 'red_bull', name: 'Red Bull', nationality: 'Austrian' },
-  leclerc: { constructorId: 'ferrari', name: 'Ferrari', nationality: 'Italian' },
-  hamilton: { constructorId: 'ferrari', name: 'Ferrari', nationality: 'Italian' },
-  russell: { constructorId: 'mercedes', name: 'Mercedes', nationality: 'German' },
-  antonelli: { constructorId: 'mercedes', name: 'Mercedes', nationality: 'German' },
-  gasly: { constructorId: 'alpine', name: 'Alpine', nationality: 'French' },
-  colapinto: { constructorId: 'alpine', name: 'Alpine', nationality: 'French' },
-  norris: { constructorId: 'mclaren', name: 'McLaren', nationality: 'British' },
-  piastri: { constructorId: 'mclaren', name: 'McLaren', nationality: 'British' },
-  sainz: { constructorId: 'williams', name: 'Williams', nationality: 'British' },
-  albon: { constructorId: 'williams', name: 'Williams', nationality: 'British' },
-  lawson: { constructorId: 'rb', name: 'RB', nationality: 'Italian' },
-  arvid_lindblad: { constructorId: 'rb', name: 'RB', nationality: 'Italian' },
-  stroll: { constructorId: 'aston_martin', name: 'Aston Martin', nationality: 'British' },
-  alonso: { constructorId: 'aston_martin', name: 'Aston Martin', nationality: 'British' },
-  hulkenberg: { constructorId: 'sauber', name: 'Kick Sauber', nationality: 'Swiss' },
-  bortoleto: { constructorId: 'sauber', name: 'Kick Sauber', nationality: 'Swiss' },
-  ocon: { constructorId: 'haas', name: 'Haas F1 Team', nationality: 'American' },
-  bearman: { constructorId: 'haas', name: 'Haas F1 Team', nationality: 'American' },
-  bottas: { constructorId: 'cadillac', name: 'Cadillac', nationality: 'American' },
-  perez: { constructorId: 'cadillac', name: 'Cadillac', nationality: 'American' },
-};
 
 function normalizeScheduleRaces(races: ScheduleRace[], year: number): ScheduleRace[] {
   return races.map(race => {
@@ -1147,11 +1119,11 @@ async function mapOpenF1SessionResultsToQualifying(
   return results.map((r, index) => {
     const driverNumStr = r.driver_number.toString();
     const driver = resolvedDrivers[index];
-    const roster = SEASON_2026_DRIVER_CONSTRUCTOR[driver.driverId];
+    const rosterConstructorId = DRIVER_TO_CONSTRUCTOR_2026[driver.driverId];
     const constructor =
       constructorLookup.get(driver.driverId) ??
-      (roster
-        ? { constructorId: roster.constructorId, url: '', name: roster.name, nationality: roster.nationality }
+      (rosterConstructorId
+        ? { constructorId: rosterConstructorId, url: '', name: rosterConstructorId, nationality: '' }
         : unknownConstructor);
 
     return {
