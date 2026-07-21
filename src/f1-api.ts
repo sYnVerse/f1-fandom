@@ -360,35 +360,73 @@ export async function getDriversForRace(
   return cachedJolpicaJson(url, ctx, (data: any) => data.MRData.DriverTable.Drivers || []);
 }
 
-// Fetch list of drivers for a race, with recursive fallback to preceding races/seasons if empty
+/** Season-wide driver list in one Jolpica call (no per-round walk). */
+export async function getSeasonDrivers(
+  year: number,
+  ctx?: F1ApiContext
+): Promise<Driver[]> {
+  const url = `${BASE_URL}/${year}/drivers.json?limit=1000`;
+  return cachedJolpicaJson(url, ctx, (data: any) => data.MRData.DriverTable.Drivers || []);
+}
+
+/**
+ * Resolve drivers for a round with bulk endpoints only.
+ * Prefer the round list; on true empty/error use season drivers (1 call), then at most
+ * one prior round. Never walks R-1…R-N (that amplified Jolpica 429s).
+ */
 export async function getDriversForRaceWithFallback(
   year: number,
   round: number,
   ctx?: F1ApiContext
 ): Promise<Driver[]> {
-  let drivers = await getDriversForRace(year, round, ctx).catch(() => []);
-  let currentYear = year;
-  let prevRound = round - 1;
+  try {
+    const drivers = await getDriversForRace(year, round, ctx);
+    if (drivers.length > 0) return drivers;
+  } catch (e: any) {
+    console.warn(
+      `getDriversForRace(${year}, ${round}) failed; trying season drivers instead of prior-round walk:`,
+      e?.message || e
+    );
+  }
 
-  while (drivers.length === 0) {
-    if (prevRound >= 1) {
-      drivers = await getDriversForRace(currentYear, prevRound, ctx).catch(() => []);
-      prevRound--;
-    } else {
-      currentYear--;
-      try {
-        const prevSchedule = await getSchedule(currentYear, ctx);
-        if (prevSchedule && prevSchedule.length > 0) {
-          prevRound = prevSchedule.length;
-        } else {
-          break;
-        }
-      } catch (e) {
-        break;
-      }
+  try {
+    const seasonDrivers = await getSeasonDrivers(year, ctx);
+    if (seasonDrivers.length > 0) return seasonDrivers;
+  } catch (e: any) {
+    console.warn(`getSeasonDrivers(${year}) failed:`, e?.message || e);
+  }
+
+  if (round > 1) {
+    try {
+      const prev = await getDriversForRace(year, round - 1, ctx);
+      if (prev.length > 0) return prev;
+    } catch (e: any) {
+      console.warn(
+        `getDriversForRace(${year}, ${round - 1}) prior-round fallback failed:`,
+        e?.message || e
+      );
     }
   }
-  return drivers;
+
+  return [];
+}
+
+/** Collect unique Driver objects from standings / race / quali payloads (0 extra Jolpica calls). */
+export function driversFromBulkPayloads(sources: {
+  standings?: DriverStanding[] | null;
+  results?: Array<{ driver?: Driver }> | null;
+  quali?: Array<{ driver?: Driver }> | null;
+}): Driver[] {
+  const byId = new Map<string, Driver>();
+  const add = (driver?: Driver) => {
+    if (driver?.driverId && !byId.has(driver.driverId)) {
+      byId.set(driver.driverId, driver);
+    }
+  };
+  for (const s of sources.standings ?? []) add(s.Driver);
+  for (const r of sources.results ?? []) add(r.driver);
+  for (const q of sources.quali ?? []) add(q.driver);
+  return [...byId.values()];
 }
 
 /** Fetch lap chart data for a round (used by stats). */
@@ -661,6 +699,8 @@ export async function fetchRoundJolpicaData(
     race: raceForRound,
   } = options;
 
+  // Fetch bulk round payloads in parallel. Drivers are derived from these when possible
+  // so we avoid a separate /drivers.json call (and never fan out per-driver constructor URLs).
   const [
     jolpicaQualiResults,
     gpResults,
@@ -669,7 +709,6 @@ export async function fetchRoundJolpicaData(
     prevDrivers,
     currentConstructors,
     prevConstructors,
-    drivers,
   ] = await Promise.all([
     needQuali ? getQualifyingResult(year, round, ctx).catch(() => []) : Promise.resolve([]),
     needGpResults ? getRaceResult(year, round, false, ctx).catch(() => []) : Promise.resolve([]),
@@ -678,8 +717,19 @@ export async function fetchRoundJolpicaData(
     needStandings && round > 1 ? getDriverStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
     needStandings ? getConstructorStandings(year, round, ctx).catch(() => []) : Promise.resolve([]),
     needStandings && round > 1 ? getConstructorStandings(year, round - 1, ctx).catch(() => null) : Promise.resolve(null),
-    needDrivers || needSprintQuali || needQuali ? getDriversForRaceWithFallback(year, round, ctx).catch(() => []) : Promise.resolve([]),
   ]);
+
+  let drivers: Driver[] = [];
+  if (needDrivers || needSprintQuali || needQuali) {
+    drivers = driversFromBulkPayloads({
+      standings: currentDrivers.length > 0 ? currentDrivers : prevDrivers,
+      results: [...gpResults, ...sprintResults],
+      quali: jolpicaQualiResults,
+    });
+    if (drivers.length === 0) {
+      drivers = await getDriversForRaceWithFallback(year, round, ctx).catch(() => []);
+    }
+  }
 
   let qualiResults = jolpicaQualiResults;
   if (needQuali && !hasQualifyingSessionTimes(qualiResults)) {
@@ -980,7 +1030,8 @@ export function formatOpenF1SessionSegmentTime(
 
 function buildConstructorLookup(
   currentDrivers?: DriverStanding[],
-  prevDrivers?: DriverStanding[] | null
+  prevDrivers?: DriverStanding[] | null,
+  resultsWithConstructors?: Array<{ driver?: Driver; constructor?: Constructor }> | null
 ): Map<string, Constructor> {
   const lookup = new Map<string, Constructor>();
   for (const standing of currentDrivers ?? []) {
@@ -993,60 +1044,53 @@ function buildConstructorLookup(
       lookup.set(standing.Driver.driverId, standing.Constructors[0]);
     }
   }
+  for (const row of resultsWithConstructors ?? []) {
+    const id = row.driver?.driverId;
+    if (id && row.constructor && !lookup.has(id)) {
+      lookup.set(id, row.constructor);
+    }
+  }
   return lookup;
 }
 
-async function resolveConstructorsForDrivers(
-  year: number,
+function constructorFromSeasonRoster(driverId: string): Constructor | null {
+  const constructorId = DRIVER_TO_CONSTRUCTOR_2026[driverId];
+  if (!constructorId) return null;
+  return { constructorId, url: '', name: constructorId, nationality: '' };
+}
+
+/**
+ * Resolve constructors without per-driver Jolpica calls.
+ * Order: standings / bulk results → 2026 season roster. Never N× /drivers/{id}/constructors.json.
+ */
+function resolveConstructorsForDrivers(
   driverIds: string[],
-  ctx: F1ApiContext | undefined,
-  currentDrivers: DriverStanding[] | undefined,
-  prevDrivers: DriverStanding[] | null | undefined
-): Promise<Map<string, Constructor>> {
-  const lookup = buildConstructorLookup(currentDrivers, prevDrivers);
-  const missingIds = [...new Set(driverIds)].filter(id => !lookup.has(id));
-  if (missingIds.length === 0) return lookup;
-
-  const hasStandings =
-    (currentDrivers && currentDrivers.length > 0) ||
-    (prevDrivers && prevDrivers.length > 0);
-  if (!hasStandings) {
-    console.warn(
-      `Standings unavailable; skipping ${missingIds.length} per-driver constructor lookups to avoid rate limits`
-    );
-    return lookup;
+  currentDrivers?: DriverStanding[],
+  prevDrivers?: DriverStanding[] | null,
+  resultsWithConstructors?: Array<{ driver?: Driver; constructor?: Constructor }> | null
+): Map<string, Constructor> {
+  const lookup = buildConstructorLookup(currentDrivers, prevDrivers, resultsWithConstructors);
+  for (const driverId of new Set(driverIds)) {
+    if (lookup.has(driverId)) continue;
+    const roster = constructorFromSeasonRoster(driverId);
+    if (roster) lookup.set(driverId, roster);
   }
-
-  await Promise.all(
-    missingIds.map(async driverId => {
-      const constructor = await getDriverConstructorForSeason(year, driverId, ctx);
-      if (constructor) lookup.set(driverId, constructor);
-    })
-  );
   return lookup;
 }
 
+/** @deprecated Prefer standings/results/roster — per-driver Jolpica constructor URLs are not used. */
 export async function getDriverConstructorForSeason(
-  year: number,
+  _year: number,
   driverId: string,
-  ctx?: F1ApiContext
+  _ctx?: F1ApiContext
 ): Promise<Constructor | null> {
-  const url = `${BASE_URL}/${year}/drivers/${driverId}/constructors.json`;
-  try {
-    return await cachedJolpicaJson(url, ctx, (data: any) => {
-      const list = data?.MRData?.ConstructorTable?.Constructors;
-      return list && list.length > 0 ? list[0] : null;
-    });
-  } catch (e) {
-    console.error(`Failed to fetch constructor for driver ${driverId} in season ${year}:`, e);
-    return null;
-  }
+  return constructorFromSeasonRoster(driverId);
 }
 
 export async function getDriverConstructor(
-  year: number,
+  _year: number,
   driverId: string,
-  ctx?: F1ApiContext,
+  _ctx?: F1ApiContext,
   currentDrivers?: DriverStanding[],
   prevDrivers?: DriverStanding[] | null
 ): Promise<Constructor | null> {
@@ -1058,7 +1102,7 @@ export async function getDriverConstructor(
     const s = prevDrivers.find(x => x.Driver.driverId === driverId);
     if (s && s.Constructors && s.Constructors.length > 0) return s.Constructors[0];
   }
-  return getDriverConstructorForSeason(year, driverId, ctx);
+  return constructorFromSeasonRoster(driverId);
 }
 
 async function mapOpenF1SessionResultsToQualifying(
@@ -1100,15 +1144,13 @@ async function mapOpenF1SessionResultsToQualifying(
     resolvedDrivers.push(driver);
   }
 
-  const constructorLookup = await resolveConstructorsForDrivers(
-    year,
+  const constructorLookup = resolveConstructorsForDrivers(
     resolvedDrivers.map(driver => driver.driverId),
-    ctx,
     currentDrivers,
     prevDrivers
   );
 
-  // Season roster fallback when Jolpica standings are unavailable (avoids {{Unknown-CON}}).
+  // Season roster is already applied inside resolveConstructorsForDrivers.
   const unknownConstructor: Constructor = {
     constructorId: 'unknown',
     url: '',
@@ -1119,12 +1161,7 @@ async function mapOpenF1SessionResultsToQualifying(
   return results.map((r, index) => {
     const driverNumStr = r.driver_number.toString();
     const driver = resolvedDrivers[index];
-    const rosterConstructorId = DRIVER_TO_CONSTRUCTOR_2026[driver.driverId];
-    const constructor =
-      constructorLookup.get(driver.driverId) ??
-      (rosterConstructorId
-        ? { constructorId: rosterConstructorId, url: '', name: rosterConstructorId, nationality: '' }
-        : unknownConstructor);
+    const constructor = constructorLookup.get(driver.driverId) ?? unknownConstructor;
 
     return {
       number: driverNumStr,
