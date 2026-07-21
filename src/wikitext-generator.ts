@@ -80,7 +80,25 @@ export function getTeamTemplate(constructorId: string, constructorName: string):
   if (CONSTRUCTORS[constructorId]) {
     return CONSTRUCTORS[constructorId];
   }
+  // OpenF1 fallback uses constructorId/name "unknown" when standings are unavailable —
+  // never emit {{Unknown-CON}} onto wiki pages.
+  if (
+    !constructorId ||
+    constructorId === 'unknown' ||
+    !constructorName ||
+    constructorName === 'Unknown'
+  ) {
+    return '{{Team-Placeholder}}';
+  }
   return `{{${constructorName}-CON}}`;
+}
+
+/** True when a team template is usable (not a placeholder / Unknown-CON). */
+export function isUsableTeamTemplate(template: string | undefined | null): boolean {
+  if (!template) return false;
+  if (template.includes('Unknown-CON')) return false;
+  if (template.includes('Team-Placeholder')) return false;
+  return true;
 }
 
 // Convert time differential (e.g. +0.087s) to absolute based on a base time
@@ -798,7 +816,10 @@ export function generatePracticeWikitext(
   const driverToConstructorTemplate: Record<string, string> = {};
   if (qualiResults) {
     qualiResults.forEach(q => {
-      driverToConstructorTemplate[q.driver.driverId] = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
+      const template = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
+      if (isUsableTeamTemplate(template)) {
+        driverToConstructorTemplate[q.driver.driverId] = template;
+      }
     });
   }
 
@@ -1126,13 +1147,14 @@ export function resolveTestDriversForRace(
     .sort((a, b) => parseInt(a.number || '999', 10) - parseInt(b.number || '999', 10));
 }
 
-/** Resolve a driver's team wikitext, preferring quali data then the season roster map. */
+/** Resolve a driver's team wikitext, preferring valid quali data then the season roster map. */
 export function resolveDriverTeamTemplate(
   driverId: string,
   qualiTeamMap: Record<string, string>
 ): string {
-  if (qualiTeamMap[driverId]) {
-    return qualiTeamMap[driverId];
+  const fromQuali = qualiTeamMap[driverId];
+  if (isUsableTeamTemplate(fromQuali)) {
+    return fromQuali;
   }
   const constructorId = DRIVER_TO_CONSTRUCTOR_2026[driverId];
   if (constructorId) {

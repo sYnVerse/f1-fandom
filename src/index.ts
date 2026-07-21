@@ -839,8 +839,14 @@ export default {
         // weekend for a grace period so we can re-sync once Jolpica/OpenF1 publish times.
         const weekendRepairUntil = new Date(raceEndTime.getTime() + 48 * 60 * 60 * 1000);
         const allowQualiTimesRepair = now < weekendRepairUntil;
+        // Longer window for the latest concluded round: practice may have {{Unknown-CON}} from
+        // OpenF1 constructor gaps, and standings may have been frozen before Jolpica published points.
+        const contentRepairUntil = new Date(raceEndTime.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const latestConcluded = apiCtx.latestConcludedRound ?? 0;
+        const allowContentRepair =
+          now < contentRepairUntil && isRaceConcluded && round === latestConcluded;
 
-        if (roundFullySynced && !allowQualiTimesRepair) {
+        if (roundFullySynced && !allowQualiTimesRepair && !allowContentRepair) {
           console.log(`Round ${round} (${raceName}) fully synced in KV. Skipping all Jolpica fetches.`);
           continue;
         }
@@ -848,7 +854,10 @@ export default {
         const needGpCareerTemplate = gpSessionCompleted && !gpCareerTemplateSynced;
         const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
         const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
-        const needGpPage = !gpPageFullySynced || (allowQualiTimesRepair && isQualiConcluded);
+        const needGpPage =
+          !gpPageFullySynced ||
+          (allowQualiTimesRepair && isQualiConcluded) ||
+          allowContentRepair;
 
         if (roundFullySynced && needGpPage) {
           console.log(
@@ -1385,11 +1394,16 @@ export default {
 
               if (
                 isRaceConcluded &&
+                raceResults &&
+                raceResults.length > 0 &&
                 currentDrivers &&
                 currentDrivers.length > 0 &&
                 currentConstructors &&
                 currentConstructors.length > 0 &&
-                !isGpPageSectionSynced('standings')
+                (!isGpPageSectionSynced('standings') ||
+                  // Weekend repair: standings may have been synced from pre-result Jolpica
+                  // data (prior-round points). Re-apply once race results are present.
+                  ((allowQualiTimesRepair || allowContentRepair) && isGpPageSectionSynced('standings')))
               ) {
                 const standingsWikitext = generateStandingsWikitext(
                   currentDrivers,
@@ -1402,6 +1416,11 @@ export default {
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
                   changes.push("Championship Standings");
+                  if (isGpPageSectionSynced('standings')) {
+                    console.log(
+                      `  Re-synced Championship Standings during weekend repair window (race results available).`
+                    );
+                  }
                 }
                 await markGpPageSectionSynced('standings');
               }
