@@ -11,7 +11,7 @@ import {
   shouldRevalidateIncompleteQualifying,
   shouldRevalidateMismatchedRoundStandings,
 } from '../src/f1-api-cache';
-import { getSchedule, getRaceResult, hasQualifyingSessionTimes } from '../src/f1-api';
+import { getSchedule, getRaceResult, hasQualifyingSessionTimes, getDriversForRaceWithFallback, getDriverConstructor, driversFromBulkPayloads, fetchRoundJolpicaData } from '../src/f1-api';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 const SCHEDULE_URL = `${BASE}/2026.json?limit=1000`;
@@ -489,6 +489,199 @@ async function testActiveScheduleNotOverwrittenByOtherYears() {
   console.log('PASS: active season schedule not overwritten by other-year fetch');
 }
 
+async function testDriversFallbackUsesSeasonNotRoundWalk() {
+  const prev = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes('/2026/10/drivers.json')) {
+      return new Response('throttled', { status: 429 });
+    }
+    if (url.includes('/2026/drivers.json') && !url.match(/\/2026\/\d+\//)) {
+      return new Response(JSON.stringify({
+        MRData: {
+          DriverTable: {
+            Drivers: [{
+              driverId: 'norris',
+              permanentNumber: '4',
+              code: 'NOR',
+              url: '',
+              givenName: 'Lando',
+              familyName: 'Norris',
+              dateOfBirth: '',
+              nationality: 'British',
+            }],
+          },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Any prior-round walk would hit these — fail the test if we see them.
+    if (url.match(/\/2026\/[1-9]\/drivers\.json/)) {
+      throw new Error(`Unexpected prior-round drivers walk: ${url}`);
+    }
+    return new Response('throttled', { status: 429 });
+  };
+
+  try {
+    const ctx = createF1ApiContext();
+    ctx.testBackoffMs = 1;
+    const drivers = await getDriversForRaceWithFallback(2026, 10, ctx);
+    assert(drivers.length === 1 && drivers[0].driverId === 'norris', 'Should recover via season drivers');
+    assert(
+      !urls.some(u => /\/2026\/(?:9|8|7|6)\/drivers\.json/.test(u)),
+      'Must not walk prior rounds on 429'
+    );
+    assert(
+      urls.some(u => u.includes('/2026/drivers.json') && !u.match(/\/2026\/\d+\//)),
+      'Should use season /drivers.json bulk endpoint'
+    );
+    console.log('PASS: drivers fallback uses season bulk endpoint (no round walk)');
+  } finally {
+    globalThis.fetch = prev;
+  }
+}
+
+async function testConstructorResolutionNeverFansOut() {
+  const prev = globalThis.fetch;
+  let constructorFanOut = 0;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/constructors.json')) {
+      constructorFanOut++;
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const ids = [
+      'norris', 'piastri', 'leclerc', 'hamilton', 'russell', 'antonelli',
+      'max_verstappen', 'hadjar', 'gasly', 'colapinto', 'sainz', 'albon',
+      'lawson', 'arvid_lindblad', 'stroll', 'alonso', 'hulkenberg', 'bortoleto',
+      'ocon', 'bearman', 'bottas', 'perez',
+    ];
+    await Promise.all(ids.map(id => getDriverConstructor(2026, id)));
+    assert(constructorFanOut === 0, `Expected 0 per-driver constructors.json calls, got ${constructorFanOut}`);
+
+    const norris = await getDriverConstructor(2026, 'norris');
+    assert(norris?.constructorId === 'mclaren', `Roster should map norris→mclaren, got ${norris?.constructorId}`);
+    console.log('PASS: constructor resolution uses roster (0 per-driver Jolpica calls)');
+  } finally {
+    globalThis.fetch = prev;
+  }
+}
+
+async function testFetchRoundDerivesDriversFromStandings() {
+  const prev = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes('/driverStandings.json')) {
+      return new Response(JSON.stringify({
+        MRData: {
+          StandingsTable: {
+            StandingsLists: [{
+              round: '10',
+              DriverStandings: [{
+                position: '1',
+                positionText: '1',
+                points: '200',
+                wins: '3',
+                Driver: {
+                  driverId: 'norris',
+                  permanentNumber: '4',
+                  code: 'NOR',
+                  url: '',
+                  givenName: 'Lando',
+                  familyName: 'Norris',
+                  dateOfBirth: '',
+                  nationality: 'British',
+                },
+                Constructors: [{ constructorId: 'mclaren', url: '', name: 'McLaren', nationality: 'British' }],
+              }],
+            }],
+          },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.includes('/constructorStandings.json')) {
+      return new Response(JSON.stringify({
+        MRData: {
+          StandingsTable: {
+            StandingsLists: [{
+              round: '10',
+              ConstructorStandings: [{
+                position: '1',
+                positionText: '1',
+                points: '400',
+                wins: '5',
+                Constructor: { constructorId: 'mclaren', url: '', name: 'McLaren', nationality: 'British' },
+              }],
+            }],
+          },
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.includes('/results.json') || url.includes('/qualifying.json') || url.includes('/sprint.json')) {
+      return new Response(JSON.stringify({
+        MRData: { RaceTable: { Races: [] } },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.includes('/drivers.json')) {
+      throw new Error(`Unexpected drivers.json fetch when standings available: ${url}`);
+    }
+    return new Response('{}', { status: 200 });
+  };
+
+  try {
+    const fromBulk = driversFromBulkPayloads({
+      standings: [{
+        position: '1',
+        positionText: '1',
+        points: '1',
+        wins: '0',
+        Driver: {
+          driverId: 'norris',
+          permanentNumber: '4',
+          code: 'NOR',
+          url: '',
+          givenName: 'Lando',
+          familyName: 'Norris',
+          dateOfBirth: '',
+          nationality: 'British',
+        },
+        Constructors: [],
+      }],
+    });
+    assert(fromBulk.length === 1 && fromBulk[0].driverId === 'norris', 'driversFromBulkPayloads should extract standings drivers');
+
+    const ctx = createF1ApiContext();
+    const roundData = await fetchRoundJolpicaData(
+      2026,
+      10,
+      {
+        needQuali: false,
+        needGpResults: false,
+        needSprintResults: false,
+        needStandings: true,
+        needDrivers: true,
+        hasSprint: false,
+        needSprintQuali: false,
+      },
+      ctx
+    );
+    assert(roundData.drivers.length === 1, 'fetchRound should derive drivers from standings');
+    assert(
+      !urls.some(u => u.includes('/drivers.json')),
+      'fetchRound must not call drivers.json when standings already provide drivers'
+    );
+    console.log('PASS: fetchRound derives drivers from standings (skips drivers.json)');
+  } finally {
+    globalThis.fetch = prev;
+  }
+}
+
 async function main() {
   testClassifyJolpicaUrl();
   testIsResponseEmpty();
@@ -504,6 +697,9 @@ async function main() {
   await testStandingsTtlOnFetch();
   await testStaleStandingsKvRevalidation();
   await testActiveScheduleNotOverwrittenByOtherYears();
+  await testDriversFallbackUsesSeasonNotRoundWalk();
+  await testConstructorResolutionNeverFansOut();
+  await testFetchRoundDerivesDriversFromStandings();
   console.log('All Jolpica cache verification tests passed.');
 }
 
