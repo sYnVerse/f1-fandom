@@ -1012,21 +1012,26 @@ export function isRaceDriver(driverName: string, raceDriverKeys: Set<string>): b
 export function buildTestDriverNameKeys(testDrivers: TestDriverEntry[]): Set<string> {
   const keys = new Set<string>();
   for (const td of testDrivers) {
-    keys.add(td.name.toLowerCase());
-    keys.add(td.name.toLowerCase().replace(/[\s'-]/g, ''));
+    for (const key of driverNameKeys(td.name)) {
+      keys.add(key);
+    }
   }
   return keys;
 }
 
 export function isKnownTestDriver(driverName: string, testDriverKeys: Set<string>): boolean {
-  const lower = driverName.toLowerCase();
-  const clean = lower.replace(/[\s'-]/g, '');
-  return testDriverKeys.has(lower) || testDriverKeys.has(clean);
+  return driverNameKeys(driverName).some(key => testDriverKeys.has(key));
 }
 
 function driverNameKeys(name: string): string[] {
   const lower = name.toLowerCase();
-  return [lower, lower.replace(/[\s'-]/g, '')];
+  const ascii = normalizeDriverNameKey(name);
+  return [
+    lower,
+    lower.replace(/[\s'-]/g, ''),
+    ascii,
+    ascii.replace(/[\s'-]/g, ''),
+  ];
 }
 
 function lookupFp1PracticeData(
@@ -1048,7 +1053,7 @@ export function detectTestDriversFromJolpica(drivers: Driver[]): TestDriverEntry
   return drivers
     .filter(driver => !DRIVER_TO_CONSTRUCTOR_2026[driver.driverId])
     .map(driver => {
-      const name = `${driver.givenName} ${driver.familyName}`;
+      const name = canonicalizeTestDriverWikiName(`${driver.givenName} ${driver.familyName}`);
       const nationality = driver.nationality || lookupTestDriverNationality(name);
       return {
         number: driver.permanentNumber || '',
@@ -1088,12 +1093,14 @@ function enrichTestDriverEntry(
     constructorId = constructorId || teamNameToConstructorId(fp1Data.teamName) || '';
   }
 
+  const name = canonicalizeTestDriverWikiName(entry.name);
+
   if (flag === '{{FIA}}') {
-    const nationality = lookupTestDriverNationality(entry.name);
+    const nationality = lookupTestDriverNationality(name);
     if (nationality) flag = getFlag(nationality);
   }
 
-  return { ...entry, number, flag, constructorId };
+  return { ...entry, name, number, flag, constructorId };
 }
 
 /** Higher is better: number + team matter most; FIA-only flags score lowest. */
@@ -1316,6 +1323,30 @@ export function teamNameToConstructorId(teamName: string): string | null {
   return null;
 }
 
+/** Strip diacritics for ASCII-insensitive driver name matching (Pérez/Hülkenberg/Ryō). */
+export function normalizeDriverNameKey(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Canonical Fandom article titles for test drivers whose source data (FIA PDF / OpenF1)
+ * often omits special characters — same class of fix as Sergio Pérez / Nico Hülkenberg.
+ */
+const TEST_DRIVER_WIKI_NAMES: Record<string, string> = {
+  'ryo hirakawa': 'Ryō Hirakawa',
+};
+
+export function canonicalizeTestDriverWikiName(name: string): string {
+  const key = normalizeDriverNameKey(name);
+  return TEST_DRIVER_WIKI_NAMES[key] || name;
+}
+
 const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
   'patricio o\'ward': 'Mexican',
   'patricio oward': 'Mexican',
@@ -1327,15 +1358,16 @@ const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
   'andrea kimi antonelli': 'Italian',
   'liam lawson': 'New Zealander',
   'jak crawford': 'American',
+  'ryo hirakawa': 'Japanese',
 };
 
 export function lookupTestDriverNationality(driverName: string): string | null {
-  const key = driverName.toLowerCase().replace(/[\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const key = normalizeDriverNameKey(driverName);
   if (TEST_DRIVER_NATIONALITIES[key]) {
     return TEST_DRIVER_NATIONALITIES[key];
   }
   for (const [name, nationality] of Object.entries(TEST_DRIVER_NATIONALITIES)) {
-    const normalized = name.replace(/[\s'-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const normalized = normalizeDriverNameKey(name);
     if (key.includes(normalized) || normalized.includes(key)) {
       return nationality;
     }
@@ -1385,7 +1417,7 @@ export function detectTestDriversFromFp1(
 
     testDrivers.push({
       number: pdfRow?.number || data.number,
-      name,
+      name: canonicalizeTestDriverWikiName(name),
       flag,
       constructorId,
     });
@@ -1488,7 +1520,7 @@ function fiaRowsToTestDriverEntries(rows: FiaDriverRow[]): TestDriverEntry[] {
   return rows
     .map(row => ({
       number: row.number,
-      name: row.name,
+      name: canonicalizeTestDriverWikiName(row.name),
       flag: getFlagFromNatCode(row.natCode),
       constructorId: teamNameToConstructorId(row.team) || teamNameToConstructorId(row.constructor) || '',
     }))
@@ -1521,6 +1553,7 @@ export function extractTestDriversFromCareerResults(wikitext: string): string[] 
 /**
  * Append missing test drivers as `|Name = {{TD}}` before `#default` in a
  * Career Results switch template (e.g. Template:Career Results/2026 Belgian Grand Prix).
+ * Also rewrites ASCII spellings to canonical wiki titles (e.g. Ryo → Ryō Hirakawa).
  */
 export function addTestDriversToCareerResults(
   wikitext: string,
@@ -1530,36 +1563,62 @@ export function addTestDriversToCareerResults(
     return { updatedWikitext: wikitext, changed: false };
   }
 
-  const namesToAdd = testDrivers.map(td => (typeof td === 'string' ? td.trim() : td.name.trim())).filter(Boolean);
+  const namesToAdd = [
+    ...new Set(
+      testDrivers
+        .map(td => canonicalizeTestDriverWikiName(typeof td === 'string' ? td.trim() : td.name.trim()))
+        .filter(Boolean)
+    ),
+  ];
   if (namesToAdd.length === 0) {
     return { updatedWikitext: wikitext, changed: false };
   }
 
+  const canonicalByKey = new Map(namesToAdd.map(name => [normalizeDriverNameKey(name), name]));
   const lines = wikitext.split('\n');
-  const existingNames = new Set<string>();
   // Match generateWikiResultsText / wikiDriverList padding (ASCII-oriented column).
   const padWidth = 22;
+  let changed = false;
 
+  // Rewrite existing rows that match a canonical name but use the wrong spelling.
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^\|([^=]+)=(.*)$/);
+    if (!match) continue;
+    const rawName = match[1];
+    const name = rawName.trim();
+    if (name === '#default') continue;
+    const canonical = canonicalByKey.get(normalizeDriverNameKey(name));
+    if (canonical && canonical !== name) {
+      const value = match[2];
+      // Keep original padding width when renaming in place.
+      const width = Math.max(rawName.length, padWidth);
+      lines[i] = `|${canonical.padEnd(width, ' ')}=${value}`;
+      changed = true;
+    }
+  }
+
+  const existingKeys = new Set<string>();
   for (const line of lines) {
     const match = line.match(/^\|([^=]+)=/);
     if (!match) continue;
     const name = match[1].trim();
     if (name === '#default') continue;
-    existingNames.add(name.toLowerCase());
+    existingKeys.add(normalizeDriverNameKey(name));
   }
 
-  const missing = namesToAdd.filter(name => !existingNames.has(name.toLowerCase()));
-  if (missing.length === 0) {
+  const missing = namesToAdd.filter(name => !existingKeys.has(normalizeDriverNameKey(name)));
+  if (missing.length > 0) {
+    const defaultIdx = lines.findIndex(line => /^\|\s*#default\s*=/.test(line));
+    if (defaultIdx !== -1) {
+      const newLines = missing.map(name => `|${name.padEnd(padWidth, ' ')} = {{TD}}`);
+      lines.splice(defaultIdx, 0, ...newLines);
+      changed = true;
+    }
+  }
+
+  if (!changed) {
     return { updatedWikitext: wikitext, changed: false };
   }
-
-  const defaultIdx = lines.findIndex(line => /^\|\s*#default\s*=/.test(line));
-  if (defaultIdx === -1) {
-    return { updatedWikitext: wikitext, changed: false };
-  }
-
-  const newLines = missing.map(name => `|${name.padEnd(padWidth, ' ')} = {{TD}}`);
-  lines.splice(defaultIdx, 0, ...newLines);
   return { updatedWikitext: lines.join('\n'), changed: true };
 }
 
@@ -1614,11 +1673,12 @@ export function updateEntryListTableIfNeeded(
             break;
           }
         }
-        const nationality = lookupTestDriverNationality(name);
+        const wikiName = canonicalizeTestDriverWikiName(name);
+        const nationality = lookupTestDriverNationality(wikiName);
         const flag = nationality ? getFlag(nationality) : '{{FIA}}';
         parsedTestDrivers.push({
           number,
-          name,
+          name: wikiName,
           flag,
           constructorId,
         });
@@ -1627,6 +1687,10 @@ export function updateEntryListTableIfNeeded(
   }
 
   const combinedTestDriversMap = new Map<string, TestDriverEntry>();
+  const setCombined = (td: TestDriverEntry) => {
+    const canonical = { ...td, name: canonicalizeTestDriverWikiName(td.name) };
+    combinedTestDriversMap.set(normalizeDriverNameKey(canonical.name), canonical);
+  };
   if (testDrivers.length > 0) {
     // Never replace a complete on-wiki test driver block with an uncorroborated
     // Jolpica-only list (empty numbers/teams) — that caused Belgian GP flip-flops.
@@ -1634,12 +1698,12 @@ export function updateEntryListTableIfNeeded(
       td => testDriverEntryCompleteness(td) >= 4
     );
     if (isWeakTestDriverList(testDrivers) && wikiHasCompleteTestDrivers) {
-      parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+      parsedTestDrivers.forEach(setCombined);
     } else {
-      testDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+      testDrivers.forEach(setCombined);
     }
   } else {
-    parsedTestDrivers.forEach(td => combinedTestDriversMap.set(td.name.toLowerCase(), td));
+    parsedTestDrivers.forEach(setCombined);
   }
   const combinedTestDrivers = Array.from(combinedTestDriversMap.values())
     .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));

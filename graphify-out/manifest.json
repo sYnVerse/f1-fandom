@@ -15,8 +15,8 @@
     "semantic_hash": ""
   },
   "src/f1-api.ts": {
-    "mtime": 1784930951.4273763,
-    "ast_hash": "33f362b73b2c34d639081051a5634457",
+    "mtime": 1784941930.1914546,
+    "ast_hash": "760b709faa0b2badeed3f62cd8e38c2b",
     "semantic_hash": ""
   },
   "src/frontend-html.ts": {
@@ -25,7 +25,7 @@
     "semantic_hash": ""
   },
   "src/index.ts": {
-    "mtime": 1784940850.4376364,
+    "mtime": 1784941831.3358312,
     "ast_hash": "6ec2aeb96b1807d1c985fe96376ccd98",
     "semantic_hash": ""
   },
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "src/wikitext-generator.ts": {
-    "mtime": 1784940892.4698622,
-    "ast_hash": "4db44e1642a82de15183c7786b27c23e",
+    "mtime": 1784941917.855492,
+    "ast_hash": "cd6f2afb42de98009f801aa802791382",
     "semantic_hash": ""
   },
   "tsconfig.json": {
