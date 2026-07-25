@@ -8,7 +8,7 @@
   "6": "Daily Reporting and Cloudflare Worker HTTP",
   "7": "Project Dependencies and Scripts (package.json)",
   "8": "Repository Documentation and Settings (README)",
-  "9": "Community 9",
-  "10": "Community 10",
-  "12": "Community 12"
+  "9": "wiki.ts",
+  "10": "llm-reporter.ts",
+  "12": "f1-api-cache.ts"
 }

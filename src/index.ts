@@ -51,7 +51,10 @@ import {
   buildTestDriverNameKeys,
   isKnownTestDriver,
   updateEntryListTableIfNeeded,
+  addTestDriversToCareerResults,
+  extractTestDriversFromCareerResults,
 } from './wikitext-generator';
+import type { TestDriverEntry } from './wikitext-generator';
 import { 
   loginToWiki, 
   getPageContent, 
@@ -944,7 +947,9 @@ export default {
             console.error(`  Error fetching GP template: ${e.message}`);
           }
 
-          const expectedWikitext = generateWikiResultsText(gpResults, false);
+          // Preserve any {{TD}} test-driver rows already on the Career Results template.
+          const existingTestDrivers = extractTestDriversFromCareerResults(gpWikitext);
+          const expectedWikitext = generateWikiResultsText(gpResults, false, existingTestDrivers);
           if (gpWikitext.trim() === expectedWikitext.trim()) {
             console.log(`  GP template already matches expected results.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
@@ -1125,6 +1130,17 @@ export default {
                   updatedContent = entryListUpdate.updatedWikitext;
                   changes.push("Entry List");
                 }
+                // Keep Career Results in sync with Entry List test drivers (e.g. |Jak Crawford = {{TD}}).
+                await syncCareerResultsTestDrivers({
+                  year,
+                  raceName,
+                  testDrivers: resolvedTestDrivers,
+                  domain,
+                  apiEndpoint,
+                  proxySecret,
+                  kvState: env.F1_WIKI_STATE,
+                  getSession,
+                });
               }
               await markGpPageSectionSynced('entry_list');
             } else if (isNewPage) {
@@ -1244,6 +1260,16 @@ export default {
                     updatedContent = entryListUpdate.updatedWikitext;
                     changes.push("Entry List (Test Drivers)");
                   }
+                  await syncCareerResultsTestDrivers({
+                    year,
+                    raceName,
+                    testDrivers: fp1TestDrivers,
+                    domain,
+                    apiEndpoint,
+                    proxySecret,
+                    kvState: env.F1_WIKI_STATE,
+                    getSession,
+                  });
                 } else if (isWeakTestDriverList(fp1TestDrivers)) {
                   console.log(
                     `Skipping Entry List test-driver update for ${gpPageTitle}: unresolved Jolpica-only list (${fp1TestDrivers.map(td => td.name).join(', ')})`
@@ -1933,7 +1959,65 @@ export function isPlaceholder(wikitext: string): boolean {
   return true;
 }
 
-function generateWikiResultsText(results: any[], _isSprint: boolean): string {
+/**
+ * After Entry List test-driver sync, append missing `|Name = {{TD}}` rows to
+ * Template:Career Results/{year} {raceName} (idempotent).
+ */
+async function syncCareerResultsTestDrivers(opts: {
+  year: number;
+  raceName: string;
+  testDrivers: TestDriverEntry[];
+  domain: string;
+  apiEndpoint: string | undefined;
+  proxySecret: string | undefined;
+  kvState: any;
+  getSession: () => Promise<any>;
+}): Promise<boolean> {
+  const { year, raceName, testDrivers, domain, apiEndpoint, proxySecret, kvState, getSession } = opts;
+  if (testDrivers.length === 0 || isWeakTestDriverList(testDrivers)) {
+    return false;
+  }
+
+  const gpTitle = `Template:Career Results/${year} ${raceName}`;
+  let gpWikitext = '';
+  try {
+    const pageInfo = await getPageContent(domain, gpTitle, undefined, apiEndpoint, proxySecret, kvState);
+    if (!pageInfo.exists) {
+      console.log(`  Career Results template ${gpTitle} does not exist yet; skipping test-driver TD sync.`);
+      return false;
+    }
+    gpWikitext = pageInfo.content;
+  } catch (e: any) {
+    console.error(`  Error fetching Career Results template for TD sync: ${e.message}`);
+    return false;
+  }
+
+  const { updatedWikitext, changed } = addTestDriversToCareerResults(gpWikitext, testDrivers);
+  if (!changed) {
+    console.log(`  Career Results template already includes test drivers (${testDrivers.map(td => td.name).join(', ')}).`);
+    return false;
+  }
+
+  const currentSession = await getSession();
+  await editPage(
+    domain,
+    currentSession,
+    gpTitle,
+    updatedWikitext,
+    "Automated test driver update for Career Results",
+    apiEndpoint
+  );
+  console.log(
+    `  Updated Career Results template with test drivers: ${testDrivers.map(td => td.name).join(', ')}.`
+  );
+  return true;
+}
+
+function generateWikiResultsText(
+  results: any[],
+  _isSprint: boolean,
+  testDriverNames: string[] = []
+): string {
   const driverResultsMap: Record<string, string> = {};
   for (const r of results) {
     const wikiName = driverIdToWikiName[r.Driver.driverId];
@@ -1942,11 +2026,26 @@ function generateWikiResultsText(results: any[], _isSprint: boolean): string {
     }
   }
 
+  const raceDriverNames = new Set(wikiDriverList.map(n => n.toLowerCase()));
+  const uniqueTestDrivers: string[] = [];
+  const seenTest = new Set<string>();
+  for (const name of testDriverNames) {
+    const trimmed = name.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || raceDriverNames.has(key) || seenTest.has(key)) continue;
+    seenTest.add(key);
+    uniqueTestDrivers.push(trimmed);
+  }
+
   let wikitext = '{{#switch:{{{1}}}\n';
   for (const wikiName of wikiDriverList) {
     const resultVal = driverResultsMap[wikiName] || '';
     const paddedName = wikiName.padEnd(22, ' ');
     wikitext += `|${paddedName} = ${resultVal}\n`;
+  }
+  for (const wikiName of uniqueTestDrivers) {
+    const paddedName = wikiName.padEnd(22, ' ');
+    wikitext += `|${paddedName} = {{TD}}\n`;
   }
   wikitext += '|#default = \n';
   wikitext += '}}<noinclude>[[Category:2026 Results Templates]]</noinclude>';

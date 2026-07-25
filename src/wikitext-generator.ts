@@ -1503,6 +1503,66 @@ export function detectTestDriversFromPdf(
   return fiaRowsToTestDriverEntries(fp1TestDrivers);
 }
 
+/** Extract driver names already marked {{TD}} in a Career Results switch template. */
+export function extractTestDriversFromCareerResults(wikitext: string): string[] {
+  const names: string[] = [];
+  for (const line of wikitext.split('\n')) {
+    const match = line.match(/^\|([^=]+)=\s*(.*)$/);
+    if (!match) continue;
+    const name = match[1].trim();
+    if (name === '#default') continue;
+    if (match[2].trim() === '{{TD}}') {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * Append missing test drivers as `|Name = {{TD}}` before `#default` in a
+ * Career Results switch template (e.g. Template:Career Results/2026 Belgian Grand Prix).
+ */
+export function addTestDriversToCareerResults(
+  wikitext: string,
+  testDrivers: Array<TestDriverEntry | string>
+): { updatedWikitext: string; changed: boolean } {
+  if (!wikitext || testDrivers.length === 0) {
+    return { updatedWikitext: wikitext, changed: false };
+  }
+
+  const namesToAdd = testDrivers.map(td => (typeof td === 'string' ? td.trim() : td.name.trim())).filter(Boolean);
+  if (namesToAdd.length === 0) {
+    return { updatedWikitext: wikitext, changed: false };
+  }
+
+  const lines = wikitext.split('\n');
+  const existingNames = new Set<string>();
+  // Match generateWikiResultsText / wikiDriverList padding (ASCII-oriented column).
+  const padWidth = 22;
+
+  for (const line of lines) {
+    const match = line.match(/^\|([^=]+)=/);
+    if (!match) continue;
+    const name = match[1].trim();
+    if (name === '#default') continue;
+    existingNames.add(name.toLowerCase());
+  }
+
+  const missing = namesToAdd.filter(name => !existingNames.has(name.toLowerCase()));
+  if (missing.length === 0) {
+    return { updatedWikitext: wikitext, changed: false };
+  }
+
+  const defaultIdx = lines.findIndex(line => /^\|\s*#default\s*=/.test(line));
+  if (defaultIdx === -1) {
+    return { updatedWikitext: wikitext, changed: false };
+  }
+
+  const newLines = missing.map(name => `|${name.padEnd(padWidth, ' ')} = {{TD}}`);
+  lines.splice(defaultIdx, 0, ...newLines);
+  return { updatedWikitext: lines.join('\n'), changed: true };
+}
+
 export function updateEntryListTableIfNeeded(
   currentWikitext: string,
   expectedDrivers: Driver[],

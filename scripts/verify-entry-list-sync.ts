@@ -10,6 +10,8 @@ import {
   extractEntryListTable,
   isWeakTestDriverList,
   testDriverEntryCompleteness,
+  addTestDriversToCareerResults,
+  extractTestDriversFromCareerResults,
 } from '../src/wikitext-generator';
 import { Driver } from '../src/f1-api';
 
@@ -310,5 +312,70 @@ const resolvedWithFp1 = resolveTestDriversForRace(previousRoundJuniors, {
 });
 assert(resolvedWithFp1.some(td => td.name === 'Jak Crawford'), 'FP1+PDF must keep Crawford');
 assert(!resolvedWithFp1.some(td => td.name === 'Paul Aron'), 'FP1+PDF must not keep Barcelona juniors');
+
+// --- 8. Career Results template: append {{TD}} for test drivers (Belgian GP style) ---
+const careerResultsTemplate = `{{#switch:{{{1}}}
+|Max Verstappen         = 
+|Isack Hadjar           = 
+|Charles Leclerc        = 
+|Lewis Hamilton         = 
+|George Russell         = 
+|Andrea Kimi Antonelli  = 
+|Pierre Gasly           = 
+|Franco Colapinto       = 
+|Lando Norris           = 
+|Oscar Piastri          = 
+|Carlos Sainz, Jr.      = 
+|Alexander Albon        = 
+|Liam Lawson            = 
+|Arvid Lindblad         = 
+|Lance Stroll           = 
+|Fernando Alonso        = 
+|Nico Hülkenberg        = 
+|Gabriel Bortoleto      = 
+|Esteban Ocon           = 
+|Oliver Bearman         = 
+|Valtteri Bottas        = 
+|Sergio Pérez           = 
+|#default = 
+}}<noinclude>[[Category:2026 Results Templates]]</noinclude>`;
+
+const careerTdUpdate = addTestDriversToCareerResults(careerResultsTemplate, crawfordResolved);
+assert(careerTdUpdate.changed === true, 'Career Results should gain Jak Crawford {{TD}}');
+assert(
+  careerTdUpdate.updatedWikitext.includes('|Jak Crawford           = {{TD}}'),
+  'Should insert padded |Jak Crawford = {{TD}} before #default'
+);
+assert(
+  careerTdUpdate.updatedWikitext.indexOf('|Jak Crawford') <
+    careerTdUpdate.updatedWikitext.indexOf('|#default'),
+  'TD row must appear before #default'
+);
+
+const careerTdAgain = addTestDriversToCareerResults(careerTdUpdate.updatedWikitext, crawfordResolved);
+assert(careerTdAgain.changed === false, 'Career Results TD sync must be idempotent');
+
+const extracted = extractTestDriversFromCareerResults(careerTdUpdate.updatedWikitext);
+assert(extracted.length === 1 && extracted[0] === 'Jak Crawford', 'Should extract Jak Crawford from Career Results');
+
+// Multiple test drivers + preserve existing race values
+const filledTemplate = `{{#switch:{{{1}}}
+|Max Verstappen         = {{1st}}
+|Lando Norris           = {{2nd}}
+|Jak Crawford           = {{TD}}
+|#default = 
+}}<noinclude>[[Category:2026 Results Templates]]</noinclude>`;
+const multiTd = addTestDriversToCareerResults(filledTemplate, [
+  { number: '34', name: 'Jak Crawford', flag: '{{USA}}', constructorId: 'aston_martin' },
+  { number: '98', name: "Patricio O'Ward", flag: '{{MEX}}', constructorId: 'mclaren' },
+]);
+assert(multiTd.changed === true, 'Should add missing O\'Ward while keeping Crawford');
+assert(multiTd.updatedWikitext.includes('|Max Verstappen         = {{1st}}'), 'Must not clobber race results');
+assert(multiTd.updatedWikitext.includes('|Jak Crawford           = {{TD}}'), 'Must keep existing TD');
+assert(multiTd.updatedWikitext.includes("|Patricio O'Ward"), 'Must add second test driver');
+assert(
+  (multiTd.updatedWikitext.match(/\|Patricio O'Ward[^=]*= \{\{TD\}\}/) || []).length === 1,
+  'O\'Ward must be marked {{TD}}'
+);
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');
