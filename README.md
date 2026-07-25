@@ -16,6 +16,7 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 
 ### Automated Syncing & Background Tasks (Cron Workers)
 - **Latest News & Events Sync**: Periodically compiles the previous, latest, and upcoming event schedules and updates `Template:Latest_F1_News/Events`.
+- **Latest Data Template Sync**: After each Grand Prix race concludes and final results are published, updates `Template:Latest_Data` (`number` = season round, `gp` = latest completed GP link, `gpnumber` incremented by 1 per completed round).
 - **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with the latest standings from the Jolpi API.
 - **Concluded Sessions Polling**: Automatically checks KV caches and conclusion status for completed Grand Prix and Sprint sessions, polling results and deploying them to wiki templates as soon as they become available.
 - **Sprint Qualifying Automation**: Fetches Sprint Qualifying session classifications from the OpenF1 API, resolves driver numbers to current season constructors, and updates the GP page's Sprint Qualifying Results section with a formatted wikitext table.
@@ -98,6 +99,7 @@ f1-fandom/
 │   ├── verify-jolpica-cache.ts     # API cache dedup and backoff tests
 │   ├── verify-practice-sessions.ts # Practice scraping and test driver tests
 │   ├── verify-openf1-sync.ts       # OpenF1 Sprint Qualifying sync and wikitext tests
+│   ├── verify-latest-data.ts       # Template:Latest_Data parse/increment tests
 │   ├── verify-llm-reporter.ts      # HTML sanitization and prompt context tests
 │   ├── verify-entry-list-sync.ts   # Entry list table sync and PDF parser tests
 │   ├── verify-kv-ops.ts            # KV daily write count and edit failure lock tests

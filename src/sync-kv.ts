@@ -63,6 +63,11 @@ export function latestNewsEventsKey(): string {
   return `${ACTIVE_SEASON}_latest_f1_news_events_synced`;
 }
 
+/** Per-round flag for Template:Latest_Data after that GP's results are published. */
+export function latestDataKey(round: number): string {
+  return `${ACTIVE_SEASON}_round_${round}_latest_data_synced`;
+}
+
 export function careerStandingsKey(page: CareerStandingsPage): string {
   return `${ACTIVE_SEASON}_career_standings_${page}_synced`;
 }

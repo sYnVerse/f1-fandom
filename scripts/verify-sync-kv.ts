@@ -7,6 +7,7 @@ import {
   sprintCareerTemplateKey,
   statsTemplateKey,
   gpPageSectionKey,
+  latestDataKey,
   legacyGpUpdatedKey,
   gpPageSectionRequired,
   allRequiredGpPageSectionsSynced,
@@ -48,6 +49,10 @@ assert(
 assert(
   gpPageSectionKey(7, 'fp3_report') === '2026_round_7_gp_page_fp3_report_synced',
   'FP3 report section key'
+);
+assert(
+  latestDataKey(10) === '2026_round_10_latest_data_synced',
+  'Latest_Data per-round key'
 );
 
 const fpOnlyTiming = {
