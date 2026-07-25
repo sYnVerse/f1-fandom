@@ -12,6 +12,8 @@ import {
   testDriverEntryCompleteness,
   addTestDriversToCareerResults,
   extractTestDriversFromCareerResults,
+  canonicalizeTestDriverWikiName,
+  normalizeDriverNameKey,
 } from '../src/wikitext-generator';
 import { Driver } from '../src/f1-api';
 
@@ -377,5 +379,81 @@ assert(
   (multiTd.updatedWikitext.match(/\|Patricio O'Ward[^=]*= \{\{TD\}\}/) || []).length === 1,
   'O\'Ward must be marked {{TD}}'
 );
+
+// --- 9. Hirakawa wiki title uses macron (Ryō), like Pérez / Hülkenberg ---
+assert(canonicalizeTestDriverWikiName('Ryo Hirakawa') === 'Ryō Hirakawa', 'ASCII Ryo must canonicalize to Ryō');
+assert(canonicalizeTestDriverWikiName('Ryō Hirakawa') === 'Ryō Hirakawa', 'Canonical Ryō must be stable');
+assert(normalizeDriverNameKey('Ryō Hirakawa') === 'ryo hirakawa', 'Diacritic-insensitive key for Ryō');
+
+const hungarianPdf = `
+In addition to the list of cars and drivers eligible to take part in the event the following drivers may also take part in FP1
+150 HIR Ryo Hirakawa JPN Haas F1 Team Haas Ferrari
+`;
+const hirakawaResolved = resolveTestDriversForRace(mainDrivers, { pdfText: hungarianPdf });
+assert(hirakawaResolved.length === 1, 'Hungarian PDF should resolve Hirakawa');
+assert(hirakawaResolved[0].name === 'Ryō Hirakawa', `Expected Ryō Hirakawa, got ${hirakawaResolved[0].name}`);
+
+const careerWithAsciiRyo = `{{#switch:{{{1}}}
+|Max Verstappen         = 
+|Ryo Hirakawa           = {{TD}}
+|#default = 
+}}<noinclude>[[Category:2026 Results Templates]]</noinclude>`;
+const fixedHirakawa = addTestDriversToCareerResults(careerWithAsciiRyo, hirakawaResolved);
+assert(fixedHirakawa.changed === true, 'Career Results should rewrite Ryo → Ryō');
+assert(fixedHirakawa.updatedWikitext.includes('|Ryō Hirakawa'), 'Should use Ryō Hirakawa');
+assert(!fixedHirakawa.updatedWikitext.includes('|Ryo Hirakawa'), 'ASCII Ryo spelling must be removed');
+assert(
+  (fixedHirakawa.updatedWikitext.match(/Hirakawa/g) || []).length === 1,
+  'Must not duplicate Hirakawa rows'
+);
+
+const wikiWithAsciiRyo = `
+===Entry List===
+{| class="wikitable"
+!<span title="Car number">No.</span>
+!Driver
+!Entrant
+!Constructor
+!Chassis
+!Engine
+!Model
+!Tyre
+|-
+!4
+|{{GBR}} [[Lando Norris]]
+|{{GBR}} [[McLaren|McLaren Mastercard F1 Team]]
+|{{McLaren-CON}}
+|[[McLaren MCL40|MCL40]]
+|{{Mercedes-ENG}}
+|[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+!81
+|{{AUS}} [[Oscar Piastri]]
+|{{GBR}} [[McLaren|McLaren Mastercard F1 Team]]
+|{{McLaren-CON}}
+|[[McLaren MCL40|MCL40]]
+|{{Mercedes-ENG}}
+|[[Mercedes-AMG F1 M17|F1 M17]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+!colspan="8" | [[Test Driver]]s for [[#FP1|Practice 1]]
+|-
+!50
+|{{JPN}} [[Ryo Hirakawa]]
+|{{USA}} [[Haas F1 Team]]
+|{{Haas-CON}}
+|[[Haas VF-26|VF-26]]
+|{{Ferrari-ENG}}
+|[[Ferrari 066/12|066/12]] 1.6 [[V6]][[Turbocharger|t]]
+|{{Pirelli}}
+|-
+! colspan="8" align="center" |Source: [https://fia.com source.pdf]
+|}
+`;
+const entryListHirakawa = updateEntryListTableIfNeeded(wikiWithAsciiRyo, mainDrivers, hirakawaResolved);
+assert(entryListHirakawa.changed === true, 'Entry List should rewrite Ryo → Ryō');
+assert(entryListHirakawa.updatedWikitext.includes('[[Ryō Hirakawa]]'), 'Entry List link must use Ryō');
+assert(!entryListHirakawa.updatedWikitext.includes('[[Ryo Hirakawa]]'), 'ASCII Ryo link must be gone');
 
 console.log('PASS: Entry list verification and PDF test driver detection tests.');
