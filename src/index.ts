@@ -3,6 +3,7 @@ import { pageContainsHeader, extractBackgroundTemplates } from './wikitext-parse
 import { 
   getSchedule,
   setActiveSeasonSchedule,
+  getLatestConcludedRound,
   getRaceResult, 
   getQualifyingResult,
   hasQualifyingSessionTimes,
@@ -82,6 +83,7 @@ import {
   statsTemplateKey,
   gpPageSectionKey,
   latestNewsEventsKey,
+  latestDataKey,
   careerStandingsKey,
   legacySprintUpdatedKey,
   isKvSynced,
@@ -715,6 +717,18 @@ export default {
           await syncCareerStandingsTemplates(env, getSession, apiCtx);
         } catch (e: any) {
           console.error("Failed to sync Career Results standings templates:", e.message);
+        }
+        setActiveSeasonSchedule(apiCtx, schedule);
+      }
+
+      // --- Sync Template:Latest_Data after the latest GP results are published ---
+      // Runs on hourly cron always, and on high-frequency during an active race weekend
+      // so the template updates soon after the race concludes.
+      if (!isHighFrequency || activeWeekendRace) {
+        try {
+          await syncLatestDataTemplate(env, getSession, schedule, apiCtx);
+        } catch (e: any) {
+          console.error("Failed to sync Latest_Data template:", e.message);
         }
         setActiveSeasonSchedule(apiCtx, schedule);
       }
@@ -2248,6 +2262,186 @@ async function checkAndSendDailySummary(env: any): Promise<void> {
 }
 
 const ACTIVE_SEASON = 2026;
+
+export type LatestDataValues = {
+  number: number;
+  gp: string;
+  gpnumber: number;
+};
+
+/** Parse Template:Latest_Data switch values from page wikitext. */
+export function parseLatestDataTemplate(wikitext: string): LatestDataValues | null {
+  const numberMatch = wikitext.match(/\|number\s*=\s*(\d+)/i);
+  const gpMatch = wikitext.match(/\|gp\s*=\s*(\[\[[^\]]+\]\])/i);
+  const gpnumberMatch = wikitext.match(/\|gpnumber\s*=\s*(\d+)/i);
+  if (!numberMatch || !gpMatch || !gpnumberMatch) {
+    return null;
+  }
+  return {
+    number: parseInt(numberMatch[1], 10),
+    gp: gpMatch[1].trim(),
+    gpnumber: parseInt(gpnumberMatch[1], 10),
+  };
+}
+
+/** Build Template:Latest_Data wikitext, preserving the documentation noinclude. */
+export function generateLatestDataWikitext(values: LatestDataValues): string {
+  return (
+    `{{#switch:{{{1}}}` +
+    `|number = ${values.number}` +
+    `|gp = ${values.gp}` +
+    `|gpnumber = ${values.gpnumber}` +
+    `}}<noinclude>{{Documentation}}</noinclude>`
+  );
+}
+
+/**
+ * Compute the next Latest_Data values after a completed GP.
+ * gpnumber increments by 1 per completed grand prix round (by round delta within a season).
+ */
+export function computeNextLatestDataValues(
+  current: LatestDataValues | null,
+  year: number,
+  round: number,
+  raceName: string
+): LatestDataValues {
+  const gp = `[[${year} ${raceName}]]`;
+  if (!current) {
+    throw new Error(
+      'Cannot compute gpnumber without an existing Template:Latest_Data baseline (number/gp/gpnumber).'
+    );
+  }
+
+  const currentGpYearMatch = current.gp.match(/\[\[(\d{4})\s+/);
+  const currentGpYear = currentGpYearMatch ? parseInt(currentGpYearMatch[1], 10) : NaN;
+
+  if (current.gp === gp && current.number === round) {
+    return { ...current, gp };
+  }
+
+  let increment = 1;
+  if (!Number.isNaN(currentGpYear) && currentGpYear === year && round > current.number) {
+    increment = round - current.number;
+  } else if (!Number.isNaN(currentGpYear) && currentGpYear === year && round < current.number) {
+    // Do not rewind historical GP count when a stale/older round is requested.
+    return current;
+  }
+
+  return {
+    number: round,
+    gp,
+    gpnumber: current.gpnumber + increment,
+  };
+}
+
+/**
+ * Update Template:Latest_Data after the latest completed GP has published race results.
+ * number = season round, gp = wiki link to that GP, gpnumber = historical GP count (+1 per round).
+ */
+async function syncLatestDataTemplate(
+  env: any,
+  getSession: () => Promise<any>,
+  schedule: ScheduleRace[],
+  apiCtx?: F1ApiContext
+): Promise<void> {
+  const domain = env.DEFAULT_WIKI_DOMAIN || 'f1.fandom.com';
+  const apiEndpoint = env.WIKI_API_ENDPOINT;
+  const proxySecret = env.PROXY_SECRET;
+  const year = ACTIVE_SEASON;
+  const pageTitle = 'Template:Latest_Data';
+
+  console.log('Starting Latest_Data template sync...');
+
+  const latestRound = apiCtx?.latestConcludedRound ?? getLatestConcludedRound(schedule);
+  if (latestRound <= 0) {
+    console.log('No concluded GP rounds yet this season. Skipping Latest_Data sync.');
+    return;
+  }
+
+  const kvKey = latestDataKey(latestRound);
+  if (await isKvSynced(env.F1_WIKI_STATE, kvKey)) {
+    console.log(`Latest_Data already synced for round ${latestRound} (KV). Skipping.`);
+    return;
+  }
+
+  const race = schedule.find((r) => parseInt(r.round, 10) === latestRound);
+  if (!race) {
+    console.warn(`Could not find schedule entry for round ${latestRound}. Skipping Latest_Data sync.`);
+    return;
+  }
+
+  let gpResults: any[] = [];
+  try {
+    gpResults = await getRaceResult(year, latestRound, false, apiCtx);
+  } catch (e: any) {
+    console.warn(`Failed to fetch GP results for Latest_Data (round ${latestRound}): ${e.message}`);
+    return;
+  }
+
+  if (!gpResults || gpResults.length === 0) {
+    console.log(
+      `Round ${latestRound} (${race.raceName}) has concluded by time but race results are not published yet. Skipping Latest_Data sync.`
+    );
+    return;
+  }
+
+  console.log(`Latest completed GP with published results: round ${latestRound} (${race.raceName}).`);
+
+  const pageInfo = await getPageContent(
+    domain,
+    pageTitle,
+    undefined,
+    apiEndpoint,
+    proxySecret,
+    env.F1_WIKI_STATE
+  );
+
+  const current = pageInfo.exists ? parseLatestDataTemplate(pageInfo.content) : null;
+  if (pageInfo.exists && !current) {
+    console.error(`Could not parse ${pageTitle} contents. Skipping edit to avoid corrupting the page.`);
+    return;
+  }
+
+  let next: LatestDataValues;
+  try {
+    next = computeNextLatestDataValues(current, year, latestRound, race.raceName);
+  } catch (e: any) {
+    console.error(`Latest_Data compute failed: ${e.message}`);
+    return;
+  }
+
+  // If parse succeeded but compute chose not to advance (stale older round), treat as synced only when matching.
+  const expected = generateLatestDataWikitext(next);
+  if (pageInfo.exists && pageInfo.content.trim() === expected.trim()) {
+    console.log(`${pageTitle} is already up to date for round ${latestRound}.`);
+    await markKvSynced(env.F1_WIKI_STATE, kvKey);
+    return;
+  }
+
+  if (
+    current &&
+    current.number === next.number &&
+    current.gp === next.gp &&
+    current.gpnumber === next.gpnumber
+  ) {
+    console.log(`${pageTitle} values already match round ${latestRound}.`);
+    await markKvSynced(env.F1_WIKI_STATE, kvKey);
+    return;
+  }
+
+  console.log(`Updating ${pageTitle}:`, next);
+  const session = await getSession();
+  await editPage(
+    domain,
+    session,
+    pageTitle,
+    expected,
+    `Automated Latest_Data update after ${year} ${race.raceName} (round ${latestRound})`,
+    apiEndpoint
+  );
+  await markKvSynced(env.F1_WIKI_STATE, kvKey);
+  console.log(`Successfully updated ${pageTitle}!`);
+}
 
 async function syncLatestNewsEvents(
   env: any,
