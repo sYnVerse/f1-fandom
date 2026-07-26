@@ -1694,7 +1694,7 @@ export default {
                       const { weatherTemplate, tyresTemplate } = extractBackgroundTemplates(sectionContent);
                       const weatherPart = weatherTemplate || (race.Sprint ? `{{WeatherSprint/2023\n| fp1 = \n| quali = \n| Sprint_shootout = \n| sprint = \n| race = \n}}` : `{{Weather|fp1=|fp2=|fp3=|qualification=|race=}}`);
                       const tyresPart = tyresTemplate || `{{AvailableTyres/2023|H=|M=|S=}}`;
-                      reportText = `${weatherPart}${tyresPart}\n{{Clear}}\n${reportText}`;
+                      reportText = `${weatherPart}${tyresPart}\n${reportText}`;
                     }
 
                     const replaced = replaceSectionWikitext(updatedContent, sec.header, reportText);
