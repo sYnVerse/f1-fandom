@@ -72,6 +72,11 @@ export function careerStandingsKey(page: CareerStandingsPage): string {
   return `${ACTIVE_SEASON}_career_standings_${page}_synced`;
 }
 
+/** Cached FP1 test-driver metadata (flags, teams, numbers) resolved for a round. */
+export function testDriversCacheKey(round: number): string {
+  return `${ACTIVE_SEASON}_round_${round}_test_drivers_cache`;
+}
+
 export const BASE_STATS_TEMPLATES = [
   'Distance', 'DistanceLed', 'Entries', 'FastestLaps', 'FrontRows',
   'Laps', 'LapsLed', 'Podiums', 'Points', 'Poles', 'RacesLed', 'Starts', 'Wins',

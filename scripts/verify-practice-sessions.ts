@@ -211,6 +211,45 @@ const practiceNoPhantoms = generatePracticeWikitext(
 assert(!practiceNoPhantoms.includes('[[Paul Aron]]'), 'Should exclude test drivers without a classified session time');
 assert(practiceNoPhantoms.includes('[[Patricio O Ward]]'), 'Should still include participating test drivers');
 
+// Cached Entry List test-driver metadata must supply flags/teams when the hardcoded
+// nationality map does not know the driver (Hungarian GP 2026: Herta/Aron/etc.).
+const fp1UnknownNationality = {
+  'Lando Norris': {
+    position: '1',
+    number: '4',
+    driverName: 'Lando Norris',
+    teamName: 'McLaren',
+    time: '1:23.456',
+  },
+  'Colton Herta': {
+    position: '15',
+    number: '50',
+    driverName: 'Colton Herta',
+    teamName: '',
+    time: '1:26.100',
+  },
+};
+const cachedHerta: import('../src/wikitext-generator').TestDriverEntry[] = [
+  {
+    number: '50',
+    name: 'Colton Herta',
+    flag: '{{USA}}',
+    constructorId: 'cadillac',
+  },
+];
+const practiceWithCachedFlags = generatePracticeWikitext(
+  mainDrivers as any,
+  null,
+  fp1UnknownNationality,
+  null,
+  null,
+  { hasSprint: true, testDrivers: cachedHerta }
+);
+assert(practiceWithCachedFlags.includes('{{USA}} [[Colton Herta]]'), 'Cached test driver flag must appear in practice table');
+assert(practiceWithCachedFlags.includes('Cadillac') || practiceWithCachedFlags.includes('{{Cadillac'), 'Cached test driver team must appear in practice table');
+assert(!practiceWithCachedFlags.includes('{{FIA}} [[Colton Herta]]'), 'Must not fall back to FIA flag when cache has a real flag');
+
+
 // Jolpica lists FP1 test drivers in the round driver entry; they must still appear in practice results
 const fp1TestDriverOnJolpicaList = {
   driverId: 'ayumu_iwasa',

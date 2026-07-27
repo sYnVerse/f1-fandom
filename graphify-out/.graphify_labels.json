@@ -3,6 +3,7 @@
   "1": "Wiki Standings Syncing and Formatting",
   "2": "Ergast API Python Client (pyergast)",
   "3": "F1 Statistics and Calculations",
+  "4": "fia-pdf-parser.ts",
   "5": "TypeScript Configuration (tsconfig)",
   "6": "Daily Reporting and Cloudflare Worker HTTP",
   "7": "Project Dependencies and Scripts (package.json)",
