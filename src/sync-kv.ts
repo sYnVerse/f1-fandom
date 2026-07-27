@@ -77,6 +77,26 @@ export function testDriversCacheKey(round: number): string {
   return `${ACTIVE_SEASON}_round_${round}_test_drivers_cache`;
 }
 
+/** Round whose standings are reflected in Career Points/Position/Team_Position templates. */
+export function careerStandingsRoundKey(): string {
+  return `${ACTIVE_SEASON}_career_standings_source_round`;
+}
+
+export async function clearKvSynced(kv: any, key: string): Promise<void> {
+  if (!kv) return;
+  await kv.delete(key);
+}
+
+/** Clear per-page Career standings sync flags so the next run re-compares wiki content. */
+export async function clearCareerStandingsSynced(kv: any): Promise<void> {
+  if (!kv) return;
+  await Promise.all(
+    (['points', 'position', 'team_position'] as CareerStandingsPage[]).map(page =>
+      clearKvSynced(kv, careerStandingsKey(page))
+    )
+  );
+}
+
 export const BASE_STATS_TEMPLATES = [
   'Distance', 'DistanceLed', 'Entries', 'FastestLaps', 'FrontRows',
   'Laps', 'LapsLed', 'Podiums', 'Points', 'Poles', 'RacesLed', 'Starts', 'Wins',

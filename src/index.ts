@@ -18,6 +18,7 @@ import {
   getF1RacingKey,
   createF1ApiContextFromEnv,
   fetchRoundJolpicaData,
+  invalidateSeasonStandingsCache,
   F1ApiContext,
   ScheduleRace,
   PracticeSessionData,
@@ -85,6 +86,8 @@ import {
   latestNewsEventsKey,
   latestDataKey,
   careerStandingsKey,
+  careerStandingsRoundKey,
+  clearCareerStandingsSynced,
   legacySprintUpdatedKey,
   testDriversCacheKey,
   isKvSynced,
@@ -712,10 +715,25 @@ export default {
         setActiveSeasonSchedule(apiCtx, schedule);
       }
 
-      // --- Sync Career Results Standings Templates (only on hourly/low-frequency/manual sync) ---
+      // --- Career Results Points/Position/Team_Position ---
+      // Prefer syncing alongside race-result processing (same round-specific Jolpica
+      // standings as Championship Standings). Keep a light hourly backup that only
+      // runs once race results exist for the latest concluded round.
       if (!isHighFrequency) {
         try {
-          await syncCareerStandingsTemplates(env, getSession, apiCtx);
+          const latestRound = apiCtx.latestConcludedRound ?? getLatestConcludedRound(schedule);
+          if (latestRound > 0) {
+            const results = await getRaceResult(year, latestRound, false, apiCtx).catch(() => []);
+            if (results.length > 0) {
+              await syncCareerStandingsTemplates(env, getSession, apiCtx, {
+                expectedRound: latestRound,
+              });
+            } else {
+              console.log(
+                `Career standings templates: round ${latestRound} race results not published yet. Skipping early sync.`
+              );
+            }
+          }
         } catch (e: any) {
           console.error("Failed to sync Career Results standings templates:", e.message);
         }
@@ -849,11 +867,17 @@ export default {
         const gpPageFullySynced = allRequiredGpPageSectionsSynced(gpPageSectionState, pageTiming);
 
         const sprintFullyHandled = !race.Sprint || sprintCareerTemplateSynced || !isSprintConcluded;
+        const standingsSourceRound = env.F1_WIKI_STATE
+          ? await env.F1_WIKI_STATE.get(careerStandingsRoundKey())
+          : null;
+        const careerStandingsBehind =
+          isRaceConcluded && standingsSourceRound !== String(round);
         const roundFullySynced =
           (!gpSessionCompleted || gpCareerTemplateSynced) &&
           sprintFullyHandled &&
           (!isRaceConcluded || statsTemplatesSynced) &&
-          gpPageFullySynced;
+          gpPageFullySynced &&
+          !careerStandingsBehind;
 
         // Order-only qualifying can be marked synced with blank Q times. Keep processing the
         // weekend for a grace period so we can re-sync once Jolpica/OpenF1 publish times.
@@ -871,13 +895,20 @@ export default {
           continue;
         }
 
+        if (careerStandingsBehind) {
+          console.log(
+            `Round ${round} (${raceName}): Career standings templates still on round ${standingsSourceRound ?? 'unknown'}; will sync with race results.`
+          );
+        }
+
         const needGpCareerTemplate = gpSessionCompleted && !gpCareerTemplateSynced;
         const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
         const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
         const needGpPage =
           !gpPageFullySynced ||
           (allowQualiTimesRepair && isQualiConcluded) ||
-          allowContentRepair;
+          allowContentRepair ||
+          careerStandingsBehind;
 
         if (roundFullySynced && needGpPage) {
           console.log(
@@ -895,9 +926,15 @@ export default {
 
         const needSprintQuali = needGpPage && !!race.Sprint && isSprintQualiConcluded;
         const needQuali = needGpPage && isQualiConcluded;
-        const needGpResults = needGpCareerTemplate || needStats || (needGpPage && isRaceConcluded);
+        const needGpResults =
+          needGpCareerTemplate ||
+          needStats ||
+          (needGpPage && isRaceConcluded) ||
+          careerStandingsBehind;
         const needSprintResults = needSprintTemplate || (needGpPage && isSprintConcluded);
-        const needStandings = needGpPage && (isRaceConcluded || isBackgroundTime || needSprintQuali || needQuali);
+        const needStandings =
+          needGpPage && (isRaceConcluded || isBackgroundTime || needSprintQuali || needQuali) ||
+          careerStandingsBehind;
         const needDrivers = needGpPage && (
           isBackgroundTime ||
           isQualiConcluded ||
@@ -965,6 +1002,7 @@ export default {
           // Preserve any {{TD}} test-driver rows already on the Career Results template.
           const existingTestDrivers = extractTestDriversFromCareerResults(gpWikitext);
           const expectedWikitext = generateWikiResultsText(gpResults, false, existingTestDrivers);
+          let gpTemplateUpdated = false;
           if (gpWikitext.trim() === expectedWikitext.trim()) {
             console.log(`  GP template already matches expected results.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
@@ -978,15 +1016,36 @@ export default {
             await editPage(domain, currentSession, gpTitle, expectedWikitext, "Automated results update from Jolpi API", apiEndpoint);
             console.log(`  Updated GP template for round ${round}.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
+            gpTemplateUpdated = true;
           } else if (gpCareerTemplateSynced) {
             console.log(`  GP template KV flag set but content differs; re-syncing...`);
             const currentSession = await getSession();
             await editPage(domain, currentSession, gpTitle, expectedWikitext, "Automated results update from Jolpi API", apiEndpoint);
             console.log(`  Updated GP template for round ${round}.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
+            gpTemplateUpdated = true;
           } else {
             console.log(`  GP template already has custom results on Fandom.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
+            gpTemplateUpdated = true;
+          }
+
+          // Once race results exist for this GP, keep Career Points/Position/Team_Position
+          // in lockstep using the same round-specific standings as Championship Standings.
+          if (gpTemplateUpdated || careerStandingsBehind || allowContentRepair) {
+            if (gpTemplateUpdated || careerStandingsBehind) {
+              await invalidateSeasonStandingsCache(year, apiCtx);
+              await clearCareerStandingsSynced(env.F1_WIKI_STATE);
+            }
+            try {
+              await syncCareerStandingsTemplates(env, getSession, apiCtx, {
+                expectedRound: round,
+                driverStandings: currentDrivers.length > 0 ? currentDrivers : undefined,
+                constructorStandings: currentConstructors.length > 0 ? currentConstructors : undefined,
+              });
+            } catch (e: any) {
+              console.error(`Failed to sync Career standings templates after round ${round} results:`, e.message);
+            }
           }
         } else {
           console.log(`  No GP results for round ${round} yet.`);
@@ -2653,26 +2712,87 @@ function mergeTestDriverCaches(
 async function syncCareerStandingsTemplates(
   env: any,
   getSession: () => Promise<any>,
-  apiCtx?: F1ApiContext
+  apiCtx?: F1ApiContext,
+  options?: {
+    /** Prefer round-specific Jolpica standings (same source as Championship Standings). */
+    expectedRound?: number;
+    driverStandings?: any[];
+    constructorStandings?: any[];
+  }
 ): Promise<void> {
   const domain = env.DEFAULT_WIKI_DOMAIN || "f1.fandom.com";
   const apiEndpoint = env.WIKI_API_ENDPOINT;
   const proxySecret = env.PROXY_SECRET;
+  const expectedRound = options?.expectedRound;
 
-  console.log("Starting Career Results standings templates sync...");
+  console.log(
+    expectedRound
+      ? `Starting Career Results standings templates sync for round ${expectedRound}...`
+      : "Starting Career Results standings templates sync..."
+  );
 
   try {
     const year = 2026;
-    console.log("Fetching latest standings from Jolpi API...");
 
-    const [driverStandings, constructorStandings] = await Promise.all([
-      getDriverStandings(year, undefined, apiCtx).catch(() => []),
-      getConstructorStandings(year, undefined, apiCtx).catch(() => [])
-    ]);
+    let driverStandings = options?.driverStandings ?? [];
+    let constructorStandings = options?.constructorStandings ?? [];
+
+    // Round-specific standings match Championship Standings on the GP page. Season-level
+    // payloads can lag (Hungarian GP 2026: Team_Position updated, Points/Position stuck).
+    if (expectedRound && (driverStandings.length === 0 || constructorStandings.length === 0)) {
+      console.log(`Fetching round ${expectedRound} standings from Jolpi API...`);
+      const [drivers, constructors] = await Promise.all([
+        driverStandings.length > 0
+          ? Promise.resolve(driverStandings)
+          : getDriverStandings(year, expectedRound, apiCtx).catch((e: any) => {
+              console.warn(`Driver standings fetch failed for round ${expectedRound}: ${e.message}`);
+              return [] as any[];
+            }),
+        constructorStandings.length > 0
+          ? Promise.resolve(constructorStandings)
+          : getConstructorStandings(year, expectedRound, apiCtx).catch((e: any) => {
+              console.warn(`Constructor standings fetch failed for round ${expectedRound}: ${e.message}`);
+              return [] as any[];
+            }),
+      ]);
+      driverStandings = drivers;
+      constructorStandings = constructors;
+    }
+
+    if (driverStandings.length === 0 || constructorStandings.length === 0) {
+      console.log("Falling back to season standings from Jolpi API...");
+      const [seasonDrivers, seasonConstructors] = await Promise.all([
+        driverStandings.length > 0
+          ? Promise.resolve(driverStandings)
+          : getDriverStandings(year, undefined, apiCtx).catch((e: any) => {
+              console.warn(`Season driver standings fetch failed: ${e.message}`);
+              return [] as any[];
+            }),
+        constructorStandings.length > 0
+          ? Promise.resolve(constructorStandings)
+          : getConstructorStandings(year, undefined, apiCtx).catch((e: any) => {
+              console.warn(`Season constructor standings fetch failed: ${e.message}`);
+              return [] as any[];
+            }),
+      ]);
+      if (driverStandings.length === 0) driverStandings = seasonDrivers;
+      if (constructorStandings.length === 0) constructorStandings = seasonConstructors;
+    }
 
     if (driverStandings.length === 0 && constructorStandings.length === 0) {
       console.warn("Standings are empty. Skipping Career Results templates sync.");
       return;
+    }
+
+    if (expectedRound && driverStandings.length === 0) {
+      console.warn(
+        `Driver standings empty for round ${expectedRound}; skipping Points/Position (will retry next cron).`
+      );
+    }
+    if (expectedRound && constructorStandings.length === 0) {
+      console.warn(
+        `Constructor standings empty for round ${expectedRound}; skipping Team_Position (will retry next cron).`
+      );
     }
 
     const syncStandingsPage = async (
@@ -2701,7 +2821,6 @@ async function syncCareerStandingsTemplates(
 
     const standingsPromises: Promise<void>[] = [];
 
-    // 1. Points template
     if (driverStandings.length > 0) {
       standingsPromises.push(
         syncStandingsPage(
@@ -2711,10 +2830,6 @@ async function syncCareerStandingsTemplates(
           "Automated update of driver career points template"
         )
       );
-    }
-
-    // 2. Position template
-    if (driverStandings.length > 0) {
       standingsPromises.push(
         syncStandingsPage(
           "Template:Career_Results/Position/2026",
@@ -2725,7 +2840,6 @@ async function syncCareerStandingsTemplates(
       );
     }
 
-    // 3. Team Position template
     if (constructorStandings.length > 0) {
       standingsPromises.push(
         syncStandingsPage(
@@ -2738,6 +2852,15 @@ async function syncCareerStandingsTemplates(
     }
 
     await Promise.all(standingsPromises);
+
+    if (
+      expectedRound &&
+      driverStandings.length > 0 &&
+      constructorStandings.length > 0 &&
+      env.F1_WIKI_STATE
+    ) {
+      await trackedKvPut(env.F1_WIKI_STATE, careerStandingsRoundKey(), String(expectedRound));
+    }
 
   } catch (e: any) {
     console.error("Failed to sync Career Results standings templates:", e.message);
