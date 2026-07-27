@@ -8,8 +8,10 @@ import {
   getCacheTtl,
   isResponseEmpty,
   isRoundDataSessionComplete,
+  invalidateSeasonStandingsCache,
   shouldRevalidateIncompleteQualifying,
   shouldRevalidateMismatchedRoundStandings,
+  kvCacheKey,
 } from '../src/f1-api-cache';
 import { getSchedule, getRaceResult, hasQualifyingSessionTimes, getDriversForRaceWithFallback, getDriverConstructor, driversFromBulkPayloads, fetchRoundJolpicaData } from '../src/f1-api';
 
@@ -682,6 +684,30 @@ async function testFetchRoundDerivesDriversFromStandings() {
   }
 }
 
+async function testInvalidateSeasonStandingsCache() {
+  const deleted: string[] = [];
+  const kv = {
+    async get() {
+      return null;
+    },
+    async put() {},
+    async delete(key: string) {
+      deleted.push(key);
+    },
+  };
+  const ctx = createF1ApiContext(kv);
+  const driverUrl = `${BASE}/2026/driverStandings.json?limit=1000`;
+  const constructorUrl = `${BASE}/2026/constructorStandings.json?limit=1000`;
+  ctx.cache.set(driverUrl, [{ position: '1' }]);
+  ctx.cache.set(constructorUrl, [{ position: '1' }]);
+  await invalidateSeasonStandingsCache(2026, ctx);
+  assert(!ctx.cache.has(driverUrl), 'driver season standings memory cache cleared');
+  assert(!ctx.cache.has(constructorUrl), 'constructor season standings memory cache cleared');
+  assert(deleted.includes(kvCacheKey(driverUrl)), 'driver season standings KV deleted');
+  assert(deleted.includes(kvCacheKey(constructorUrl)), 'constructor season standings KV deleted');
+  console.log('PASS: invalidateSeasonStandingsCache');
+}
+
 async function main() {
   testClassifyJolpicaUrl();
   testIsResponseEmpty();
@@ -700,6 +726,7 @@ async function main() {
   await testDriversFallbackUsesSeasonNotRoundWalk();
   await testConstructorResolutionNeverFansOut();
   await testFetchRoundDerivesDriversFromStandings();
+  await testInvalidateSeasonStandingsCache();
   console.log('All Jolpica cache verification tests passed.');
 }
 
