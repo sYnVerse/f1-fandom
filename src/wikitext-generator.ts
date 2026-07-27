@@ -742,9 +742,15 @@ export function generatePracticeWikitext(
   fp1: Record<string, PracticeSessionData> | null,
   fp2: Record<string, PracticeSessionData> | null,
   fp3: Record<string, PracticeSessionData> | null,
-  options?: { hasSprint?: boolean; pdfText?: string | null }
+  options?: {
+    hasSprint?: boolean;
+    pdfText?: string | null;
+    /** Cached/resolved Entry List test drivers (flags + teams) for reuse. */
+    testDrivers?: TestDriverEntry[] | null;
+  }
 ): string {
   const hasSprint = options?.hasSprint ?? false;
+  const cachedTestDrivers = options?.testDrivers ?? null;
   const pdfTestDriverLookup = options?.pdfText
     ? buildDriverNameLookup(parseFiaEntryListPdf(options.pdfText, drivers).fp1TestDrivers)
     : null;
@@ -754,7 +760,15 @@ export function generatePracticeWikitext(
   const isMainDriver = (name: string): boolean => isRaceDriver(name, raceDriverKeys);
 
   const enrichTestDriverData = (data: PracticeSessionData): PracticeSessionData => {
-    if (!pdfTestDriverLookup) return data;
+    const cached = lookupTestDriverEntry(data.driverName, cachedTestDrivers);
+    let next: PracticeSessionData = { ...data };
+    if (cached?.number) {
+      next = { ...next, number: cached.number };
+    }
+    if (cached?.constructorId && !teamNameToConstructorId(next.teamName)) {
+      next = { ...next, teamName: cached.constructorId.replace(/_/g, ' ') };
+    }
+    if (!pdfTestDriverLookup) return next;
     const keys = [
       data.driverName.toLowerCase(),
       data.driverName.toLowerCase().replace(/[\s'-]/g, ''),
@@ -764,12 +778,26 @@ export function generatePracticeWikitext(
       pdfRow = pdfTestDriverLookup.get(key);
       if (pdfRow) break;
     }
-    if (!pdfRow) return data;
+    if (!pdfRow) return next;
     return {
-      ...data,
-      number: pdfRow.number || data.number,
-      teamName: pdfRow.team || data.teamName,
+      ...next,
+      number: pdfRow.number || next.number,
+      teamName: pdfRow.team || next.teamName,
     };
+  };
+
+  const resolveTestDriverFlag = (name: string, pdfRow?: FiaDriverRow): string => {
+    const cached = lookupTestDriverEntry(name, cachedTestDrivers);
+    if (cached?.flag && cached.flag !== '{{FIA}}') {
+      return cached.flag;
+    }
+    if (pdfRow) {
+      const fromPdf = getFlagFromNatCode(pdfRow.natCode);
+      if (fromPdf && fromPdf !== '{{FIA}}') return fromPdf;
+    }
+    const nationality = lookupTestDriverNationality(name);
+    if (nationality) return getFlag(nationality);
+    return cached?.flag || '{{FIA}}';
   };
 
   const collectTestDrivers = (
@@ -879,20 +907,26 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
       ? pdfTestDriverLookup.get(entry.driverName.toLowerCase())
         ?? pdfTestDriverLookup.get(entry.driverName.toLowerCase().replace(/[\s'-]/g, ''))
       : undefined;
+    const cached = isTestDriver ? lookupTestDriverEntry(entry.driverName, cachedTestDrivers) : undefined;
     const num = isTestDriver
-      ? (pdfRow?.number || entry.number || '0')
+      ? (cached?.number || pdfRow?.number || entry.number || '0')
       : (entry.permanentNumber || '0');
-    const name = isTestDriver ? entry.driverName : `${entry.givenName} ${entry.familyName}`;
+    const name = isTestDriver
+      ? (cached?.name || canonicalizeTestDriverWikiName(entry.driverName))
+      : `${entry.givenName} ${entry.familyName}`;
     const flag = isTestDriver
-      ? (pdfRow ? getFlagFromNatCode(pdfRow.natCode) : (lookupTestDriverNationality(name) ? getFlag(lookupTestDriverNationality(name)!) : '{{FIA}}'))
+      ? resolveTestDriverFlag(name, pdfRow)
       : getFlag(entry.nationality);
 
     let team: string;
     if (isTestDriver) {
-      const constructorId = teamNameToConstructorId(entry.teamName);
+      const constructorId =
+        cached?.constructorId ||
+        teamNameToConstructorId(entry.teamName) ||
+        (pdfRow ? teamNameToConstructorId(pdfRow.team || pdfRow.constructor || '') : null);
       team = constructorId
         ? (getTeamEntryDetails(constructorId)?.constructor || getTeamTemplate(constructorId, entry.teamName))
-        : `{{${entry.teamName}-CON}}`;
+        : `{{${entry.teamName || 'Unknown'}-CON}}`;
     } else {
       team = resolveDriverTeamTemplate(entry.driverId, driverToConstructorTemplate);
     }
@@ -1032,6 +1066,21 @@ function driverNameKeys(name: string): string[] {
     ascii,
     ascii.replace(/[\s'-]/g, ''),
   ];
+}
+
+/** Match a practice/session driver name against cached Entry List test-driver rows. */
+export function lookupTestDriverEntry(
+  driverName: string,
+  testDrivers: TestDriverEntry[] | null | undefined
+): TestDriverEntry | undefined {
+  if (!testDrivers?.length) return undefined;
+  const keys = new Set(driverNameKeys(driverName));
+  for (const entry of testDrivers) {
+    if (driverNameKeys(entry.name).some(key => keys.has(key))) {
+      return entry;
+    }
+  }
+  return undefined;
 }
 
 function lookupFp1PracticeData(

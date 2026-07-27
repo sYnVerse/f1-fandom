@@ -12,6 +12,7 @@ import {
   careerStandingsRoundKey,
   clearCareerStandingsSynced,
   legacyGpUpdatedKey,
+  testDriversCacheKey,
   gpPageSectionRequired,
   allRequiredGpPageSectionsSynced,
   allStatsTemplatesSynced,
@@ -40,6 +41,10 @@ assert(
 assert(
   statsTemplateKey(7, 'Grand Chelems') === '2026_round_7_stats_grand_chelems_synced',
   'Stats template key slug'
+);
+assert(
+  testDriversCacheKey(11) === '2026_round_11_test_drivers_cache',
+  'Test drivers cache key'
 );
 assert(
   careerStandingsKey('points') === '2026_career_standings_points_synced',

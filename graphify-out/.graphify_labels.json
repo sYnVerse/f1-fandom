@@ -3,11 +3,12 @@
   "1": "Wiki Standings Syncing and Formatting",
   "2": "Ergast API Python Client (pyergast)",
   "3": "F1 Statistics and Calculations",
+  "4": "fia-pdf-parser.ts",
   "5": "TypeScript Configuration (tsconfig)",
   "6": "Daily Reporting and Cloudflare Worker HTTP",
   "7": "Project Dependencies and Scripts (package.json)",
   "8": "Repository Documentation and Settings (README)",
   "9": "wiki.ts",
   "10": "llm-reporter.ts",
-  "12": "f1-api-cache.ts"
+  "11": "llm-reporter.ts"
 }

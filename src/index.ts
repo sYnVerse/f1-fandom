@@ -43,11 +43,11 @@ import {
   generateCareerTeamPositionWikitext,
   getNationalityCode,
   getTeamTemplate,
-  lookupTestDriverNationality,
   detectTestDriversFromJolpica,
   detectTestDriversFromFp1,
   resolveTestDriversForRace,
   isWeakTestDriverList,
+  testDriverEntryCompleteness,
   buildRaceDriverKeys,
   isRaceDriver,
   buildTestDriverNameKeys,
@@ -89,6 +89,7 @@ import {
   careerStandingsRoundKey,
   clearCareerStandingsSynced,
   legacySprintUpdatedKey,
+  testDriversCacheKey,
   isKvSynced,
   markKvSynced,
   getGpPageSectionSyncState,
@@ -1203,6 +1204,7 @@ export default {
                   updatedContent = entryListUpdate.updatedWikitext;
                   changes.push("Entry List");
                 }
+                await saveCachedTestDrivers(env.F1_WIKI_STATE, round, resolvedTestDrivers);
                 // Keep Career Results in sync with Entry List test drivers (e.g. |Jak Crawford = {{TD}}).
                 await syncCareerResultsTestDrivers({
                   year,
@@ -1247,8 +1249,19 @@ export default {
               // names from previous-round driver fallback (drops real FP1 times like Jak Crawford).
               const fp1Detected = detectTestDriversFromFp1(drivers, fp1Results, pdfText);
               const resolvedTestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
+              const cachedTestDrivers = await loadCachedTestDrivers(env.F1_WIKI_STATE, round);
+              const testDriversForPractice = mergeTestDriverCaches(
+                resolvedTestDrivers,
+                cachedTestDrivers
+              );
+              if (
+                testDriversForPractice.length > 0 &&
+                !isWeakTestDriverList(testDriversForPractice)
+              ) {
+                await saveCachedTestDrivers(env.F1_WIKI_STATE, round, testDriversForPractice);
+              }
               const testDriverKeys = buildTestDriverNameKeys([
-                ...resolvedTestDrivers,
+                ...testDriversForPractice,
                 ...fp1Detected,
               ]);
               const raceDriverKeys = buildRaceDriverKeys(drivers);
@@ -1284,7 +1297,11 @@ export default {
                   fp1Results,
                   fp2Results,
                   fp3Results,
-                  { hasSprint: !!race.Sprint, pdfText }
+                  {
+                    hasSprint: !!race.Sprint,
+                    pdfText,
+                    testDrivers: testDriversForPractice,
+                  }
                 );
 
                 const bestPracticeHeader = findBestHeader(
@@ -1315,11 +1332,15 @@ export default {
               }
 
               if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0) {
-                const fp1TestDrivers = resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results });
+                const fp1TestDrivers = mergeTestDriverCaches(
+                  resolveTestDriversForRace(drivers, { pdfText, fp1: fp1Results }),
+                  testDriversForPractice
+                );
                 // Skip weak Jolpica-only lists so cron does not flip-flop the entry list every run.
                 if (fp1TestDrivers.length > 0 && !isWeakTestDriverList(fp1TestDrivers)) {
+                  await saveCachedTestDrivers(env.F1_WIKI_STATE, round, fp1TestDrivers);
                   for (const td of fp1TestDrivers) {
-                    if (!lookupTestDriverNationality(td.name)) {
+                    if (!td.flag || td.flag === '{{FIA}}') {
                       await appendKvWarning(
                         env.F1_WIKI_STATE,
                         'missing_test_driver_flags',
@@ -2645,6 +2666,47 @@ function getRaceTimes(race: any): { startTime: Date; endTime: Date } {
   const startTime = new Date(`${startDateStr}T${startTimeStr}`);
   const endTime = new Date(`${race.date}T23:59:59Z`);
   return { startTime, endTime };
+}
+
+async function loadCachedTestDrivers(kv: any, round: number): Promise<TestDriverEntry[]> {
+  if (!kv) return [];
+  try {
+    const raw = await kv.get(testDriversCacheKey(round));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as TestDriverEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveCachedTestDrivers(
+  kv: any,
+  round: number,
+  testDrivers: TestDriverEntry[]
+): Promise<void> {
+  if (!kv || testDrivers.length === 0 || isWeakTestDriverList(testDrivers)) return;
+  await trackedKvPut(kv, testDriversCacheKey(round), JSON.stringify(testDrivers));
+}
+
+/** Prefer the richer of two test-driver lists (number/team/flag completeness). */
+function mergeTestDriverCaches(
+  primary: TestDriverEntry[],
+  secondary: TestDriverEntry[]
+): TestDriverEntry[] {
+  const map = new Map<string, TestDriverEntry>();
+  const consider = (td: TestDriverEntry) => {
+    const key = td.name.toLowerCase().replace(/[\s'-]/g, '');
+    const prev = map.get(key);
+    if (!prev || testDriverEntryCompleteness(td) > testDriverEntryCompleteness(prev)) {
+      map.set(key, td);
+    }
+  };
+  secondary.forEach(consider);
+  primary.forEach(consider);
+  return Array.from(map.values()).sort(
+    (a, b) => parseInt(a.number || '999', 10) - parseInt(b.number || '999', 10)
+  );
 }
 
 async function syncCareerStandingsTemplates(
