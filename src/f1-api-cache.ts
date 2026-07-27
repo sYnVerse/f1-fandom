@@ -380,8 +380,28 @@ export function getCacheTtl(
   return TTL_DEFAULT;
 }
 
-function kvCacheKey(url: string): string {
+export function kvCacheKey(url: string): string {
   return `${KV_CACHE_PREFIX}${url}`;
+}
+
+const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
+
+/** Drop in-memory + KV season standings so the next fetch cannot reuse pre-race points. */
+export async function invalidateSeasonStandingsCache(
+  year: number,
+  ctx?: F1ApiContext
+): Promise<void> {
+  const urls = [
+    `${JOLPICA_BASE}/${year}/driverStandings.json?limit=1000`,
+    `${JOLPICA_BASE}/${year}/constructorStandings.json?limit=1000`,
+  ];
+  for (const url of urls) {
+    ctx?.cache.delete(url);
+    ctx?.inFlight.delete(url);
+    if (ctx?.kv) {
+      await ctx.kv.delete(kvCacheKey(url));
+    }
+  }
 }
 
 /** True when URL is already in the per-run memory cache or KV store. */

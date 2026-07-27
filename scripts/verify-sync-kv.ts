@@ -8,6 +8,9 @@ import {
   statsTemplateKey,
   gpPageSectionKey,
   latestDataKey,
+  careerStandingsKey,
+  careerStandingsRoundKey,
+  clearCareerStandingsSynced,
   legacyGpUpdatedKey,
   gpPageSectionRequired,
   allRequiredGpPageSectionsSynced,
@@ -37,6 +40,14 @@ assert(
 assert(
   statsTemplateKey(7, 'Grand Chelems') === '2026_round_7_stats_grand_chelems_synced',
   'Stats template key slug'
+);
+assert(
+  careerStandingsKey('points') === '2026_career_standings_points_synced',
+  'Career points standings key'
+);
+assert(
+  careerStandingsRoundKey() === '2026_career_standings_source_round',
+  'Career standings source round key'
 );
 assert(
   gpPageSectionKey(7, 'race_results') === '2026_round_7_gp_page_race_results_synced',
@@ -125,4 +136,32 @@ assert(!isStatsSyncEnabled({}), 'Missing STATS_SYNC disables stats sync');
 assert(!isStatsSyncEnabled({ STATS_SYNC: 'true' }), 'Lowercase true does not enable stats sync');
 assert(!isStatsSyncEnabled({ STATS_SYNC: 'FALSE' }), 'STATS_SYNC=FALSE disables stats sync');
 
-console.log('verify-sync-kv: all assertions passed');
+async function testClearCareerStandingsSynced() {
+  const store = new Map<string, string>();
+  const kv = {
+    async get(key: string) {
+      return store.has(key) ? store.get(key)! : null;
+    },
+    async put(key: string, value: string) {
+      store.set(key, value);
+    },
+    async delete(key: string) {
+      store.delete(key);
+    },
+  };
+  store.set(careerStandingsKey('points'), 'true');
+  store.set(careerStandingsKey('position'), 'true');
+  store.set(careerStandingsKey('team_position'), 'true');
+  await clearCareerStandingsSynced(kv);
+  assert(store.get(careerStandingsKey('points')) === undefined, 'points flag cleared');
+  assert(store.get(careerStandingsKey('position')) === undefined, 'position flag cleared');
+  assert(store.get(careerStandingsKey('team_position')) === undefined, 'team_position flag cleared');
+  console.log('PASS: clearCareerStandingsSynced');
+}
+
+testClearCareerStandingsSynced()
+  .then(() => console.log('verify-sync-kv: all assertions passed'))
+  .catch(err => {
+    console.error('FAIL:', err.message);
+    process.exit(1);
+  });

@@ -4,6 +4,7 @@ import {
   createF1ApiContextFromEnv,
   F1ApiContext,
   isJolpicaUrlCached,
+  invalidateSeasonStandingsCache,
   CachedScheduleRace,
   ACTIVE_F1_SEASON,
 } from './f1-api-cache';
@@ -11,7 +12,13 @@ import { trackedKvPut } from './kv-ops';
 import { extractPdfText } from './fia-pdf-parser';
 import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 
-export { createF1ApiContext, createF1ApiContextFromEnv, F1ApiContext, ACTIVE_F1_SEASON };
+export {
+  createF1ApiContext,
+  createF1ApiContextFromEnv,
+  F1ApiContext,
+  ACTIVE_F1_SEASON,
+  invalidateSeasonStandingsCache,
+};
 
 export interface Driver {
   driverId: string;
