@@ -79,6 +79,10 @@ import {
 } from './stats';
 import { getStatsF1Results, verifyResults } from './statsf1';
 import {
+  isCareerStandingsBehind,
+  shouldSyncCareerStandingsForRound,
+} from './career-standings-owner';
+import {
   gpCareerTemplateKey,
   sprintCareerTemplateKey,
   statsTemplateKey,
@@ -842,11 +846,23 @@ export default {
         const gpPageFullySynced = allRequiredGpPageSectionsSynced(gpPageSectionState, pageTiming);
 
         const sprintFullyHandled = !race.Sprint || sprintCareerTemplateSynced || !isSprintConcluded;
+        // Longer window for the latest concluded round: practice may have {{Unknown-CON}} from
+        // OpenF1 constructor gaps, and standings may have been frozen before Jolpica published points.
+        const contentRepairUntil = new Date(raceEndTime.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const latestConcluded = apiCtx.latestConcludedRound ?? 0;
+        const allowContentRepair =
+          now < contentRepairUntil && isRaceConcluded && round === latestConcluded;
         const standingsSourceRound = env.F1_WIKI_STATE
           ? await env.F1_WIKI_STATE.get(careerStandingsRoundKey())
           : null;
-        const careerStandingsBehind =
-          isRaceConcluded && standingsSourceRound !== String(round);
+        // Only the latest concluded round owns Career Points/Position/Team_Position. Older
+        // rounds in the last-2 processing loop must not rewrite them (hourly flip-flops).
+        const careerStandingsBehind = isCareerStandingsBehind({
+          isRaceConcluded,
+          round,
+          latestConcludedRound: latestConcluded,
+          standingsSourceRound,
+        });
         const roundFullySynced =
           (!gpSessionCompleted || gpCareerTemplateSynced) &&
           sprintFullyHandled &&
@@ -858,12 +874,6 @@ export default {
         // weekend for a grace period so we can re-sync once Jolpica/OpenF1 publish times.
         const weekendRepairUntil = new Date(raceEndTime.getTime() + 48 * 60 * 60 * 1000);
         const allowQualiTimesRepair = now < weekendRepairUntil;
-        // Longer window for the latest concluded round: practice may have {{Unknown-CON}} from
-        // OpenF1 constructor gaps, and standings may have been frozen before Jolpica published points.
-        const contentRepairUntil = new Date(raceEndTime.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const latestConcluded = apiCtx.latestConcludedRound ?? 0;
-        const allowContentRepair =
-          now < contentRepairUntil && isRaceConcluded && round === latestConcluded;
 
         if (roundFullySynced && !allowQualiTimesRepair && !allowContentRepair) {
           console.log(`Round ${round} (${raceName}) fully synced in KV. Skipping all Jolpica fetches.`);
@@ -1005,9 +1015,18 @@ export default {
             gpTemplateUpdated = true;
           }
 
-          // Once race results exist for this GP, keep Career Points/Position/Team_Position
-          // in lockstep using the same round-specific standings as Championship Standings.
-          if (gpTemplateUpdated || careerStandingsBehind || allowContentRepair) {
+          // Once race results exist for the latest concluded GP, keep Career
+          // Points/Position/Team_Position in lockstep with Championship Standings.
+          // Never sync from an older round in the last-2 processing loop.
+          if (
+            shouldSyncCareerStandingsForRound({
+              round,
+              latestConcludedRound: latestConcluded,
+              gpTemplateUpdated,
+              careerStandingsBehind,
+              allowContentRepair,
+            })
+          ) {
             if (gpTemplateUpdated || careerStandingsBehind) {
               await invalidateSeasonStandingsCache(year, apiCtx);
               await clearCareerStandingsSynced(env.F1_WIKI_STATE);
