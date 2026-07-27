@@ -715,31 +715,6 @@ export default {
         setActiveSeasonSchedule(apiCtx, schedule);
       }
 
-      // --- Career Results Points/Position/Team_Position ---
-      // Prefer syncing alongside race-result processing (same round-specific Jolpica
-      // standings as Championship Standings). Keep a light hourly backup that only
-      // runs once race results exist for the latest concluded round.
-      if (!isHighFrequency) {
-        try {
-          const latestRound = apiCtx.latestConcludedRound ?? getLatestConcludedRound(schedule);
-          if (latestRound > 0) {
-            const results = await getRaceResult(year, latestRound, false, apiCtx).catch(() => []);
-            if (results.length > 0) {
-              await syncCareerStandingsTemplates(env, getSession, apiCtx, {
-                expectedRound: latestRound,
-              });
-            } else {
-              console.log(
-                `Career standings templates: round ${latestRound} race results not published yet. Skipping early sync.`
-              );
-            }
-          }
-        } catch (e: any) {
-          console.error("Failed to sync Career Results standings templates:", e.message);
-        }
-        setActiveSeasonSchedule(apiCtx, schedule);
-      }
-
       // --- Sync Template:Latest_Data after the latest GP results are published ---
       // Runs on hourly cron always, and on high-frequency during an active race weekend
       // so the template updates soon after the race concludes.
@@ -2736,31 +2711,36 @@ async function syncCareerStandingsTemplates(
 
     let driverStandings = options?.driverStandings ?? [];
     let constructorStandings = options?.constructorStandings ?? [];
+    let driverFromRound = options?.driverStandings !== undefined && driverStandings.length > 0;
+    let constructorFromRound =
+      options?.constructorStandings !== undefined && constructorStandings.length > 0;
 
     // Round-specific standings match Championship Standings on the GP page. Season-level
-    // payloads can lag (Hungarian GP 2026: Team_Position updated, Points/Position stuck).
-    if (expectedRound && (driverStandings.length === 0 || constructorStandings.length === 0)) {
-      console.log(`Fetching round ${expectedRound} standings from Jolpi API...`);
-      const [drivers, constructors] = await Promise.all([
-        driverStandings.length > 0
-          ? Promise.resolve(driverStandings)
-          : getDriverStandings(year, expectedRound, apiCtx).catch((e: any) => {
-              console.warn(`Driver standings fetch failed for round ${expectedRound}: ${e.message}`);
-              return [] as any[];
-            }),
-        constructorStandings.length > 0
-          ? Promise.resolve(constructorStandings)
-          : getConstructorStandings(year, expectedRound, apiCtx).catch((e: any) => {
-              console.warn(`Constructor standings fetch failed for round ${expectedRound}: ${e.message}`);
-              return [] as any[];
-            }),
-      ]);
-      driverStandings = drivers;
-      constructorStandings = constructors;
-    }
-
-    if (driverStandings.length === 0 || constructorStandings.length === 0) {
-      console.log("Falling back to season standings from Jolpi API...");
+    // payloads can lag and caused Team_Position/2026 to flip every hourly cron when mixed
+    // with round-specific data from race-result processing.
+    if (expectedRound) {
+      if (!driverFromRound) {
+        console.log(`Fetching round ${expectedRound} driver standings from Jolpi API...`);
+        driverStandings = await getDriverStandings(year, expectedRound, apiCtx).catch((e: any) => {
+          console.warn(`Driver standings fetch failed for round ${expectedRound}: ${e.message}`);
+          return [] as any[];
+        });
+        driverFromRound = driverStandings.length > 0;
+      }
+      if (!constructorFromRound) {
+        console.log(`Fetching round ${expectedRound} constructor standings from Jolpi API...`);
+        constructorStandings = await getConstructorStandings(year, expectedRound, apiCtx).catch(
+          (e: any) => {
+            console.warn(
+              `Constructor standings fetch failed for round ${expectedRound}: ${e.message}`
+            );
+            return [] as any[];
+          }
+        );
+        constructorFromRound = constructorStandings.length > 0;
+      }
+    } else if (driverStandings.length === 0 || constructorStandings.length === 0) {
+      console.log("Fetching season standings from Jolpi API...");
       const [seasonDrivers, seasonConstructors] = await Promise.all([
         driverStandings.length > 0
           ? Promise.resolve(driverStandings)
@@ -2779,20 +2759,30 @@ async function syncCareerStandingsTemplates(
       if (constructorStandings.length === 0) constructorStandings = seasonConstructors;
     }
 
-    if (driverStandings.length === 0 && constructorStandings.length === 0) {
+    if (!expectedRound && driverStandings.length === 0 && constructorStandings.length === 0) {
       console.warn("Standings are empty. Skipping Career Results templates sync.");
       return;
     }
 
-    if (expectedRound && driverStandings.length === 0) {
+    const syncDriverStandings = expectedRound ? driverFromRound : driverStandings.length > 0;
+    const syncConstructorStandings = expectedRound
+      ? constructorFromRound
+      : constructorStandings.length > 0;
+
+    if (expectedRound && !driverFromRound) {
       console.warn(
         `Driver standings empty for round ${expectedRound}; skipping Points/Position (will retry next cron).`
       );
     }
-    if (expectedRound && constructorStandings.length === 0) {
+    if (expectedRound && !constructorFromRound) {
       console.warn(
         `Constructor standings empty for round ${expectedRound}; skipping Team_Position (will retry next cron).`
       );
+    }
+
+    if (!syncDriverStandings && !syncConstructorStandings) {
+      console.warn("No round-specific standings available. Skipping Career Results templates sync.");
+      return;
     }
 
     const syncStandingsPage = async (
@@ -2821,7 +2811,7 @@ async function syncCareerStandingsTemplates(
 
     const standingsPromises: Promise<void>[] = [];
 
-    if (driverStandings.length > 0) {
+    if (syncDriverStandings) {
       standingsPromises.push(
         syncStandingsPage(
           "Template:Career_Results/Points/2026",
@@ -2840,7 +2830,7 @@ async function syncCareerStandingsTemplates(
       );
     }
 
-    if (constructorStandings.length > 0) {
+    if (syncConstructorStandings) {
       standingsPromises.push(
         syncStandingsPage(
           "Template:Career_Results/Team_Position/2026",
@@ -2853,12 +2843,7 @@ async function syncCareerStandingsTemplates(
 
     await Promise.all(standingsPromises);
 
-    if (
-      expectedRound &&
-      driverStandings.length > 0 &&
-      constructorStandings.length > 0 &&
-      env.F1_WIKI_STATE
-    ) {
+    if (expectedRound && driverFromRound && constructorFromRound && env.F1_WIKI_STATE) {
       await trackedKvPut(env.F1_WIKI_STATE, careerStandingsRoundKey(), String(expectedRound));
     }
 
