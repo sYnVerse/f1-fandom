@@ -11,8 +11,27 @@ import {
   EditBlockedError,
   isEditBlocked,
   MAX_EDIT_FAILURES,
+  PendingWikiEdit,
   recordEditFailure,
+  savePendingWikiEdit,
 } from './kv-ops';
+
+export const WIKI_EDIT_RETRY_DELAY_MS = 10_000;
+
+export type WikiEditResult = 'published' | 'deferred';
+
+export interface EditPageRetryOptions {
+  /** When true (default if session has KV), persist the edit after a second failure. */
+  persistOnFailure?: boolean;
+  /** Metadata stored with a deferred edit for post-replay sync bookkeeping. */
+  meta?: Pick<PendingWikiEdit, 'gpRound' | 'gpSections' | 'syncKeys'>;
+  /** Override retry delay (used by tests). */
+  retryDelayMs?: number;
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 export interface WikiConfig {
   domain: string; // e.g. f1.fandom.com
@@ -367,6 +386,69 @@ export async function editPage(
   const editData = await res.json() as any;
   if (editData?.edit?.result !== 'Success') {
     throw new Error(`Wiki edit failed: ${editData?.edit?.reason || JSON.stringify(editData?.error || editData?.edit)}`);
+  }
+}
+
+/**
+ * Attempt a wiki edit, retry once after 10s on failure, then optionally persist
+ * the full edit payload to KV for an immediate replay on the next cron run.
+ */
+export async function editPageWithRetry(
+  domain: string,
+  session: WikiSession,
+  title: string,
+  text: string,
+  summary: string,
+  apiEndpoint?: string,
+  options?: EditPageRetryOptions
+): Promise<WikiEditResult> {
+  const persistOnFailure = options?.persistOnFailure ?? !!session.kvState;
+
+  try {
+    await editPage(domain, session, title, text, summary, apiEndpoint);
+    return 'published';
+  } catch (firstError: any) {
+    if (firstError instanceof EditBlockedError) {
+      throw firstError;
+    }
+
+    console.warn(
+      `Edit failed for "${title}" (${firstError?.message || firstError}). Retrying in ${(options?.retryDelayMs ?? WIKI_EDIT_RETRY_DELAY_MS) / 1000}s...`
+    );
+    await sleep(options?.retryDelayMs ?? WIKI_EDIT_RETRY_DELAY_MS);
+
+    try {
+      await editPage(domain, session, title, text, summary, apiEndpoint);
+      return 'published';
+    } catch (secondError: any) {
+      if (secondError instanceof EditBlockedError) {
+        throw secondError;
+      }
+
+      console.error(
+        `Edit failed again for "${title}" (${secondError?.message || secondError}).`
+      );
+
+      if (persistOnFailure && session.kvState) {
+        await savePendingWikiEdit(session.kvState, {
+          title,
+          text,
+          summary,
+          domain,
+          apiEndpoint: apiEndpoint ?? null,
+          gpRound: options?.meta?.gpRound,
+          gpSections: options?.meta?.gpSections,
+          syncKeys: options?.meta?.syncKeys,
+          savedAt: new Date().toISOString(),
+        });
+        // Pending KV replay is the durable retry path — don't let the short
+        // consecutive-failure circuit breaker block future cron replays.
+        await clearEditFailures(session.kvState, title);
+        return 'deferred';
+      }
+
+      throw secondError;
+    }
   }
 }
 

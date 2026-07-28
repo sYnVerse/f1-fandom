@@ -60,7 +60,8 @@ import type { TestDriverEntry } from './wikitext-generator';
 import { 
   loginToWiki, 
   getPageContent, 
-  editPage, 
+  editPage,
+  editPageWithRetry,
   replaceSectionWikitext,
   getSectionContent,
   isSectionEmptyOrPlaceholder
@@ -112,6 +113,10 @@ import {
   getPacificDateString,
   KV_FREE_TIER_DAILY_WRITE_LIMIT,
   trackedKvPut,
+  listPendingWikiEditTitles,
+  loadPendingWikiEdit,
+  clearPendingWikiEdit,
+  PendingWikiEdit,
 } from './kv-ops';
 
 // CORS response helper
@@ -129,6 +134,77 @@ function corsResponse(body: string | object, status = 200, headers: Record<strin
     status,
     headers: { ...defaultHeaders, ...headers }
   });
+}
+
+async function applyPendingWikiEditSyncFlags(kv: any, pending: PendingWikiEdit): Promise<void> {
+  if (pending.gpRound != null && pending.gpSections?.length) {
+    for (const section of pending.gpSections) {
+      await markKvSynced(kv, gpPageSectionKey(pending.gpRound, section as GpPageSection));
+    }
+  }
+  if (pending.syncKeys?.length) {
+    for (const key of pending.syncKeys) {
+      await markKvSynced(kv, key);
+    }
+  }
+}
+
+/**
+ * Replay wiki edits that previously failed twice. Uses the saved wikitext so we
+ * do not re-fetch Jolpica/OpenF1 or re-run the LLM.
+ */
+async function flushPendingWikiEdits(
+  env: any,
+  domain: string,
+  apiEndpoint: string | undefined,
+  getSession: () => Promise<any>
+): Promise<void> {
+  const kv = env.F1_WIKI_STATE;
+  if (!kv) return;
+
+  const titles = await listPendingWikiEditTitles(kv);
+  if (titles.length === 0) return;
+
+  console.log(`Replaying ${titles.length} pending wiki edit(s) from KV...`);
+  const session = await getSession();
+
+  for (const title of titles) {
+    const pending = await loadPendingWikiEdit(kv, title);
+    if (!pending) {
+      await clearPendingWikiEdit(kv, title);
+      continue;
+    }
+
+    console.log(`  Replaying pending edit for "${title}" (saved ${pending.savedAt})...`);
+    try {
+      const result = await editPageWithRetry(
+        pending.domain || domain,
+        session,
+        pending.title,
+        pending.text,
+        pending.summary,
+        pending.apiEndpoint || apiEndpoint,
+        {
+          persistOnFailure: true,
+          meta: {
+            gpRound: pending.gpRound,
+            gpSections: pending.gpSections,
+            syncKeys: pending.syncKeys,
+          },
+        }
+      );
+
+      if (result === 'published') {
+        await applyPendingWikiEditSyncFlags(kv, pending);
+        await clearPendingWikiEdit(kv, title);
+        console.log(`  Successfully published pending edit for "${title}"`);
+      } else {
+        console.log(`  Pending edit for "${title}" deferred again after retry`);
+      }
+    } catch (e: any) {
+      console.error(`  Failed to replay pending edit for "${title}": ${e.message}`);
+    }
+  }
 }
 
 async function verifyTurnstile(token: string, secretKey: string | undefined, request: Request): Promise<boolean> {
@@ -709,6 +785,13 @@ export default {
         return session;
       };
 
+      // Replay any wiki edits that failed previously before regenerating content.
+      try {
+        await flushPendingWikiEdits(env, domain, apiEndpoint, getSession);
+      } catch (e: any) {
+        console.error("Failed to flush pending wiki edits:", e.message);
+      }
+
       // --- Sync Latest F1 News/Events (only on hourly/low-frequency/manual sync) ---
       if (!isHighFrequency) {
         try {
@@ -1138,8 +1221,20 @@ export default {
             let updatedContent = currentContent;
             let changes: string[] = [];
             const pendingGpPageSections: GpPageSection[] = [];
+            const queueGpPageSectionSynced = (section: GpPageSection) => {
+              if (!pendingGpPageSections.includes(section)) {
+                pendingGpPageSections.push(section);
+              }
+            };
             const raceResults = gpResults;
             const racingKey = getF1RacingKey(race.raceName);
+
+            // If a prior edit is still pending, do not regenerate (avoids re-LLM / re-fetch).
+            if (await loadPendingWikiEdit(env.F1_WIKI_STATE, gpPageTitle)) {
+              console.log(
+                `Skipping GP page section rebuild for ${gpPageTitle}: pending edit still awaiting successful publish`
+              );
+            } else {
 
             const needFp1 = needGpPage && isFp1Concluded;
             const needFp2 = needGpPage && !race.Sprint && isFp2Concluded;
@@ -1211,9 +1306,15 @@ export default {
                   getSession,
                 });
               }
-              await markGpPageSectionSynced('entry_list');
+              // Entry list verified this run — only commit KV after a successful page publish
+              // when the page will be edited; otherwise mark immediately (no edit pending).
+              if (changes.includes('Entry List')) {
+                queueGpPageSectionSynced('entry_list');
+              } else {
+                await markGpPageSectionSynced('entry_list');
+              }
             } else if (isNewPage) {
-              await markGpPageSectionSynced('entry_list');
+              queueGpPageSectionSynced('entry_list');
             }
 
             // --- 2. Practice Scrapes & Practice Results Section ---
@@ -1309,19 +1410,32 @@ export default {
                 );
 
                 const newPracticeContent = replaceSectionWikitext(updatedContent, bestPracticeHeader, practiceWikitext);
-                if (newPracticeContent !== updatedContent) {
+                const practiceChanged = newPracticeContent !== updatedContent;
+                if (practiceChanged) {
                   updatedContent = newPracticeContent;
                   changes.push("Practice Results");
                 }
 
                 if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0 && !isGpPageSectionSynced('practice_results_fp1')) {
-                  await markGpPageSectionSynced('practice_results_fp1');
+                  if (practiceChanged || changes.length > 0) {
+                    queueGpPageSectionSynced('practice_results_fp1');
+                  } else {
+                    await markGpPageSectionSynced('practice_results_fp1');
+                  }
                 }
                 if (needFp2 && fp2Results && Object.keys(fp2Results).length > 0 && !isGpPageSectionSynced('practice_results_fp2')) {
-                  await markGpPageSectionSynced('practice_results_fp2');
+                  if (practiceChanged || changes.length > 0) {
+                    queueGpPageSectionSynced('practice_results_fp2');
+                  } else {
+                    await markGpPageSectionSynced('practice_results_fp2');
+                  }
                 }
                 if (needFp3 && fp3Results && Object.keys(fp3Results).length > 0 && !isGpPageSectionSynced('practice_results_fp3')) {
-                  await markGpPageSectionSynced('practice_results_fp3');
+                  if (practiceChanged || changes.length > 0) {
+                    queueGpPageSectionSynced('practice_results_fp3');
+                  } else {
+                    await markGpPageSectionSynced('practice_results_fp3');
+                  }
                 }
               }
 
@@ -1347,6 +1461,7 @@ export default {
                   if (entryListUpdate.changed) {
                     updatedContent = entryListUpdate.updatedWikitext;
                     changes.push("Entry List (Test Drivers)");
+                    queueGpPageSectionSynced('entry_list');
                   }
                   await syncCareerResultsTestDrivers({
                     year,
@@ -1382,13 +1497,21 @@ export default {
 
               const fpReportSectionsToGenerate = [];
               for (const sec of fpReportSections) {
-                if (!sec.required || isGpPageSectionSynced(sec.section)) continue;
+                if (!sec.required) continue;
                 if (!sec.results || Object.keys(sec.results).length === 0) continue;
 
                 const sectionContent = getSectionContent(updatedContent, sec.header);
                 if (!isSectionEmptyOrPlaceholder(sectionContent)) {
-                  await markGpPageSectionSynced(sec.section);
+                  if (!isGpPageSectionSynced(sec.section)) {
+                    await markGpPageSectionSynced(sec.section);
+                  }
                   continue;
+                }
+                if (isGpPageSectionSynced(sec.section)) {
+                  console.log(
+                    `  ${sec.title} KV flag set but section is still empty/placeholder; re-generating...`
+                  );
+                  gpPageSectionState[sec.section] = false;
                 }
                 fpReportSectionsToGenerate.push(sec);
               }
@@ -1430,8 +1553,8 @@ export default {
                     if (replaced !== updatedContent) {
                       updatedContent = replaced;
                       changes.push(`${sec.title} Report`);
+                      queueGpPageSectionSynced(sec.section);
                     }
-                    await markGpPageSectionSynced(sec.section);
                   }
                 }
               }
@@ -1516,8 +1639,10 @@ export default {
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
                   changes.push("Sprint Results");
+                  queueGpPageSectionSynced('sprint_results');
+                } else {
+                  await markGpPageSectionSynced('sprint_results');
                 }
-                await markGpPageSectionSynced('sprint_results');
               }
 
               if (isRaceConcluded && raceResults && raceResults.length > 0 && !isGpPageSectionSynced('race_results')) {
@@ -1527,8 +1652,10 @@ export default {
                 if (newContent !== updatedContent) {
                   updatedContent = newContent;
                   changes.push("Race Results");
+                  queueGpPageSectionSynced('race_results');
+                } else {
+                  await markGpPageSectionSynced('race_results');
                 }
-                await markGpPageSectionSynced('race_results');
               }
 
               if (
@@ -1560,8 +1687,10 @@ export default {
                       `  Re-synced Championship Standings during weekend repair window (race results available).`
                     );
                   }
+                  queueGpPageSectionSynced('standings');
+                } else if (!isGpPageSectionSynced('standings')) {
+                  await markGpPageSectionSynced('standings');
                 }
-                await markGpPageSectionSynced('standings');
               }
 
               const shouldUpdateInfobox =
@@ -1684,7 +1813,11 @@ export default {
                   const hasRaceData = !!(raceResults && raceResults.length > 0);
 
                   if (isInfoboxSyncComplete(updatedContent, { hasQualiData, hasSprintData, hasRaceData })) {
-                    await markGpPageSectionSynced('infobox');
+                    if (changes.includes('Infobox')) {
+                      queueGpPageSectionSynced('infobox');
+                    } else {
+                      await markGpPageSectionSynced('infobox');
+                    }
                   } else {
                     console.log('  Infobox incomplete for race weekend — will retry on next cron run.');
                   }
@@ -1711,17 +1844,26 @@ export default {
 
               const reportSectionsToGenerate: typeof reportSections = [];
               for (const sec of reportSections) {
-                if (!sec.check() || isGpPageSectionSynced(sec.section)) {
+                if (!sec.check()) {
                   continue;
                 }
 
                 const sectionContent = getSectionContent(updatedContent, sec.header);
-                if (isSectionEmptyOrPlaceholder(sectionContent)) {
-                  reportSectionsToGenerate.push(sec);
-                } else {
-                  console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
-                  await markGpPageSectionSynced(sec.section);
+                if (!isSectionEmptyOrPlaceholder(sectionContent)) {
+                  if (!isGpPageSectionSynced(sec.section)) {
+                    console.log(`Section ${sec.title} already has custom content. Skipping to preserve human edits.`);
+                    await markGpPageSectionSynced(sec.section);
+                  }
+                  continue;
                 }
+
+                if (isGpPageSectionSynced(sec.section)) {
+                  console.log(
+                    `  ${sec.title} KV flag set but section is still empty/placeholder; re-generating...`
+                  );
+                  gpPageSectionState[sec.section] = false;
+                }
+                reportSectionsToGenerate.push(sec);
               }
 
               if (reportSectionsToGenerate.length > 0) {
@@ -1775,8 +1917,8 @@ export default {
                     if (replaced !== updatedContent) {
                       updatedContent = replaced;
                       changes.push(`${sec.title} Report`);
+                      queueGpPageSectionSynced(sec.section);
                     }
-                    await markGpPageSectionSynced(sec.section);
                   }
                 }
               }
@@ -1786,19 +1928,33 @@ export default {
             if (changes.length > 0 || isNewPage) {
               console.log(`  Publishing GP page for ${gpPageTitle}: ${isNewPage ? 'Creating new page' : `Updating sections: ${changes.join(', ')}`}`);
               const currentSession = await getSession();
-              await editPage(
+              const editSummary = isNewPage
+                ? `Automated creation of GP page${changes.length > 0 ? ` with updates: ${changes.join(', ')}` : ''}`
+                : `Automated update of GP page sections: ${changes.join(', ')}`;
+              const editResult = await editPageWithRetry(
                 domain,
                 currentSession,
                 gpPageTitle,
                 updatedContent,
-                isNewPage 
-                  ? `Automated creation of GP page${changes.length > 0 ? ` with updates: ${changes.join(', ')}` : ''}`
-                  : `Automated update of GP page sections: ${changes.join(', ')}`,
-                apiEndpoint
+                editSummary,
+                apiEndpoint,
+                {
+                  persistOnFailure: true,
+                  meta: {
+                    gpRound: round,
+                    gpSections: [...pendingGpPageSections],
+                  },
+                }
               );
-              console.log(`  Successfully published ${gpPageTitle}!`);
-              for (const section of pendingGpPageSections) {
-                await markGpPageSectionSynced(section);
+              if (editResult === 'published') {
+                console.log(`  Successfully published ${gpPageTitle}!`);
+                for (const section of pendingGpPageSections) {
+                  await markGpPageSectionSynced(section);
+                }
+              } else {
+                console.log(
+                  `  Edit for ${gpPageTitle} deferred to KV after retry; will republish on next cron without regenerating`
+                );
               }
             } else {
               console.log(`  No updates needed for GP page ${gpPageTitle} sections.`);
@@ -1806,6 +1962,8 @@ export default {
                 await markGpPageSectionSynced(section);
               }
             }
+
+            } // end: no pending edit rebuild skip
           } catch (e: any) {
             console.error(`Error updating GP page sections for round ${round}:`, e.message);
           }
