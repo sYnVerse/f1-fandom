@@ -524,7 +524,7 @@ export default {
             finalText = replaceSectionWikitext(baseText, sectionHeader, text);
           }
 
-          await editPage(domain, session, title, finalText, summary || 'Bot edit', _env.WIKI_API_ENDPOINT);
+          await editPage(domain, session, title, finalText, summary || 'Semi-automated edit (https://christran.io/f1)', _env.WIKI_API_ENDPOINT);
           return corsResponse({ success: true });
         } catch (e: any) {
           return corsResponse({ success: false, error: e.message }, 500);
@@ -687,7 +687,7 @@ export default {
                 finalText = updateCorrectionText(finalText, 2026, raceName, winnerCode);
               }
               
-              await editPage(domain, session, pageTitle, finalText, `Automated stats update up to 2026 Round ${rd} (${raceName || `Round ${rd}`})`, _env.WIKI_API_ENDPOINT);
+              await editPage(domain, session, pageTitle, finalText, `Semi-automated edit of stats template up to 2026 Round ${rd} (${raceName || `Round ${rd}`}) (https://christran.io/f1)`, _env.WIKI_API_ENDPOINT);
               publishResults.push({ template: temp, status: 'Updated' });
             } else {
               publishResults.push({ template: temp, status: 'No changes' });

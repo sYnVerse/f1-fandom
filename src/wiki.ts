@@ -331,7 +331,9 @@ export async function editPage(
   editParams.append('action', 'edit');
   editParams.append('title', title);
   editParams.append('text', text);
-  editParams.append('summary', summary);
+  const plug = '(https://christran.io/f1)';
+  const fullSummary = summary.includes('https://christran.io/f1') ? summary : `${summary} ${plug}`;
+  editParams.append('summary', fullSummary);
   editParams.append('token', session.csrfToken);
   editParams.append('format', 'json');
   editParams.append('bot', '1'); // mark as bot edit

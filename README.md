@@ -140,6 +140,7 @@ This runs the TypeScript compiler (`tsc --noEmit`) and all verification scripts 
 Summary of improvements (updated July 28, 2026):
 
 ### F1.com Glued TLA Stripping & Practice Table Protection (July 2026)
+- **Semi-Automated Edit Summaries**: All edit summaries triggered from the front-end dashboard now use `"Semi-automated edit..."` instead of `"automated update"`.
 - **Glued TLA Normalization**: Strips trailing 3-letter driver TLAs (e.g. `Paul AronARO`) produced when falling back to F1.com scrapes during OpenF1 429 errors, ensuring accurate nationality flag mapping and KV cache lookups.
 - **Test Driver Constructor Templates**: Formats test driver team templates consistently with race drivers using `getTeamTemplate`.
 - **Practice Table Degradation Safeguard**: Prevents overwriting an already healthy Practice Results table when a regenerated or fallback scrape yields incomplete or degraded data.

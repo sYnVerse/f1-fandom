@@ -1441,7 +1441,7 @@ export const frontendHtml = `<!DOCTYPE html>
             domain, username, password,
             title: sandboxPage,
             text: testContent,
-            summary: 'Bot test edit from Cloudflare Automator Worker',
+            summary: 'Semi-automated edit: Bot test edit from Cloudflare Automator Worker (https://christran.io/f1)',
             isTest: true,
             turnstileToken: token
           })
@@ -1511,7 +1511,7 @@ export const frontendHtml = `<!DOCTYPE html>
             text: newSectionContent,
             sectionHeader,
             currentFullText: pageText,
-            summary: \`Automated update of \${sectionHeader} section\`,
+            summary: \`Semi-automated edit of \${sectionHeader} section (https://christran.io/f1)\`,
             turnstileToken: token
           })
         });
@@ -1562,7 +1562,7 @@ export const frontendHtml = `<!DOCTYPE html>
             domain, username, password,
             title: pageName,
             text: fullText,
-            summary: 'Automated deployment of complete Grand Prix results page',
+            summary: 'Semi-automated edit of complete Grand Prix results page (https://christran.io/f1)',
             turnstileToken: token
           })
         });
