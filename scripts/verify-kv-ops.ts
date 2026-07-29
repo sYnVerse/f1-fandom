@@ -1,5 +1,5 @@
 /**
- * Verifies KV batching, edit failure limits, and daily put counting.
+ * Verifies KV batching, edit failure limits, pending wiki edits, and daily put counting.
  * Run: npx tsx scripts/verify-kv-ops.ts
  */
 import {
@@ -7,6 +7,7 @@ import {
   bufferApiLog,
   bufferKvWarning,
   clearEditFailures,
+  clearPendingWikiEdit,
   editFailureKey,
   endKvInvocation,
   acquireCronSyncLock,
@@ -14,9 +15,14 @@ import {
   getDailyKvPutCount,
   getEditFailureCount,
   isEditBlocked,
+  listPendingWikiEditTitles,
+  loadPendingWikiEdit,
   MAX_EDIT_FAILURES,
+  PENDING_WIKI_EDIT_INDEX_KEY,
+  pendingWikiEditKey,
   PROXY_LOGS_KEY,
   recordEditFailure,
+  savePendingWikiEdit,
   trackedKvPut,
 } from '../src/kv-ops';
 
@@ -123,6 +129,39 @@ async function testCronSyncLock(): Promise<void> {
   await releaseCronSyncLock(kv, ownerB);
 }
 
+async function testPendingWikiEditRoundTrip(): Promise<void> {
+  const kv = createMockKv();
+  beginKvInvocation();
+  const title = '2026 Hungarian Grand Prix';
+
+  await savePendingWikiEdit(kv, {
+    title,
+    text: '=== Q1 ===\nNorris took pole.\n',
+    summary: 'Automated update of GP page sections: Q1 Report, Q2 Report, Q3 Report',
+    domain: 'f1.fandom.com',
+    apiEndpoint: null,
+    gpRound: 11,
+    gpSections: ['q1_report', 'q2_report', 'q3_report'],
+    savedAt: '2026-07-25T15:42:00.000Z',
+  });
+
+  const titles = await listPendingWikiEditTitles(kv);
+  assert(titles.includes(title), 'Index should list pending title');
+  assert(kv.store.has(pendingWikiEditKey(title)), 'Pending edit payload should be stored');
+  assert(kv.store.has(PENDING_WIKI_EDIT_INDEX_KEY), 'Pending edit index should be stored');
+
+  const loaded = await loadPendingWikiEdit(kv, title);
+  assert(!!loaded, 'Should load pending edit');
+  assert(loaded!.text.includes('Norris took pole'), 'Should preserve edit text');
+  assert(loaded!.gpRound === 11, 'Should preserve gpRound');
+  assert(loaded!.gpSections?.join(',') === 'q1_report,q2_report,q3_report', 'Should preserve sections');
+
+  await clearPendingWikiEdit(kv, title);
+  assert(!(await loadPendingWikiEdit(kv, title)), 'Pending edit should be cleared');
+  assert(!(await listPendingWikiEditTitles(kv)).includes(title), 'Index should drop cleared title');
+  await endKvInvocation(kv);
+}
+
 async function main(): Promise<void> {
   await testBufferedApiLogs();
   console.log('PASS: buffered API logs');
@@ -136,6 +175,8 @@ async function main(): Promise<void> {
   console.log('PASS: expirationTtl passthrough');
   await testCronSyncLock();
   console.log('PASS: cron sync lock');
+  await testPendingWikiEditRoundTrip();
+  console.log('PASS: pending wiki edit round trip');
   console.log('verify-kv-ops: all assertions passed');
 }
 

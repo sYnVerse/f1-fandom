@@ -151,8 +151,90 @@ export async function clearEditFailures(kv: any, pageTitle: string): Promise<voi
   await kv.delete(editFailureKey(pageTitle));
 }
 
+/** Full wiki edit payload retained after a double-failure so the next cron can replay it. */
+export interface PendingWikiEdit {
+  title: string;
+  text: string;
+  summary: string;
+  domain: string;
+  apiEndpoint?: string | null;
+  /** GP page round whose section sync flags should be set after a successful replay. */
+  gpRound?: number;
+  /** GpPageSection values to mark synced after a successful replay. */
+  gpSections?: string[];
+  /** Additional KV sync keys (templates, etc.) to mark after a successful replay. */
+  syncKeys?: string[];
+  savedAt: string;
+}
+
+export const PENDING_WIKI_EDIT_INDEX_KEY = 'pending_wiki_edit_index';
+export const PENDING_WIKI_EDIT_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+export function pendingWikiEditKey(pageTitle: string): string {
+  return `pending_wiki_edit:${pageTitle.slice(0, 150)}`;
+}
+
+export async function listPendingWikiEditTitles(kv: any): Promise<string[]> {
+  if (!kv) return [];
+  const raw = await kv.get(PENDING_WIKI_EDIT_INDEX_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((t: unknown) => typeof t === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writePendingWikiEditIndex(kv: any, titles: string[]): Promise<void> {
+  const unique = [...new Set(titles)];
+  if (unique.length === 0) {
+    await kv.delete(PENDING_WIKI_EDIT_INDEX_KEY);
+    return;
+  }
+  await trackedKvPut(kv, PENDING_WIKI_EDIT_INDEX_KEY, JSON.stringify(unique));
+}
+
+export async function savePendingWikiEdit(kv: any, edit: PendingWikiEdit): Promise<void> {
+  if (!kv) return;
+  const payload: PendingWikiEdit = {
+    ...edit,
+    savedAt: edit.savedAt || new Date().toISOString(),
+  };
+  await trackedKvPut(kv, pendingWikiEditKey(payload.title), JSON.stringify(payload), {
+    expirationTtl: PENDING_WIKI_EDIT_TTL_SECONDS,
+  });
+  const titles = await listPendingWikiEditTitles(kv);
+  if (!titles.includes(payload.title)) {
+    titles.push(payload.title);
+    await writePendingWikiEditIndex(kv, titles);
+  }
+  console.log(`Saved pending wiki edit for "${payload.title}" to KV for cron replay`);
+}
+
+export async function loadPendingWikiEdit(kv: any, pageTitle: string): Promise<PendingWikiEdit | null> {
+  if (!kv) return null;
+  const raw = await kv.get(pendingWikiEditKey(pageTitle));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as PendingWikiEdit;
+    if (!parsed?.title || typeof parsed.text !== 'string') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingWikiEdit(kv: any, pageTitle: string): Promise<void> {
+  if (!kv) return;
+  await kv.delete(pendingWikiEditKey(pageTitle));
+  const titles = (await listPendingWikiEditTitles(kv)).filter(t => t !== pageTitle);
+  await writePendingWikiEditIndex(kv, titles);
+}
+
 const CRON_SYNC_LOCK_KEY = 'cron_sync_lock';
-const CRON_SYNC_LOCK_TTL_SECONDS = 120;
+/** Allows LLM generation + a 10s edit retry without the lock expiring mid-run. */
+const CRON_SYNC_LOCK_TTL_SECONDS = 180;
 
 /** Best-effort mutex so hourly and high-frequency crons do not overlap. */
 export async function acquireCronSyncLock(kv: any, ownerId: string): Promise<boolean> {
