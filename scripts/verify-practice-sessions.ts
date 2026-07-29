@@ -2,14 +2,22 @@
  * Verifies practice session scraping helpers, wikitext generation, and test driver entry list logic.
  * Run: npx tsx scripts/verify-practice-sessions.ts
  */
-import { buildPracticeSessionUrl, getF1comRaceId } from '../src/f1-api';
+import {
+  buildPracticeSessionUrl,
+  getF1comRaceId,
+  mapDriverNames,
+  driverNameHasGluedTla,
+  stripTrailingDriverTla,
+} from '../src/f1-api';
 import {
   addTestDriversToEntryList,
   detectTestDriversFromFp1,
   findEntryListHeadingIndex,
   generatePracticeWikitext,
+  practiceWikitextHasGluedDriverNames,
   resolveDriverTeamTemplate,
   resolveTestDriversForRace,
+  shouldSkipDegradedPracticeOverwrite,
 } from '../src/wikitext-generator';
 import { gpPageSectionRequired } from '../src/sync-kv';
 
@@ -246,8 +254,105 @@ const practiceWithCachedFlags = generatePracticeWikitext(
   { hasSprint: true, testDrivers: cachedHerta }
 );
 assert(practiceWithCachedFlags.includes('{{USA}} [[Colton Herta]]'), 'Cached test driver flag must appear in practice table');
-assert(practiceWithCachedFlags.includes('Cadillac') || practiceWithCachedFlags.includes('{{Cadillac'), 'Cached test driver team must appear in practice table');
+assert(
+  practiceWithCachedFlags.includes('{{Cadillac-Ferrari}}') || practiceWithCachedFlags.includes('Cadillac'),
+  'Cached test driver team must use getTeamTemplate-style constructor (same as race drivers)'
+);
 assert(!practiceWithCachedFlags.includes('{{FIA}} [[Colton Herta]]'), 'Must not fall back to FIA flag when cache has a real flag');
+
+// F1.com glued TLAs must resolve to clean wiki names + cached flags
+const fp1GluedTla = {
+  'Lando NorrisNOR': {
+    position: '1',
+    number: '4',
+    driverName: 'Lando NorrisNOR',
+    teamName: 'McLaren',
+    time: '1:23.456',
+  },
+  'Paul AronARO': {
+    position: '18',
+    number: '61',
+    driverName: 'Paul AronARO',
+    teamName: 'Audi',
+    time: '1:27.200',
+  },
+};
+const cachedAron: import('../src/wikitext-generator').TestDriverEntry[] = [
+  { number: '61', name: 'Paul Aron', flag: '{{EST}}', constructorId: 'sauber' },
+];
+const practiceGlued = generatePracticeWikitext(
+  mainDrivers as any,
+  null,
+  fp1GluedTla,
+  null,
+  null,
+  { hasSprint: true, testDrivers: cachedAron }
+);
+assert(practiceGlued.includes('[[Paul Aron]]'), 'Glued TLA must be stripped from test driver wiki link');
+assert(!practiceGlued.includes('[[Paul AronARO]]'), 'Must not emit glued TLA wiki link');
+assert(practiceGlued.includes('{{EST}} [[Paul Aron]]'), 'Cache lookup must match despite glued TLA on session name');
+assert(
+  practiceGlued.includes('{{Sauber-Ferrari}}') || practiceGlued.includes('Sauber'),
+  'Test driver team must use getTeamTemplate style like race drivers'
+);
+
+assert(driverNameHasGluedTla('Paul AronARO'), 'Detect Paul AronARO');
+assert(!driverNameHasGluedTla('Paul Aron'), 'Clean name has no glued TLA');
+assert(stripTrailingDriverTla('Paul AronARO') === 'Paul Aron', 'Strip AronARO');
+assert(stripTrailingDriverTla('Leonardo FornaroliFOR') === 'Leonardo Fornaroli', 'Strip FornaroliFOR');
+
+const mappedGlued = mapDriverNames(
+  {
+    'Paul AronARO': {
+      position: '18',
+      number: '61',
+      driverName: 'Paul AronARO',
+      teamName: 'Audi',
+      time: '1:27.200',
+    },
+    'Lando NorrisNOR': {
+      position: '1',
+      number: '4',
+      driverName: 'Lando NorrisNOR',
+      teamName: 'McLaren',
+      time: '1:23.456',
+    },
+  },
+  mainDrivers as any
+);
+assert(mappedGlued['Paul Aron']?.driverName === 'Paul Aron', 'mapDriverNames strips test-driver TLA');
+assert(mappedGlued['Lando Norris']?.driverName === 'Lando Norris', 'mapDriverNames strips race-driver TLA');
+assert(!mappedGlued['Paul AronARO'], 'Glued key must not remain after mapping');
+
+assert(practiceWikitextHasGluedDriverNames('{{EST}} [[Paul AronARO]]'), 'Wikitext glued-name detector');
+assert(!practiceWikitextHasGluedDriverNames('{{EST}} [[Paul Aron]]'), 'Clean wikitext is not glued');
+
+const healthyExisting = `===Practice Results===
+{| class="wikitable"
+|-
+| {{EST}} [[Paul Aron]]
+| {{GBR}} {{McLaren-Mercedes}}
+|}`;
+const degradedNew = `===Practice Results===
+{| class="wikitable"
+|-
+| {{FIA}} [[Paul AronARO]]
+| {{Unknown-CON}}
+|}`;
+assert(
+  shouldSkipDegradedPracticeOverwrite(healthyExisting, degradedNew, {
+    usedF1comFallback: true,
+    rawHadGluedTlas: true,
+  }),
+  'Must skip overwrite when new practice table has glued TLAs'
+);
+assert(
+  !shouldSkipDegradedPracticeOverwrite(healthyExisting, practiceGlued, {
+    usedF1comFallback: true,
+    rawHadGluedTlas: true,
+  }),
+  'Must allow overwrite when new table is clean after TLA strip'
+);
 
 
 // Jolpica lists FP1 test drivers in the round driver entry; they must still appear in practice results

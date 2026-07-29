@@ -5,7 +5,9 @@ import {
   DriverStanding, 
   ConstructorStanding, 
   PracticeSessionData,
-  ScheduleRace
+  ScheduleRace,
+  driverNameHasGluedTla,
+  stripTrailingDriverTla,
 } from './f1-api';
 import {
   buildDriverNameLookup,
@@ -14,6 +16,7 @@ import {
   parseFiaEntryListPdf,
 } from './fia-pdf-parser';
 import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
+import { findSectionRanges, splitLines } from './wikitext-parse';
 
 const FLAGS: Record<string, string> = {
   "British": "{{GBR}}",
@@ -920,13 +923,14 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
 
     let team: string;
     if (isTestDriver) {
+      // Same engine-partner style as race drivers (e.g. {{GBR}} {{McLaren-Mercedes}}).
       const constructorId =
         cached?.constructorId ||
         teamNameToConstructorId(entry.teamName) ||
         (pdfRow ? teamNameToConstructorId(pdfRow.team || pdfRow.constructor || '') : null);
       team = constructorId
-        ? (getTeamEntryDetails(constructorId)?.constructor || getTeamTemplate(constructorId, entry.teamName))
-        : `{{${entry.teamName || 'Unknown'}-CON}}`;
+        ? getTeamTemplate(constructorId, entry.teamName || constructorId)
+        : getTeamTemplate('unknown', entry.teamName || 'Unknown');
     } else {
       team = resolveDriverTeamTemplate(entry.driverId, driverToConstructorTemplate);
     }
@@ -1038,9 +1042,12 @@ export function buildRaceDriverKeys(drivers: Driver[]): Set<string> {
 }
 
 export function isRaceDriver(driverName: string, raceDriverKeys: Set<string>): boolean {
-  const lower = driverName.toLowerCase();
-  const clean = lower.replace(/[\s'-]/g, '');
-  return raceDriverKeys.has(lower) || raceDriverKeys.has(clean);
+  for (const candidate of [driverName, stripTrailingDriverTla(driverName)]) {
+    const lower = candidate.toLowerCase();
+    const clean = lower.replace(/[\s'-]/g, '');
+    if (raceDriverKeys.has(lower) || raceDriverKeys.has(clean)) return true;
+  }
+  return false;
 }
 
 export function buildTestDriverNameKeys(testDrivers: TestDriverEntry[]): Set<string> {
@@ -1058,14 +1065,20 @@ export function isKnownTestDriver(driverName: string, testDriverKeys: Set<string
 }
 
 function driverNameKeys(name: string): string[] {
-  const lower = name.toLowerCase();
-  const ascii = normalizeDriverNameKey(name);
-  return [
-    lower,
-    lower.replace(/[\s'-]/g, ''),
-    ascii,
-    ascii.replace(/[\s'-]/g, ''),
-  ];
+  const stripped = stripTrailingDriverTla(name);
+  const variants = stripped === name ? [name] : [name, stripped];
+  const keys: string[] = [];
+  for (const variant of variants) {
+    const lower = variant.toLowerCase();
+    const ascii = normalizeDriverNameKey(variant);
+    keys.push(
+      lower,
+      lower.replace(/[\s'-]/g, ''),
+      ascii,
+      ascii.replace(/[\s'-]/g, '')
+    );
+  }
+  return keys;
 }
 
 /** Match a practice/session driver name against cached Entry List test-driver rows. */
@@ -1392,8 +1405,9 @@ const TEST_DRIVER_WIKI_NAMES: Record<string, string> = {
 };
 
 export function canonicalizeTestDriverWikiName(name: string): string {
-  const key = normalizeDriverNameKey(name);
-  return TEST_DRIVER_WIKI_NAMES[key] || name;
+  const stripped = stripTrailingDriverTla(name);
+  const key = normalizeDriverNameKey(stripped);
+  return TEST_DRIVER_WIKI_NAMES[key] || stripped;
 }
 
 const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
@@ -1411,7 +1425,7 @@ const TEST_DRIVER_NATIONALITIES: Record<string, string> = {
 };
 
 export function lookupTestDriverNationality(driverName: string): string | null {
-  const key = normalizeDriverNameKey(driverName);
+  const key = normalizeDriverNameKey(stripTrailingDriverTla(driverName));
   if (TEST_DRIVER_NATIONALITIES[key]) {
     return TEST_DRIVER_NATIONALITIES[key];
   }
@@ -2217,5 +2231,79 @@ export function generateCareerTeamPositionWikitext(standings: ConstructorStandin
   
   wikitext += "}}<noinclude>[[Category:2026 Results Templates]]</noinclude>";
   return wikitext;
+}
+
+const PRACTICE_RESULTS_HEADERS = [
+  '=== Practice Results ===',
+  '==== Practice Results ====',
+  '===Practice Results===',
+];
+
+/** Extract the Practice Results section body from a GP page (heading through next heading). */
+export function extractPracticeResultsSection(pageWikitext: string): string | null {
+  for (const header of PRACTICE_RESULTS_HEADERS) {
+    const ranges = findSectionRanges(pageWikitext, header);
+    if (ranges.length > 0) {
+      const { startLine, endLine } = ranges[0];
+      return splitLines(pageWikitext).slice(startLine, endLine).join('\n');
+    }
+  }
+  return null;
+}
+
+/** True when any wiki link target looks like an F1.com glued-TLA name (e.g. Paul AronARO). */
+export function practiceWikitextHasGluedDriverNames(wikitext: string): boolean {
+  const linkRe = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = linkRe.exec(wikitext)) !== null) {
+    if (driverNameHasGluedTla(match[1].trim())) return true;
+  }
+  return false;
+}
+
+function countPracticeDriverLinks(wikitext: string): number {
+  const linkRe = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
+  let count = 0;
+  let match: RegExpExecArray | null;
+  while ((match = linkRe.exec(wikitext)) !== null) {
+    const name = match[1].trim();
+    // Skip non-driver links (team pages, section anchors, etc.)
+    if (name.includes('Test Driver') || name.startsWith('#')) continue;
+    if (/\s/.test(name) || driverNameHasGluedTla(name)) count++;
+  }
+  return count;
+}
+
+/**
+ * Avoid overwriting a healthy Practice Results section with a degraded regen
+ * (F1.com TLA-glued names still present, or far fewer driver rows).
+ */
+export function shouldSkipDegradedPracticeOverwrite(
+  existingPageWikitext: string,
+  newPracticeWikitext: string,
+  options?: { usedF1comFallback?: boolean; rawHadGluedTlas?: boolean }
+): boolean {
+  const existing = extractPracticeResultsSection(existingPageWikitext);
+  if (!existing || !existing.includes('wikitable')) return false;
+
+  const existingGlued = practiceWikitextHasGluedDriverNames(existing);
+  const newGlued = practiceWikitextHasGluedDriverNames(newPracticeWikitext);
+  if (newGlued && !existingGlued) return true;
+
+  const existingDrivers = countPracticeDriverLinks(existing);
+  const newDrivers = countPracticeDriverLinks(newPracticeWikitext);
+  if (existingDrivers >= 10 && newDrivers < Math.floor(existingDrivers * 0.5)) {
+    return true;
+  }
+
+  // F1.com fallback produced glued TLAs: if strip/map still left more FIA placeholders
+  // than the healthy existing section, keep the existing table.
+  if (options?.usedF1comFallback && options?.rawHadGluedTlas && !existingGlued) {
+    const existingFia = (existing.match(/\{\{FIA\}\}/g) || []).length;
+    const newFia = (newPracticeWikitext.match(/\{\{FIA\}\}/g) || []).length;
+    if (newFia > existingFia) return true;
+  }
+
+  return false;
 }
 

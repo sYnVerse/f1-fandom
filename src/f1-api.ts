@@ -449,6 +449,29 @@ export async function getLapChart(
   });
 }
 
+/**
+ * F1.com practice HTML often concatenates the 3-letter TLA onto the driver name
+ * (e.g. "Paul AronARO", "George RussellRUS") when span tags are stripped.
+ * Detect a lowercase letter (incl. common diacritics) immediately followed by 3 A-Z chars.
+ */
+export function driverNameHasGluedTla(name: string): boolean {
+  return /[a-zà-öø-ÿáéíóúüñ][A-Z]{3}$/.test(name.trim());
+}
+
+/** Peel a trailing glued TLA from an F1.com-scraped driver name. */
+export function stripTrailingDriverTla(name: string): string {
+  const trimmed = name.trim();
+  const match = trimmed.match(/^(.+[a-zà-öø-ÿáéíóúüñ])([A-Z]{3})$/);
+  return match ? match[1] : trimmed;
+}
+
+export function practiceDataHasGluedDriverTlas(
+  data: Record<string, PracticeSessionData> | null | undefined
+): boolean {
+  if (!data) return false;
+  return Object.values(data).some(d => driverNameHasGluedTla(d.driverName));
+}
+
 // Parse HTML string from F1.com practice session results
 export function parsePracticeHTML(html: string): Record<string, PracticeSessionData> {
   const results: Record<string, PracticeSessionData> = {};
@@ -524,27 +547,42 @@ export function mapDriverNames(
   };
 
   for (const [rawName, data] of Object.entries(scrapedData)) {
-    const cleanKey = rawName.replace(/[\s'-]/g, '').toLowerCase();
+    const strippedRaw = stripTrailingDriverTla(rawName);
+    const cleanKey = strippedRaw.replace(/[\s'-]/g, '').toLowerCase();
+    const cleanKeyWithTla = rawName.replace(/[\s'-]/g, '').toLowerCase();
 
     let matchedDriver: Driver | null = null;
-    if (mapping[cleanKey]) {
+    if (mapping[cleanKeyWithTla]) {
+      matchedDriver = mapping[cleanKeyWithTla];
+    } else if (mapping[cleanKey]) {
       matchedDriver = mapping[cleanKey];
     } else {
       for (const [key, driver] of Object.entries(mapping)) {
-        if (cleanKey.includes(key) || key.includes(cleanKey)) {
+        if (
+          cleanKeyWithTla.includes(key) ||
+          key.includes(cleanKeyWithTla) ||
+          cleanKey.includes(key) ||
+          key.includes(cleanKey)
+        ) {
           matchedDriver = driver;
           break;
         }
       }
     }
 
-    let resolvedName = rawName;
+    let resolvedName = strippedRaw;
     if (matchedDriver) {
       resolvedName = `${matchedDriver.givenName} ${matchedDriver.familyName}`;
     } else {
-      const keyLower = rawName.toLowerCase();
+      const keyLower = strippedRaw.toLowerCase();
+      const keyLowerRaw = rawName.toLowerCase();
       for (const [k, v] of Object.entries(customMapping)) {
-        if (keyLower.includes(k) || k.includes(keyLower)) {
+        if (
+          keyLower.includes(k) ||
+          k.includes(keyLower) ||
+          keyLowerRaw.includes(k) ||
+          k.includes(keyLowerRaw)
+        ) {
           resolvedName = v;
           break;
         }
@@ -560,8 +598,18 @@ export function mapDriverNames(
   return mappedResults;
 }
 
+export interface PracticeSessionFetchResult {
+  data: Record<string, PracticeSessionData>;
+  source: 'openf1' | 'f1com';
+  /** True when raw F1.com HTML names had glued TLAs before mapDriverNames stripped them. */
+  rawHadGluedTlas?: boolean;
+}
+
 // Main scrape runner for practice sessions
-export async function scrapePracticeSession(url: string, drivers: Driver[]): Promise<Record<string, PracticeSessionData>> {
+export async function scrapePracticeSession(
+  url: string,
+  drivers: Driver[]
+): Promise<PracticeSessionFetchResult> {
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -573,7 +621,12 @@ export async function scrapePracticeSession(url: string, drivers: Driver[]): Pro
   const html = await res.text();
 
   const parsed = parsePracticeHTML(html);
-  return mapDriverNames(parsed, drivers);
+  const rawHadGluedTlas = practiceDataHasGluedDriverTlas(parsed);
+  return {
+    data: mapDriverNames(parsed, drivers),
+    source: 'f1com',
+    rawHadGluedTlas,
+  };
 }
 
 const RACING_KEY_MAPPING: Record<string, string> = {
@@ -860,6 +913,8 @@ export interface OpenF1SessionResult {
 }
 
 const OPENF1_SESSION_MATCH_WINDOW_DAYS = 4;
+/** KV TTL for OpenF1 session_result payloads (practice / quali / sprint quali). */
+const OPENF1_SESSION_RESULT_CACHE_TTL_SECONDS = 86400 * 30;
 
 function normalizeCircuitToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1217,7 +1272,11 @@ export async function getOpenF1SprintQualifyingResult(
   console.log(`Matched OpenF1 session_key ${matchedSession.session_key} for ${raceName}`);
 
   const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
-  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
+  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(
+    resultsUrl,
+    ctx,
+    OPENF1_SESSION_RESULT_CACHE_TTL_SECONDS
+  );
 
   if (!results || results.length === 0) {
     console.warn(`No OpenF1 session results found for session_key ${matchedSession.session_key}`);
@@ -1262,7 +1321,11 @@ export async function getOpenF1QualifyingResult(
   console.log(`Matched OpenF1 Qualifying session_key ${matchedSession.session_key} for ${raceName}`);
 
   const resultsUrl = `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`;
-  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(resultsUrl, ctx, 86400);
+  const results = await fetchOpenF1Json<OpenF1SessionResult[]>(
+    resultsUrl,
+    ctx,
+    OPENF1_SESSION_RESULT_CACHE_TTL_SECONDS
+  );
 
   if (!results || results.length === 0) {
     console.warn(`No OpenF1 Qualifying results found for session_key ${matchedSession.session_key}`);
@@ -1431,7 +1494,7 @@ export async function getOpenF1PracticeSessionResult(
     fetchOpenF1Json<OpenF1PracticeSessionResult[]>(
       `https://api.openf1.org/v1/session_result?session_key=${matchedSession.session_key}`,
       ctx,
-      86400
+      OPENF1_SESSION_RESULT_CACHE_TTL_SECONDS
     ),
     fetchOpenF1Json<OpenF1SessionDriver[]>(
       `https://api.openf1.org/v1/drivers?session_key=${matchedSession.session_key}`,
@@ -1458,11 +1521,11 @@ export async function getPracticeSessionWithFallback(
   sessionNumber: 1 | 2 | 3,
   drivers: Driver[],
   ctx?: F1ApiContext
-): Promise<Record<string, PracticeSessionData> | null> {
+): Promise<PracticeSessionFetchResult | null> {
   try {
     const openF1Results = await getOpenF1PracticeSessionResult(year, round, race, sessionNumber, drivers, ctx);
     if (openF1Results && Object.keys(openF1Results).length > 0) {
-      return openF1Results;
+      return { data: openF1Results, source: 'openf1' };
     }
   } catch (e: any) {
     console.warn(`OpenF1 Practice ${sessionNumber} fetch failed for round ${round}: ${e.message}`);
