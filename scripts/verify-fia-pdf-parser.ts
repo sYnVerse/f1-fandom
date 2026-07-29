@@ -2,7 +2,7 @@
  * End-to-end verification against the 2026 Austrian GP FIA entry list PDF.
  * Run: npx tsx scripts/verify-fia-pdf-parser.ts
  */
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { extractPdfText, parseFiaEntryListPdf } from '../src/fia-pdf-parser';
 import { detectTestDriversFromPdf, detectTestDriversFromFp1, generatePracticeWikitext } from '../src/wikitext-generator';
 import { Driver } from '../src/f1-api';
@@ -18,7 +18,12 @@ const austrianDrivers: Driver[] = [
 ];
 
 async function main() {
-  const buf = readFileSync('/tmp/austria_entry_list.pdf');
+  const pdfPath = '/tmp/austria_entry_list.pdf';
+  if (!existsSync(pdfPath)) {
+    console.log(`SKIP: ${pdfPath} not found`);
+    return;
+  }
+  const buf = readFileSync(pdfPath);
   const pdfText = await extractPdfText(new Uint8Array(buf));
   const parsed = parseFiaEntryListPdf(pdfText, austrianDrivers);
 
