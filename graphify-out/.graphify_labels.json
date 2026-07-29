@@ -8,12 +8,6 @@
   "6": "compilerOptions",
   "7": "stats.ts",
   "8": "kv-ops.ts",
-  "9": "wikitext-parse.ts",
   "10": "package.json",
-  "11": "llm-reporter.ts",
-  "12": "fetch",
-  "13": "statsf1.ts",
-  "14": "getPracticeSessionWithFallback",
-  "15": "mapDriverNames",
-  "16": "getSchedule"
+  "11": "llm-reporter.ts"
 }
