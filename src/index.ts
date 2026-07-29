@@ -35,6 +35,7 @@ import {
   generateBlankGPWikitext,
   generateLatestEventsWikitext,
   qualifyingWikitextHasLapTimes,
+  shouldSkipDegradedPracticeOverwrite,
   EventInfo,
   formatDesktopDate,
   formatMobileDate,
@@ -48,6 +49,7 @@ import {
   resolveTestDriversForRace,
   isWeakTestDriverList,
   testDriverEntryCompleteness,
+  canonicalizeTestDriverWikiName,
   buildRaceDriverKeys,
   isRaceDriver,
   buildTestDriverNameKeys,
@@ -413,19 +415,25 @@ export default {
         let fp3: Record<string, PracticeSessionData> | null = null;
 
         if (race) {
-          [fp1, fp2, fp3] = await Promise.all([
+          const [fp1Fetch, fp2Fetch, fp3Fetch] = await Promise.all([
             getPracticeSessionWithFallback(yr, rd, raceName, race, 1, drivers, apiCtx).catch(() => null),
             getPracticeSessionWithFallback(yr, rd, raceName, race, 2, drivers, apiCtx).catch(() => null),
             getPracticeSessionWithFallback(yr, rd, raceName, race, 3, drivers, apiCtx).catch(() => null),
           ]);
+          fp1 = fp1Fetch?.data ?? null;
+          fp2 = fp2Fetch?.data ?? null;
+          fp3 = fp3Fetch?.data ?? null;
         } else if (fp1Url) {
           const fp2Url = fp1Url.replace('/practice/1', '/practice/2');
           const fp3Url = fp1Url.replace('/practice/1', '/practice/3');
-          [fp1, fp2, fp3] = await Promise.all([
+          const [fp1Fetch, fp2Fetch, fp3Fetch] = await Promise.all([
             scrapePracticeSession(fp1Url, drivers).catch(() => null),
             scrapePracticeSession(fp2Url, drivers).catch(() => null),
             scrapePracticeSession(fp3Url, drivers).catch(() => null),
           ]);
+          fp1 = fp1Fetch?.data ?? null;
+          fp2 = fp2Fetch?.data ?? null;
+          fp3 = fp3Fetch?.data ?? null;
         } else {
           return corsResponse({ error: 'Practice URL required when race schedule is unavailable' }, 400);
         }
@@ -1323,7 +1331,7 @@ export default {
                 drivers = await getDriversForRaceWithFallback(year, round, apiCtx);
               }
 
-              const [fp1, fp2, fp3] = await Promise.all([
+              const [fp1Fetch, fp2Fetch, fp3Fetch] = await Promise.all([
                 needFp1
                   ? getPracticeSessionWithFallback(year, round, raceName, race, 1, drivers, apiCtx).catch(() => null)
                   : Promise.resolve(null),
@@ -1335,9 +1343,11 @@ export default {
                   : Promise.resolve(null),
               ]);
 
-              fp1Results = fp1;
-              fp2Results = fp2;
-              fp3Results = fp3;
+              fp1Results = fp1Fetch?.data ?? null;
+              fp2Results = fp2Fetch?.data ?? null;
+              fp3Results = fp3Fetch?.data ?? null;
+              const usedF1comFallback = [fp1Fetch, fp2Fetch, fp3Fetch].some(f => f?.source === 'f1com');
+              const rawHadGluedTlas = [fp1Fetch, fp2Fetch, fp3Fetch].some(f => f?.rawHadGluedTlas);
 
               await fetchPdfIfNeeded(drivers);
               // Allowlist from PDF + FP1 participants + resolved list. Do not trust Jolpica-only
@@ -1409,32 +1419,43 @@ export default {
                   "=== Practice Results ==="
                 );
 
-                const newPracticeContent = replaceSectionWikitext(updatedContent, bestPracticeHeader, practiceWikitext);
-                const practiceChanged = newPracticeContent !== updatedContent;
-                if (practiceChanged) {
-                  updatedContent = newPracticeContent;
-                  changes.push("Practice Results");
-                }
+                if (
+                  shouldSkipDegradedPracticeOverwrite(updatedContent, practiceWikitext, {
+                    usedF1comFallback,
+                    rawHadGluedTlas,
+                  })
+                ) {
+                  console.log(
+                    `Skipping Practice Results overwrite for ${gpPageTitle}: regenerated content looks degraded vs existing section`
+                  );
+                } else {
+                  const newPracticeContent = replaceSectionWikitext(updatedContent, bestPracticeHeader, practiceWikitext);
+                  const practiceChanged = newPracticeContent !== updatedContent;
+                  if (practiceChanged) {
+                    updatedContent = newPracticeContent;
+                    changes.push("Practice Results");
+                  }
 
-                if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0 && !isGpPageSectionSynced('practice_results_fp1')) {
-                  if (practiceChanged || changes.length > 0) {
-                    queueGpPageSectionSynced('practice_results_fp1');
-                  } else {
-                    await markGpPageSectionSynced('practice_results_fp1');
+                  if (needFp1 && fp1Results && Object.keys(fp1Results).length > 0 && !isGpPageSectionSynced('practice_results_fp1')) {
+                    if (practiceChanged || changes.length > 0) {
+                      queueGpPageSectionSynced('practice_results_fp1');
+                    } else {
+                      await markGpPageSectionSynced('practice_results_fp1');
+                    }
                   }
-                }
-                if (needFp2 && fp2Results && Object.keys(fp2Results).length > 0 && !isGpPageSectionSynced('practice_results_fp2')) {
-                  if (practiceChanged || changes.length > 0) {
-                    queueGpPageSectionSynced('practice_results_fp2');
-                  } else {
-                    await markGpPageSectionSynced('practice_results_fp2');
+                  if (needFp2 && fp2Results && Object.keys(fp2Results).length > 0 && !isGpPageSectionSynced('practice_results_fp2')) {
+                    if (practiceChanged || changes.length > 0) {
+                      queueGpPageSectionSynced('practice_results_fp2');
+                    } else {
+                      await markGpPageSectionSynced('practice_results_fp2');
+                    }
                   }
-                }
-                if (needFp3 && fp3Results && Object.keys(fp3Results).length > 0 && !isGpPageSectionSynced('practice_results_fp3')) {
-                  if (practiceChanged || changes.length > 0) {
-                    queueGpPageSectionSynced('practice_results_fp3');
-                  } else {
-                    await markGpPageSectionSynced('practice_results_fp3');
+                  if (needFp3 && fp3Results && Object.keys(fp3Results).length > 0 && !isGpPageSectionSynced('practice_results_fp3')) {
+                    if (practiceChanged || changes.length > 0) {
+                      queueGpPageSectionSynced('practice_results_fp3');
+                    } else {
+                      await markGpPageSectionSynced('practice_results_fp3');
+                    }
                   }
                 }
               }
@@ -2848,10 +2869,12 @@ function mergeTestDriverCaches(
 ): TestDriverEntry[] {
   const map = new Map<string, TestDriverEntry>();
   const consider = (td: TestDriverEntry) => {
-    const key = td.name.toLowerCase().replace(/[\s'-]/g, '');
+    const canonicalName = canonicalizeTestDriverWikiName(td.name);
+    const key = canonicalName.toLowerCase().replace(/[\s'-]/g, '');
+    const normalized = { ...td, name: canonicalName };
     const prev = map.get(key);
-    if (!prev || testDriverEntryCompleteness(td) > testDriverEntryCompleteness(prev)) {
-      map.set(key, td);
+    if (!prev || testDriverEntryCompleteness(normalized) > testDriverEntryCompleteness(prev)) {
+      map.set(key, normalized);
     }
   };
   secondary.forEach(consider);
