@@ -1,7 +1,7 @@
 # Graph Report - f1-fandom  (2026-07-28)
 
 ## Corpus Check
-- 20 files · ~58,598 words
+- 20 files · ~58,640 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `201a4b80`
+- Built from commit: `55adab58`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -35,8 +35,8 @@
 5. `generatePracticeWikitext()` - 19 edges
 6. `trackedKvPut()` - 18 edges
 7. `Recent Updates & Changelog` - 17 edges
-8. `getSchedule()` - 15 edges
-9. `editPage()` - 15 edges
+8. `editPage()` - 15 edges
+9. `getSchedule()` - 15 edges
 10. `syncCareerStandingsTemplates()` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
