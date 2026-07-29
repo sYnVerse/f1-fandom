@@ -17,15 +17,16 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 ### Automated Syncing & Background Tasks (Cron Workers)
 - **Latest News & Events Sync**: Periodically compiles the previous, latest, and upcoming event schedules and updates `Template:Latest_F1_News/Events`.
 - **Latest Data Template Sync**: After each Grand Prix race concludes and final results are published, updates `Template:Latest_Data` (`number` = season round, `gp` = latest completed GP link, `gpnumber` incremented by 1 per completed round).
-- **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with the latest standings from the Jolpi API.
+- **Career Standing Templates Sync**: Automatically keeps the F1 Fandom career standing templates (`Template:Career_Results/Points/2026`, `Template:Career_Results/Position/2026`, and `Template:Career_Results/Team_Position/2026`) synchronized with round-verified standings from the Jolpi API, with ownership strictly gated to the latest concluded round to prevent multi-round flip-flops.
 - **Concluded Sessions Polling**: Automatically checks KV caches and conclusion status for completed Grand Prix and Sprint sessions, polling results and deploying them to wiki templates as soon as they become available.
 - **Sprint Qualifying Automation**: Fetches Sprint Qualifying session classifications from the OpenF1 API, resolves driver numbers to current season constructors, and updates the GP page's Sprint Qualifying Results section with a formatted wikitext table.
-- **Practice Session Automation**: Scrapes F1.com practice results (FP1, FP2, FP3) during active race weekends, updates the GP page practice results table incrementally, and retries automatically when results are not yet published.
-- **Entry List Synchronization & Test Drivers**: Automatically updates and maintains the Grand Prix page's main Entry List table using FIA Entry List PDF data, detects rookie/test drivers appearing in FP1, validates them against the PDF, and appends them to a dedicated "Test Drivers for Practice 1" subsection with team details from `TEAM_DETAILS_2026`.
+- **Practice Session Automation**: Scrapes F1.com practice results (FP1, FP2, FP3) during active race weekends, updates the GP page practice results table incrementally, strips glued driver TLAs, and protects healthy tables against degraded scrapes.
+- **Entry List Synchronization & Test Drivers**: Automatically updates and maintains the Grand Prix page's main Entry List table using FIA Entry List PDF data, detects rookie/test drivers appearing in FP1, caches driver flags/teams in KV, canonicalizes special character names (e.g., Ryō Hirakawa), and appends them to a dedicated "Test Drivers for Practice 1" subsection.
+- **Career Results Test Driver {{TD}} Rows**: Appends missing `|Name = {{TD}}` rows to `Template:Career_Results/{year} {race}` when test drivers participate in FP1, preserving existing `{{TD}}` rows during race results writes.
 - **Scheduled Stats Sync**: Automatically computes and synchronizes career stats templates once a race weekend's Grand Prix results are published.
 - **Automated Infobox Updates**: Dynamically populates parameters in race infoboxes (`Infobox_Race` or `Infobox Sprint Race`) for qualifying pole, sprint standings, race winners, podium finishes, and fastest laps as sessions conclude.
 - **LLM-Powered Section Reports**: Automatically drafts and publishes factual, neutral, encyclopedia-style reports for section headings (`Background`, `FP1`, `FP2`, `FP3`, `Q1`, `Q2`, `Q3`, `Sprint Report`, and `Race Report`) using an LLM. Practice reports crawl official F1.com session articles for richer context. Features native **Cloudflare Workers AI** (Llama 3) support with failover to **Google Gemini** or **OpenAI** APIs. Checks and safeguards sections to ensure human edits are never overwritten.
-- **Per-Section KV Sync State**: Each GP page section, career template, and stats template has its own Cloudflare KV flag so one successful sync cannot block retries for another target.
+- **Per-Section KV Sync State & Edit Replay**: Each GP page section, career template, and stats template has its own Cloudflare KV flag so one successful sync cannot block retries for another target. Defers KV sync marking until MediaWiki API edits succeed, with automatic 10s edit retries and KV replay queuing for failed edits.
 
 ### Wiki Career Stats Tracking
 - **Cumulative Stat Compilations**: Combines 2025 career baseline data with 2026 round-by-round statistics to track cumulative progress.
@@ -81,31 +82,40 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 ```
 f1-fandom/
 ├── src/
-│   ├── index.ts              # Main Cloudflare Worker handler and cron sync
-│   ├── f1-api.ts             # Jolpi API integration and F1.com helpers
-│   ├── f1-api-cache.ts       # Within-run API deduplication and 429 backoff
-│   ├── sync-kv.ts            # Per-target KV sync flag helpers
-│   ├── kv-ops.ts             # KV daily write count, log buffering, and edit failure locks
-│   ├── wiki.ts               # MediaWiki API integration
-│   ├── wikitext-generator.ts # WikiTable formatting and test driver helpers
-│   ├── wikitext-parse.ts     # CodeQL-safe line-based wikitext parsing
-│   ├── llm-reporter.ts       # LLM prompts, F1.com article crawling, HTML sanitization
-│   ├── stats.ts              # Driver career statistics and template calculations
-│   └── frontend-html.ts      # Web dashboard UI
+│   ├── index.ts                     # Main Cloudflare Worker handler and cron sync
+│   ├── career-standings-owner.ts    # Latest concluded round ownership helper for career standings
+│   ├── f1-api.ts                    # Jolpi API integration, Ergast fallbacks, and F1.com helpers
+│   ├── f1-api-cache.ts              # Within-run API deduplication and 429 backoff
+│   ├── fia-pdf-parser.ts            # FIA Entry List PDF parsing for test and race drivers
+│   ├── sync-kv.ts                   # Per-target KV sync flag helpers
+│   ├── kv-ops.ts                    # KV daily write count, log buffering, edit retry/replay, and failure locks
+│   ├── llm-reporter.ts              # LLM prompts, F1.com article crawling, HTML sanitization
+│   ├── season-roster-2026.ts          # Shared 2026 driver-to-constructor roster map
+│   ├── stats.ts                     # Driver career statistics and template calculations
+│   ├── statsf1.ts                   # StatsF1 classification verification helper
+│   ├── wiki.ts                      # MediaWiki API integration and edit retries
+│   ├── wikitext-generator.ts        # WikiTable formatting and test driver helpers
+│   ├── wikitext-parse.ts            # CodeQL-safe line-based wikitext parsing
+│   └── frontend-html.ts             # Web dashboard UI
 ├── scripts/
-│   ├── verify-sync-kv.ts           # KV sync flag smoke tests
-│   ├── verify-wikitext-parse.ts    # Wikitext parsing verification
-│   ├── verify-infobox-update.ts    # Infobox parameter read/update tests
-│   ├── verify-jolpica-cache.ts     # API cache dedup and backoff tests
-│   ├── verify-practice-sessions.ts # Practice scraping and test driver tests
-│   ├── verify-openf1-sync.ts       # OpenF1 Sprint Qualifying sync and wikitext tests
-│   ├── verify-latest-data.ts       # Template:Latest_Data parse/increment tests
-│   ├── verify-llm-reporter.ts      # HTML sanitization and prompt context tests
-│   ├── verify-entry-list-sync.ts   # Entry list table sync and PDF parser tests
-│   ├── verify-kv-ops.ts            # KV daily write count and edit failure lock tests
-│   └── verify-stats-sync.ts        # Career stats template calculations verification
-├── f1.py                     # Python wiki table generator
-├── pyergast.py               # Python Ergast API wrapper
+│   ├── verify-sync-kv.ts            # KV sync flag smoke tests
+│   ├── verify-career-standings-owner.ts # Multi-round career standings ownership tests
+│   ├── verify-wikitext-parse.ts     # Wikitext parsing verification
+│   ├── verify-infobox-update.ts     # Infobox parameter read/update tests
+│   ├── verify-jolpica-cache.ts      # API cache dedup, backoff, and bulk endpoint tests
+│   ├── verify-practice-sessions.ts  # Practice scraping and test driver tests
+│   ├── verify-openf1-sync.ts        # OpenF1 Sprint Qualifying sync and wikitext tests
+│   ├── verify-latest-data.ts        # Template:Latest_Data parse/increment tests
+│   ├── verify-llm-reporter.ts       # HTML sanitization and prompt context tests
+│   ├── verify-entry-list-sync.ts    # Entry list table sync and PDF parser tests
+│   ├── verify-fia-pdf-parser.ts     # FIA Entry List PDF parser verification
+│   ├── verify-kv-ops.ts             # KV daily write count and edit failure lock tests
+│   ├── verify-wiki-edit-retry.ts    # Edit retry and KV replay queue verification
+│   ├── verify-career-placeholder.ts # Career Results placeholder row tests
+│   ├── verify-legacy-kv.ts          # Legacy KV state fallback tests
+│   └── verify-stats-sync.ts         # Career stats template calculations verification
+├── f1.py                            # Python wiki table generator
+├── pyergast.py                      # Python Ergast API wrapper
 └── README.md
 ```
 
@@ -127,7 +137,36 @@ This runs the TypeScript compiler (`tsc --noEmit`) and all verification scripts 
 
 ## Recent Updates & Changelog
 
-Summary of improvements (updated July 4, 2026):
+Summary of improvements (updated July 28, 2026):
+
+### F1.com Glued TLA Stripping & Practice Table Protection (July 2026)
+- **Glued TLA Normalization**: Strips trailing 3-letter driver TLAs (e.g. `Paul AronARO`) produced when falling back to F1.com scrapes during OpenF1 429 errors, ensuring accurate nationality flag mapping and KV cache lookups.
+- **Test Driver Constructor Templates**: Formats test driver team templates consistently with race drivers using `getTeamTemplate`.
+- **Practice Table Degradation Safeguard**: Prevents overwriting an already healthy Practice Results table when a regenerated or fallback scrape yields incomplete or degraded data.
+- **30-Day OpenF1 Session Cache**: Extended `session_result` OpenF1 KV cache TTL from 1 day to 30 days to reduce upstream API load.
+
+### Wiki Edit Retries & KV Replay Queue (July 2026)
+- **Deferred KV Sync Marking**: Defers setting KV section/template sync flags until MediaWiki API returns an explicitly successful edit (`result === 'Success'`).
+- **10s Retry & KV Replay Queue**: Automatically retries failed wiki edits after 10 seconds. On persistent failure, saves the generated edit payload to KV for instant replay on the next cron execution without re-fetching APIs or calling LLMs.
+- **Empty Report Regeneration**: Automatically detects and regenerates section report headings that were marked as synced in KV but left empty on the wiki.
+
+### Career Standings & Results Synchronization Reliability (July 2026)
+- **Single-Pass Standings Sync**: Fixed hourly template flip-flops across `Points`, `Position`, and `Team_Position` by updating Career standings in the same pass as race results and restricting standings ownership strictly to the latest concluded round.
+- **Career Results Test Driver {{TD}} Rows**: Appends missing `|Name = {{TD}}` rows to `Template:Career_Results/{year} {race}` when test drivers participate in FP1, preserving existing `{{TD}}` rows during post-race results writes.
+- **Template:Latest_Data Auto-Sync**: Cron worker automatically updates `Template:Latest_Data` (`number`, `gp`, `gpnumber`) after each completed Grand Prix.
+- **Stale Standings Cache Invalidation**: Invalidates stale season standings KV cache immediately when new race results arrive.
+
+### Entry List & Practice Session Test-Driver Consistency (July 2026)
+- **Test-Driver Entry KV Caching**: Caches resolved `TestDriverEntry` rows (names, flags, constructor teams) in KV per round during Entry List sync, ensuring practice tables reuse accurate driver details instead of defaulting to `{{FIA}}`.
+- **Canonical Wiki Name Matching**: Automatically canonicalizes test driver special characters (e.g. converting ASCII `Ryo Hirakawa` to `Ryō Hirakawa`) to match Fandom article titles.
+- **Entry-List Flip-Flop Prevention**: Prioritizes FIA Entry List PDF documents (then FP1 participants) over Jolpica previous-round fallbacks to prevent junior driver leakage onto active GP entry lists.
+
+### Jolpica Call Volume & Bulk Endpoints Optimization (July 2026)
+- **Bulk Endpoints & Grid Derivation**: Eliminated $N \times$ `/drivers/{id}/constructors.json` endpoint calls and prior-round driver walks by deriving driver grids directly from already-fetched season standings, results, and qualifying payloads.
+
+### Provisional Qualifying & Standings Repair (July 2026)
+- **Provisional / Order-Only Qualifying Recovery**: Detects order-only qualifying payloads (missing Q1/Q2/Q3 lap times), marks them as incomplete with a short TTL, falls back to OpenF1, and maintains a 48h race weekend repair window so blank pages auto-recover once session times publish.
+- **Constructor Fallback & Race Result Prerequisite**: Rejects unusable qualification team templates, falls back to `season-roster-2026.ts`, and requires verified race results before publishing season standings.
 
 ### OpenF1 Sprint Qualifying Cron Update (July 2026)
 - **OpenF1 API Integration**: Integrated `api.openf1.org` to retrieve Sprint Qualifying classifications.
