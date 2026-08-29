@@ -26,4 +26,5 @@ export const DRIVER_TO_CONSTRUCTOR_2026: Record<string, string> = {
   bearman: 'haas',
   bottas: 'cadillac',
   perez: 'cadillac',
+  tsunoda: 'rb',
 };

@@ -425,7 +425,8 @@ export const driverIdToWikiName: Record<string, string> = {
   'ocon': 'Esteban Ocon',
   'bearman': 'Oliver Bearman',
   'bottas': 'Valtteri Bottas',
-  'perez': 'Sergio Pérez'
+  'perez': 'Sergio Pérez',
+  'tsunoda': 'Yuki Tsunoda',
 };
 
 
