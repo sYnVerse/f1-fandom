@@ -2116,7 +2116,7 @@ export default {
 
       if (stintReprocessPending && env.F1_WIKI_STATE) {
         await markCareerStintReprocessComplete(env.F1_WIKI_STATE);
-        console.log('Marked 2026 career GP stint-alias reprocess v2 as complete.');
+        console.log('Marked 2026 career GP stint-alias reprocess v3 as complete.');
       }
       if (sprintFormatReprocessPending && env.F1_WIKI_STATE) {
         await markSprintCareerFormatReprocessComplete(env.F1_WIKI_STATE);

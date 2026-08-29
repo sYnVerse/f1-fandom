@@ -84,7 +84,7 @@ export function careerStandingsRoundKey(): string {
 
 /** One-time migration: re-process all completed 2026 GP career templates with stint aliases. */
 export function careerStintReprocessKey(): string {
-  return `${ACTIVE_SEASON}_career_gp_stint_reprocess_v2`;
+  return `${ACTIVE_SEASON}_career_gp_stint_reprocess_v3`;
 }
 
 /** One-time migration: fix sprint P9/P10 brace formatting on career templates. */

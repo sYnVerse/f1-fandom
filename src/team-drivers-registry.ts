@@ -1,6 +1,6 @@
 /**
  * Parses Template:Team Drivers/{year} to resolve numbered stint wiki keys
- * (e.g. Liam Lawson2 → Racing Bulls, Liam Lawson3 → Red Bull).
+ * (e.g. Liam Lawson1 → Racing Bulls, Liam Lawson2 → Red Bull).
  */
 
 import { driverIdToWikiName, normalizeName } from './stats';
