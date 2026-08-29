@@ -760,6 +760,30 @@ export default {
       const year = 2026;
       const schedule = await getSchedule(year, apiCtx);
       console.log(`Loaded schedule with ${schedule.length} rounds.`);
+
+      // Career template one-time migrations must stay lightweight (career templates only).
+      const stintReprocessPending = env.F1_WIKI_STATE
+        ? !(await isCareerStintReprocessComplete(env.F1_WIKI_STATE))
+        : false;
+      const sprintFormatReprocessPending = env.F1_WIKI_STATE
+        ? !(await isSprintCareerFormatReprocessComplete(env.F1_WIKI_STATE))
+        : false;
+      const careerReprocessOnly = stintReprocessPending || sprintFormatReprocessPending;
+      if (stintReprocessPending) {
+        console.log(
+          'Career GP stint-alias reprocess pending — will process all concluded 2026 rounds this run.'
+        );
+      }
+      if (sprintFormatReprocessPending) {
+        console.log(
+          'Sprint career position-format reprocess pending — will process all concluded sprint weekends this run.'
+        );
+      }
+      if (careerReprocessOnly) {
+        console.log(
+          'Career template reprocess mode — skipping GP page sections, news/Latest_Data, stats, and pending GP edits.'
+        );
+      }
       
       // Determine if a race weekend is currently active
       let activeWeekendRace: any = null;
@@ -808,14 +832,16 @@ export default {
       };
 
       // Replay any wiki edits that failed previously before regenerating content.
-      try {
-        await flushPendingWikiEdits(env, domain, apiEndpoint, getSession);
-      } catch (e: any) {
-        console.error("Failed to flush pending wiki edits:", e.message);
+      if (!careerReprocessOnly) {
+        try {
+          await flushPendingWikiEdits(env, domain, apiEndpoint, getSession);
+        } catch (e: any) {
+          console.error("Failed to flush pending wiki edits:", e.message);
+        }
       }
 
       // --- Sync Latest F1 News/Events (only on hourly/low-frequency/manual sync) ---
-      if (!isHighFrequency) {
+      if (!isHighFrequency && !careerReprocessOnly) {
         try {
           await syncLatestNewsEvents(env, getSession, schedule, apiCtx);
         } catch (e: any) {
@@ -827,7 +853,7 @@ export default {
       // --- Sync Template:Latest_Data after the latest GP results are published ---
       // Runs on hourly cron always, and on high-frequency during an active race weekend
       // so the template updates soon after the race concludes.
-      if (!isHighFrequency || activeWeekendRace) {
+      if ((!isHighFrequency || activeWeekendRace) && !careerReprocessOnly) {
         try {
           await syncLatestDataTemplate(env, getSession, schedule, apiCtx);
         } catch (e: any) {
@@ -846,25 +872,8 @@ export default {
       concludedRaces.sort((a, b) => parseInt(b.round, 10) - parseInt(a.round, 10));
 
       // Limit completed checking to only the last 2 completed rounds (unless stint migration pending)
-      const stintReprocessPending = env.F1_WIKI_STATE
-        ? !(await isCareerStintReprocessComplete(env.F1_WIKI_STATE))
-        : false;
-      const sprintFormatReprocessPending = env.F1_WIKI_STATE
-        ? !(await isSprintCareerFormatReprocessComplete(env.F1_WIKI_STATE))
-        : false;
-      if (stintReprocessPending) {
-        console.log(
-          'Career GP stint-alias reprocess pending — will process all concluded 2026 rounds this run.'
-        );
-      }
-      if (sprintFormatReprocessPending) {
-        console.log(
-          'Sprint career position-format reprocess pending — will process all concluded sprint weekends this run.'
-        );
-      }
-
       const completedRacesToProcess =
-        stintReprocessPending || sprintFormatReprocessPending
+        careerReprocessOnly
           ? concludedRaces
           : concludedRaces.slice(0, 2);
 
@@ -877,7 +886,7 @@ export default {
       // Combine completed and upcoming/ongoing race for processing, avoiding duplicates
       const racesToProcessMap = new Map<number, any>();
       completedRacesToProcess.forEach(r => racesToProcessMap.set(parseInt(r.round, 10), r));
-      if (nextRace) {
+      if (nextRace && !careerReprocessOnly) {
         racesToProcessMap.set(parseInt(nextRace.round, 10), nextRace);
       }
       const racesToProcess = Array.from(racesToProcessMap.values());
@@ -1044,12 +1053,14 @@ export default {
           gpSessionCompleted && (!gpCareerTemplateSynced || stintReprocessPending);
         const needSprintTemplate =
           !!race.Sprint && isSprintConcluded && (!sprintCareerTemplateSynced || sprintFormatReprocessPending);
-        const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
-        const needGpPage =
-          !gpPageFullySynced ||
-          (allowQualiTimesRepair && isQualiConcluded) ||
-          allowContentRepair ||
-          careerStandingsBehind;
+        const needStats =
+          !careerReprocessOnly && statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
+        const needGpPage = careerReprocessOnly
+          ? false
+          : !gpPageFullySynced ||
+            (allowQualiTimesRepair && isQualiConcluded) ||
+            allowContentRepair ||
+            careerStandingsBehind;
 
         if (roundFullySynced && needGpPage) {
           console.log(
@@ -1204,6 +1215,7 @@ export default {
           // Points/Position/Team_Position in lockstep with Championship Standings.
           // Never sync from an older round in the last-2 processing loop.
           if (
+            !careerReprocessOnly &&
             shouldSyncCareerStandingsForRound({
               round,
               latestConcludedRound: latestConcluded,
@@ -1308,7 +1320,7 @@ export default {
         }
 
         // --- 3. Smart Check for Stats Templates ---
-        if (statsSyncEnabled && isRaceConcluded && gpResults.length > 0) {
+        if (!careerReprocessOnly && statsSyncEnabled && isRaceConcluded && gpResults.length > 0) {
           console.log(`GP results available. Running stats sync for round ${round}...`);
           await syncStatsTemplates(
             env,
@@ -1320,11 +1332,12 @@ export default {
             schedule,
             gpResults
           );
-        } else if (statsSyncEnabled && !isRaceConcluded) {
+        } else if (!careerReprocessOnly && statsSyncEnabled && !isRaceConcluded) {
           console.log(`Round ${round} Stats Templates not completed yet. Skipping.`);
         }
 
         // --- 4. Smart Check for GP Page Sections ---
+        if (!careerReprocessOnly) {
         if (gpPageFullySynced && !allowQualiTimesRepair) {
           console.log(`Round ${round} GP page sections already synced (KV cache). Skipping.`);
         } else {
@@ -2111,6 +2124,7 @@ export default {
           } catch (e: any) {
             console.error(`Error updating GP page sections for round ${round}:`, e.message);
           }
+        }
         }
       }
 
