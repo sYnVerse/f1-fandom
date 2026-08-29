@@ -82,6 +82,22 @@ export function careerStandingsRoundKey(): string {
   return `${ACTIVE_SEASON}_career_standings_source_round`;
 }
 
+/** One-time migration: re-process all completed 2026 GP career templates with stint aliases. */
+export function careerStintReprocessKey(): string {
+  return `${ACTIVE_SEASON}_career_gp_stint_reprocess_v1`;
+}
+
+export async function isCareerStintReprocessComplete(kv: any): Promise<boolean> {
+  if (!kv) return true;
+  const flag = await kv.get(careerStintReprocessKey());
+  return flag === 'done';
+}
+
+export async function markCareerStintReprocessComplete(kv: any): Promise<void> {
+  if (!kv) return;
+  await trackedKvPut(kv, careerStintReprocessKey(), 'done');
+}
+
 export async function clearKvSynced(kv: any, key: string): Promise<void> {
   if (!kv) return;
   await kv.delete(key);
