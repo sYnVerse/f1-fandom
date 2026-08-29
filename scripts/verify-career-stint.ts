@@ -9,6 +9,9 @@ import {
   mergeCareerResultsGpTemplate,
   mergeCareerPointsWikitext,
   generateStintAwareWikiResultsText,
+  formatRaceResultValue,
+  gpTemplateNeedsStintAliasUpgrade,
+  sprintTemplateNeedsPositionFormatFix,
   CAREER_RESULTS_MANUAL_MARKER,
   parseCareerResultsSwitchRows,
 } from '../src/career-results-stint';
@@ -91,6 +94,54 @@ const belgianGenerated = generateStintAwareWikiResultsText(belgianResults, regis
 assert(
   belgianGenerated.includes('|Liam Lawson|Liam Lawson2'),
   'RB race should use Lawson2 pipe alias'
+);
+
+const australianExisting = `{{#switch:{{{1}}}
+|Liam Lawson            = 13th
+|Lando Norris           = {{1st}}
+|#default = 
+}}<noinclude>[[Category:2026 Results Templates]]</noinclude>`;
+
+const australianResults: RaceResult[] = [
+  makeResult('lawson', 'Liam', 'Lawson', 'rb', '13', '0'),
+  makeResult('norris', 'Lando', 'Norris', 'mclaren', '1', '25'),
+];
+const australianGenerated = generateStintAwareWikiResultsText(australianResults, registry);
+assert(
+  gpTemplateNeedsStintAliasUpgrade(australianExisting, australianGenerated),
+  'Should detect plain Lawson row needs stint alias upgrade'
+);
+const australianMerged = mergeCareerResultsGpTemplate(australianExisting, australianGenerated);
+assert(
+  australianMerged.wikitext.includes('|Liam Lawson|Liam Lawson2'),
+  'Merge should upgrade plain Lawson to pipe alias'
+);
+assert(
+  !australianMerged.wikitext.match(/^\|Liam Lawson\s+=/m),
+  'Merge should remove superseded plain Lawson row'
+);
+
+const sprintNinth = makeResult('alonso', 'Fernando', 'Alonso', 'aston_martin', '9', '0');
+const sprintTenth = makeResult('stroll', 'Lance', 'Stroll', 'aston_martin', '10', '0');
+assert(
+  formatRaceResultValue(sprintNinth, { isSprint: true }) === '9th',
+  'Sprint P9 should not use template braces'
+);
+assert(
+  formatRaceResultValue(sprintTenth, { isSprint: true }) === '10th',
+  'Sprint P10 should not use template braces'
+);
+assert(
+  formatRaceResultValue(makeResult('norris', 'Lando', 'Norris', 'mclaren', '8', '4'), { isSprint: true }) === '{{8th}}',
+  'Sprint P8 should still use template braces'
+);
+assert(
+  sprintTemplateNeedsPositionFormatFix('|Driver = {{9th}}'),
+  'Should detect incorrect sprint P9 braces'
+);
+assert(
+  !sprintTemplateNeedsPositionFormatFix('|Driver = 9th'),
+  'Plain 9th should not trigger sprint format fix'
 );
 
 const existingWithManual = `{{#switch:{{{1}}}

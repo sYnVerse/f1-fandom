@@ -52,7 +52,10 @@ function getOrdinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function formatRaceResultValue(r: RaceResult): string {
+export function formatRaceResultValue(
+  r: RaceResult,
+  options?: { isSprint?: boolean }
+): string {
   const posText = r.positionText || r.position;
   let formatted = '';
 
@@ -66,8 +69,10 @@ export function formatRaceResultValue(r: RaceResult): string {
     const posVal = parseInt(r.position, 10);
     const ord = getOrdinal(posVal);
     const isFL = r.FastestLap && r.FastestLap.rank === '1';
+    // Sprint awards points to P1–P8 only; GP awards points to P1–P10.
+    const pointsCutoff = options?.isSprint ? 8 : 10;
 
-    if (posVal <= 10) {
+    if (posVal <= pointsCutoff) {
       formatted = isFL ? `{{${ord}|fl}}` : `{{${ord}}}`;
     } else {
       formatted = isFL ? `${ord}|fl` : `${ord}`;
@@ -188,10 +193,45 @@ function extractCategorySuffix(wikitext: string): string {
   return wikitext.slice(idx);
 }
 
-/**
- * Merge generated GP career results with existing wiki content.
- * Preserves rows marked `<!-- manual -->` and non-empty values when API is blank.
- */
+function removeSupersededCanonicalRows(merged: Map<string, CareerResultsRow>): void {
+  for (const key of Array.from(merged.keys())) {
+    if (key.includes('|')) continue;
+    const canonical = key.trim();
+    const superseded = Array.from(merged.keys()).some(other => {
+      if (!other.includes('|')) return false;
+      const parts = parseSwitchKeyNames(other);
+      return parts.length > 0 && normalizeName(parts[0]) === normalizeName(canonical);
+    });
+    if (superseded) {
+      merged.delete(key);
+    }
+  }
+}
+
+/** True when wiki still has a plain driver row that should be a pipe-alias stint key. */
+export function gpTemplateNeedsStintAliasUpgrade(
+  existingWikitext: string,
+  generatedWikitext: string
+): boolean {
+  const existing = parseCareerResultsSwitchRows(existingWikitext);
+  const generated = parseCareerResultsSwitchRows(generatedWikitext);
+
+  for (const [genKey, genRow] of generated) {
+    if (!genKey.includes('|') || !genRow.value.trim()) continue;
+    const canonical = parseSwitchKeyNames(genKey)[0];
+    if (!canonical) continue;
+    const plainRow = existing.get(canonical);
+    if (plainRow && !plainRow.isManual && plainRow.value.trim() === genRow.value.trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Sprint templates incorrectly using {{9th}}/{{10th}} when only P1–P8 score. */
+export function sprintTemplateNeedsPositionFormatFix(wikitext: string): boolean {
+  return /\{\{9th(?:\|fl)?\}\}/.test(wikitext) || /\{\{10th(?:\|fl)?\}\}/.test(wikitext);
+}
 export function mergeCareerResultsGpTemplate(
   existingWikitext: string,
   generatedWikitext: string
@@ -242,6 +282,8 @@ export function mergeCareerResultsGpTemplate(
     }
   }
 
+  removeSupersededCanonicalRows(merged);
+
   const result = serializeCareerResultsRows(merged, categoryLine);
   const changed = result.trim() !== (existingWikitext || '').trim();
   return { wikitext: result, changed };
@@ -266,7 +308,7 @@ export function generateStintAwareWikiResultsText(
 
     rowMap.set(switchKey, {
       switchKey,
-      value: formatRaceResultValue(r),
+      value: formatRaceResultValue(r, { isSprint }),
       isManual: false,
     });
     driversWithStintRows.add(driverId);
@@ -308,7 +350,7 @@ export function generateStintAwareWikiResultsText(
     if (!rowMap.has(switchKey)) {
       rowMap.set(switchKey, {
         switchKey,
-        value: formatRaceResultValue(r),
+        value: formatRaceResultValue(r, { isSprint }),
         isManual: false,
       });
     }

@@ -84,7 +84,12 @@ export function careerStandingsRoundKey(): string {
 
 /** One-time migration: re-process all completed 2026 GP career templates with stint aliases. */
 export function careerStintReprocessKey(): string {
-  return `${ACTIVE_SEASON}_career_gp_stint_reprocess_v1`;
+  return `${ACTIVE_SEASON}_career_gp_stint_reprocess_v2`;
+}
+
+/** One-time migration: fix sprint P9/P10 brace formatting on career templates. */
+export function sprintCareerFormatReprocessKey(): string {
+  return `${ACTIVE_SEASON}_sprint_career_format_reprocess_v1`;
 }
 
 export async function isCareerStintReprocessComplete(kv: any): Promise<boolean> {
@@ -96,6 +101,17 @@ export async function isCareerStintReprocessComplete(kv: any): Promise<boolean> 
 export async function markCareerStintReprocessComplete(kv: any): Promise<void> {
   if (!kv) return;
   await trackedKvPut(kv, careerStintReprocessKey(), 'done');
+}
+
+export async function isSprintCareerFormatReprocessComplete(kv: any): Promise<boolean> {
+  if (!kv) return true;
+  const flag = await kv.get(sprintCareerFormatReprocessKey());
+  return flag === 'done';
+}
+
+export async function markSprintCareerFormatReprocessComplete(kv: any): Promise<void> {
+  if (!kv) return;
+  await trackedKvPut(kv, sprintCareerFormatReprocessKey(), 'done');
 }
 
 export async function clearKvSynced(kv: any, key: string): Promise<void> {

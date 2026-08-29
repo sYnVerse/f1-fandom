@@ -77,7 +77,6 @@ import {
   updateTemplateContent, 
   updateCorrectionText,
   prepareStatsTemplateUpdate,
-  driverIdToWikiName 
 } from './stats';
 import { getStatsF1Results, verifyResults } from './statsf1';
 import {
@@ -93,6 +92,8 @@ import {
   mergeCareerResultsGpTemplate,
   buildCareerPointsRows,
   mergeCareerPointsWikitext,
+  gpTemplateNeedsStintAliasUpgrade,
+  sprintTemplateNeedsPositionFormatFix,
 } from './career-results-stint';
 import {
   gpCareerTemplateKey,
@@ -106,6 +107,8 @@ import {
   clearCareerStandingsSynced,
   isCareerStintReprocessComplete,
   markCareerStintReprocessComplete,
+  isSprintCareerFormatReprocessComplete,
+  markSprintCareerFormatReprocessComplete,
   legacySprintUpdatedKey,
   testDriversCacheKey,
   isKvSynced,
@@ -846,15 +849,24 @@ export default {
       const stintReprocessPending = env.F1_WIKI_STATE
         ? !(await isCareerStintReprocessComplete(env.F1_WIKI_STATE))
         : false;
+      const sprintFormatReprocessPending = env.F1_WIKI_STATE
+        ? !(await isSprintCareerFormatReprocessComplete(env.F1_WIKI_STATE))
+        : false;
       if (stintReprocessPending) {
         console.log(
           'Career GP stint-alias reprocess pending — will process all concluded 2026 rounds this run.'
         );
       }
+      if (sprintFormatReprocessPending) {
+        console.log(
+          'Sprint career position-format reprocess pending — will process all concluded sprint weekends this run.'
+        );
+      }
 
-      const completedRacesToProcess = stintReprocessPending
-        ? concludedRaces
-        : concludedRaces.slice(0, 2);
+      const completedRacesToProcess =
+        stintReprocessPending || sprintFormatReprocessPending
+          ? concludedRaces
+          : concludedRaces.slice(0, 2);
 
       // Find the next upcoming/current race (ongoing race weekend)
       const nextRace = schedule.find(race => {
@@ -889,6 +901,10 @@ export default {
           teamDriversRegistry = parseTeamDriversRegistry(seasonYear, teamPage.content);
           console.log(
             `Loaded Team Drivers/${seasonYear} registry (${teamDriversRegistry.stints.length} driver slots).`
+          );
+        } else {
+          console.warn(
+            `Team Drivers/${seasonYear} registry unavailable — stint pipe aliases will not be generated this run.`
           );
         }
       } catch (e: any) {
@@ -981,7 +997,9 @@ export default {
 
         const gpPageFullySynced = allRequiredGpPageSectionsSynced(gpPageSectionState, pageTiming);
 
-        const sprintFullyHandled = !race.Sprint || sprintCareerTemplateSynced || !isSprintConcluded;
+        const sprintFullyHandled =
+          !race.Sprint ||
+          ((sprintCareerTemplateSynced && !sprintFormatReprocessPending) || !isSprintConcluded);
         // Longer window for the latest concluded round: practice may have {{Unknown-CON}} from
         // OpenF1 constructor gaps, and standings may have been frozen before Jolpica published points.
         const contentRepairUntil = new Date(raceEndTime.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -1024,7 +1042,8 @@ export default {
 
         const needGpCareerTemplate =
           gpSessionCompleted && (!gpCareerTemplateSynced || stintReprocessPending);
-        const needSprintTemplate = !!race.Sprint && isSprintConcluded && !sprintCareerTemplateSynced;
+        const needSprintTemplate =
+          !!race.Sprint && isSprintConcluded && (!sprintCareerTemplateSynced || sprintFormatReprocessPending);
         const needStats = statsSyncEnabled && isRaceConcluded && !statsTemplatesSynced;
         const needGpPage =
           !gpPageFullySynced ||
@@ -1133,12 +1152,23 @@ export default {
             gpWikitext,
             generatedWikitext
           );
+          const stintAliasUpgrade = gpTemplateNeedsStintAliasUpgrade(gpWikitext, generatedWikitext);
           let gpTemplateUpdated = false;
           if (gpWikitext.trim() === expectedWikitext.trim()) {
             console.log(`  GP template already matches expected results.`);
             await markKvSynced(env.F1_WIKI_STATE, gpCareerKey);
-          } else if (isPlaceholder(gpWikitext) || gpCareerTemplateSynced || stintReprocessPending) {
-            if (isPlaceholder(gpWikitext) || mergeChanged || stintReprocessPending) {
+          } else if (
+            isPlaceholder(gpWikitext) ||
+            gpCareerTemplateSynced ||
+            stintReprocessPending ||
+            stintAliasUpgrade
+          ) {
+            if (
+              isPlaceholder(gpWikitext) ||
+              mergeChanged ||
+              stintReprocessPending ||
+              stintAliasUpgrade
+            ) {
               console.log(
                 isPlaceholder(gpWikitext)
                   ? `  GP template is a placeholder. Auto-updating results...`
@@ -1220,27 +1250,55 @@ export default {
               console.error(`  Error fetching Sprint template: ${e.message}`);
             }
 
-            const expectedSprintWikitext = generateWikiResultsText(sprintResults, true);
+            const generatedSprintWikitext = generateStintAwareWikiResultsText(
+              sprintResults,
+              teamDriversRegistry,
+              [],
+              true
+            );
+            const { wikitext: expectedSprintWikitext, changed: sprintMergeChanged } =
+              mergeCareerResultsGpTemplate(sprintWikitext, generatedSprintWikitext);
+            const sprintFormatFixNeeded = sprintTemplateNeedsPositionFormatFix(sprintWikitext);
+
             if (sprintWikitext.trim() === expectedSprintWikitext.trim()) {
               console.log(`  Sprint template already matches expected results.`);
               await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
-            } else if (isPlaceholder(sprintWikitext)) {
-              console.log(
-                sprintCareerTemplateSynced
-                  ? `  Sprint template KV flag set but content is still placeholder; re-syncing...`
-                  : `  Sprint template is a placeholder. Auto-updating results...`
-              );
-              const currentSession = await getSession();
-              await editPage(domain, currentSession, sprintTitle, expectedSprintWikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
-
-              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
-              console.log(`  Marked round ${round} Sprint career template as synced in KV.`);
-            } else if (sprintCareerTemplateSynced) {
-              console.log(`  Sprint template KV flag set but content differs; re-syncing...`);
-              const currentSession = await getSession();
-              await editPage(domain, currentSession, sprintTitle, expectedSprintWikitext, "Automated Sprint results update from Jolpi API", apiEndpoint);
-              await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
-              console.log(`  Updated round ${round} Sprint career template.`);
+            } else if (
+              isPlaceholder(sprintWikitext) ||
+              sprintCareerTemplateSynced ||
+              sprintFormatReprocessPending ||
+              sprintFormatFixNeeded
+            ) {
+              if (
+                isPlaceholder(sprintWikitext) ||
+                sprintMergeChanged ||
+                sprintFormatReprocessPending ||
+                sprintFormatFixNeeded
+              ) {
+                console.log(
+                  isPlaceholder(sprintWikitext)
+                    ? `  Sprint template is a placeholder. Auto-updating results...`
+                    : sprintFormatReprocessPending
+                      ? `  Sprint template position-format reprocess for round ${round}...`
+                      : `  Sprint template format/stint update for round ${round}...`
+                );
+                const currentSession = await getSession();
+                await editPage(
+                  domain,
+                  currentSession,
+                  sprintTitle,
+                  expectedSprintWikitext,
+                  sprintFormatReprocessPending
+                    ? 'Automated sprint career results position-format fix'
+                    : 'Automated Sprint results update from Jolpi API',
+                  apiEndpoint
+                );
+                await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+                console.log(`  Updated round ${round} Sprint career template.`);
+              } else {
+                console.log(`  Sprint template already matches after merge.`);
+                await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
+              }
             } else {
               console.log(`  Sprint template already has custom results on Fandom.`);
               await markKvSynced(env.F1_WIKI_STATE, sprintCareerKey);
@@ -2058,7 +2116,11 @@ export default {
 
       if (stintReprocessPending && env.F1_WIKI_STATE) {
         await markCareerStintReprocessComplete(env.F1_WIKI_STATE);
-        console.log('Marked 2026 career GP stint-alias reprocess as complete.');
+        console.log('Marked 2026 career GP stint-alias reprocess v2 as complete.');
+      }
+      if (sprintFormatReprocessPending && env.F1_WIKI_STATE) {
+        await markSprintCareerFormatReprocessComplete(env.F1_WIKI_STATE);
+        console.log('Marked 2026 sprint career position-format reprocess as complete.');
       }
 
       console.log(`Scheduled sync completed successfully! Jolpica API calls this run: ${apiCtx.apiCallCount}`);
@@ -2215,66 +2277,6 @@ export function findBestHeader(fullText: string, options: string[], defaultHeade
 
 
 
-const wikiDriverList = [
-  "Max Verstappen",
-  "Isack Hadjar",
-  "Charles Leclerc",
-  "Lewis Hamilton",
-  "George Russell",
-  "Andrea Kimi Antonelli",
-  "Pierre Gasly",
-  "Franco Colapinto",
-  "Lando Norris",
-  "Oscar Piastri",
-  "Carlos Sainz, Jr.",
-  "Alexander Albon",
-  "Liam Lawson",
-  "Arvid Lindblad",
-  "Lance Stroll",
-  "Fernando Alonso",
-  "Nico Hülkenberg",
-  "Gabriel Bortoleto",
-  "Esteban Ocon",
-  "Oliver Bearman",
-  "Valtteri Bottas",
-  "Sergio Pérez"
-];
-
-function getOrdinal(n: number): string {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
-
-function formatResult(r: any): string {
-  const posText = r.positionText || r.position;
-  let formatted = '';
-
-  if (posText === 'R') {
-    formatted = '{{Ret}}';
-  } else if (posText === 'D') {
-    formatted = '{{DSQ}}';
-  } else if (posText === 'W') {
-    formatted = '{{DNS}}';
-  } else {
-    const posVal = parseInt(r.position, 10);
-    const ord = getOrdinal(posVal);
-    const isFL = r.FastestLap && r.FastestLap.rank === '1';
-
-    if (posVal <= 10) {
-      formatted = isFL ? `{{${ord}|fl}}` : `{{${ord}}}`;
-    } else {
-      formatted = isFL ? `${ord}|fl` : `${ord}`;
-    }
-  }
-
-  if (r.grid === '1') {
-    formatted += '{{Pole}}';
-  }
-
-  return formatted;
-}
-
 function isPlaceholderResultValue(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed === '') return true;
@@ -2348,45 +2350,6 @@ async function syncCareerResultsTestDrivers(opts: {
     `  Updated Career Results template with test drivers: ${testDrivers.map(td => td.name).join(', ')}.`
   );
   return true;
-}
-
-function generateWikiResultsText(
-  results: any[],
-  _isSprint: boolean,
-  testDriverNames: string[] = []
-): string {
-  const driverResultsMap: Record<string, string> = {};
-  for (const r of results) {
-    const wikiName = driverIdToWikiName[r.Driver.driverId];
-    if (wikiName) {
-      driverResultsMap[wikiName] = formatResult(r);
-    }
-  }
-
-  const raceDriverNames = new Set(wikiDriverList.map(n => n.toLowerCase()));
-  const uniqueTestDrivers: string[] = [];
-  const seenTest = new Set<string>();
-  for (const name of testDriverNames) {
-    const trimmed = name.trim();
-    const key = trimmed.toLowerCase();
-    if (!trimmed || raceDriverNames.has(key) || seenTest.has(key)) continue;
-    seenTest.add(key);
-    uniqueTestDrivers.push(trimmed);
-  }
-
-  let wikitext = '{{#switch:{{{1}}}\n';
-  for (const wikiName of wikiDriverList) {
-    const resultVal = driverResultsMap[wikiName] || '';
-    const paddedName = wikiName.padEnd(22, ' ');
-    wikitext += `|${paddedName} = ${resultVal}\n`;
-  }
-  for (const wikiName of uniqueTestDrivers) {
-    const paddedName = wikiName.padEnd(22, ' ');
-    wikitext += `|${paddedName} = {{TD}}\n`;
-  }
-  wikitext += '|#default = \n';
-  wikitext += '}}<noinclude>[[Category:2026 Results Templates]]</noinclude>';
-  return wikitext;
 }
 
 async function checkAndSendDailySummary(env: any): Promise<void> {
