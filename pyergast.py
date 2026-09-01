@@ -72,7 +72,8 @@ def get_drivers(year=None, race=None):
         url = 'http://api.jolpi.ca/ergast/f1/drivers.json?limit=1000'
     r = requests.get(url)
 
-    assert r.status_code == 200, 'Cannot connect to Ergast API'
+    if r.status_code != 200:
+        raise AssertionError('Cannot connect to Ergast API')
     drivers = r.json()
     result = pd.DataFrame(drivers["MRData"]["DriverTable"]['Drivers'])
 
@@ -507,7 +508,7 @@ def get_qualifying_result(year=None, race=None):
     [20 rows x 10 columns]
     """
     if year and race:
-        assert year >= 1996, 'Qualifying data only available starting from 1996'
+        if year < 1996: raise AssertionError('Qualifying data only available starting from 1996')
         url = 'http://api.jolpi.ca/ergast/f1/{}/{}/qualifying.json?limit=1000'.format(year, race)
     else:
         url = 'http://api.jolpi.ca/ergast/f1/current/last/qualifying.json?limit=1000'
@@ -722,7 +723,8 @@ def constructor_standings(year=None, race=None):
         assert year >= 1958, 'Constructor standings only available starting 1958'
         url = 'http://api.jolpi.ca/ergast/f1/{}/{}/constructorStandings.json?limit=1000'.format(year, race)
     elif year:
-        assert year >= 1958, 'Constructor standings only available starting 1958'
+        if year < 1958:
+            raise AssertionError('Constructor standings only available starting 1958')
         url = 'http://api.jolpi.ca/ergast/f1/{}/constructorStandings.json?limit=1000'.format(year, race)
     else:
         url = 'http://api.jolpi.ca/ergast/f1/current/constructorStandings.json?limit=1000'
@@ -958,13 +960,13 @@ def get_sprint_result(year=None, race=None):
     [20 rows x 13 columns]
     """
     if year or race:
-        assert year and race, 'You must specify both a year and a race'
+        if not (year and race): raise AssertionError('You must specify both a year and a race')
         url = 'http://api.jolpi.ca/ergast/f1/{}/{}/sprint.json?limit=1000'.format(year, race)
     else:
         url = 'http://api.jolpi.ca/ergast/f1/current/last/sprint.json?limit=1000'
 
     r = requests.get(url)
-    assert r.status_code == 200, 'Cannot connect to Ergast API. Check your inputs.'
+    if not r.status_code == 200: raise AssertionError('Cannot connect to Ergast API. Check your inputs.')
     sprint_result = r.json()
     result_dict = sprint_result["MRData"]['RaceTable']['Races'][0]['SprintResults']
 
