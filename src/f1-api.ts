@@ -1004,12 +1004,36 @@ export function matchOpenF1QualifyingSession(
   return best;
 }
 
+function buildValidatedOpenF1Url(url: string): string {
+  try {
+    if (url.includes('/../') || /\/%2e%2e\//i.test(url)) {
+      throw new Error('Invalid path');
+    }
+    
+    const parsedUrl = new URL(url);
+    
+    const allowedDomains = ['api.openf1.org'];
+    if (!allowedDomains.includes(parsedUrl.hostname)) {
+      throw new Error('Invalid host');
+    }
+    
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Invalid protocol');
+    }
+    
+    return parsedUrl.href;
+  } catch {
+    throw new Error('Invalid URL');
+  }
+}
+
 export async function fetchOpenF1Json<T>(
   url: string,
   ctx?: F1ApiContext,
   expirationTtl?: number
 ): Promise<T> {
-  const cacheKey = `openf1:${url}`;
+  const validatedUrl = buildValidatedOpenF1Url(url);
+  const cacheKey = `openf1:${validatedUrl}`;
   if (ctx?.cache.has(cacheKey)) {
     return ctx.cache.get(cacheKey) as T;
   }
@@ -1031,10 +1055,10 @@ export async function fetchOpenF1Json<T>(
   }
 
   const promise = (async (): Promise<T> => {
-    console.log(`Fetching from OpenF1: ${url}`);
+    console.log(`Fetching from OpenF1: ${validatedUrl}`);
     if (ctx) ctx.apiCallCount++;
 
-    const res = await fetch(url);
+    const res = await fetch(validatedUrl);
     if (!res.ok) {
       throw new Error(`OpenF1 API error: ${res.statusText}`);
     }
