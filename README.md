@@ -224,7 +224,7 @@ Summary of improvements (updated July 28, 2026):
 - **Stats Cache Validation & Force-Refresh**: Only caches round stats after race results are confirmed; dashboard "Refresh Stats Cache" button clears stale KV keys.
 - **StatsF1 Verification**: Classification cross-check against StatsF1 with mismatch highlighting in the dashboard.
 - **Blank GP Page Generation**: API endpoint and dashboard button to generate clean wikitext drafts for upcoming GPs.
-- **Constructor & Track Mapping**: São Paulo GP rename (2021+), Barcelona-Catalunya GP (2026), Revolut Audi and Cadillac team templates.
+- **Constructor & Track Mapping**: São Paulo GP rename (2021+), Barcelona-Catalunya GP (2026), Bahrain GP override (2026), Revolut Audi and Cadillac team templates.
 - **Dependabot**: Automated dependency update PRs configured via `.github/dependabot.yml`.
 
 ---

@@ -160,13 +160,16 @@ export interface PracticeResults {
 
 const BASE_URL = 'https://api.jolpi.ca/ergast/f1';
 
-function normalizeScheduleRaces(races: ScheduleRace[], year: number): ScheduleRace[] {
+export function normalizeScheduleRaces(races: ScheduleRace[], year: number): ScheduleRace[] {
   return races.map(race => {
     if (race.raceName === 'Brazilian Grand Prix' && year >= 2021) {
       return { ...race, raceName: 'São Paulo Grand Prix' };
     }
     if (race.raceName === 'Barcelona Grand Prix' && year === 2026) {
       return { ...race, raceName: 'Barcelona-Catalunya Grand Prix' };
+    }
+    if (race.raceName === 'Bahrain Grand Prix in Malaysia' && year === 2026) {
+      return { ...race, raceName: 'Bahrain Grand Prix' };
     }
     return race;
   });

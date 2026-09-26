@@ -13,7 +13,7 @@ import {
   shouldRevalidateMismatchedRoundStandings,
   kvCacheKey,
 } from '../src/f1-api-cache';
-import { getSchedule, getRaceResult, hasQualifyingSessionTimes, getDriversForRaceWithFallback, getDriverConstructor, driversFromBulkPayloads, fetchRoundJolpicaData } from '../src/f1-api';
+import { getSchedule, getRaceResult, hasQualifyingSessionTimes, getDriversForRaceWithFallback, getDriverConstructor, driversFromBulkPayloads, fetchRoundJolpicaData, normalizeScheduleRaces } from '../src/f1-api';
 
 const BASE = 'https://api.jolpi.ca/ergast/f1';
 const SCHEDULE_URL = `${BASE}/2026.json?limit=1000`;
@@ -708,10 +708,32 @@ async function testInvalidateSeasonStandingsCache() {
   console.log('PASS: invalidateSeasonStandingsCache');
 }
 
+function testNormalizeScheduleRaces() {
+  const races = [
+    { season: '2026', round: '1', raceName: 'Bahrain Grand Prix in Malaysia' } as any,
+    { season: '2026', round: '2', raceName: 'Barcelona Grand Prix' } as any,
+    { season: '2021', round: '20', raceName: 'Brazilian Grand Prix' } as any,
+    { season: '2025', round: '1', raceName: 'Bahrain Grand Prix in Malaysia' } as any,
+    { season: '2026', round: '3', raceName: 'Australian Grand Prix' } as any,
+  ];
+
+  const normalized2026 = normalizeScheduleRaces(races, 2026);
+  assert(normalized2026[0].raceName === 'Bahrain Grand Prix', 'Bahrain GP in Malaysia should normalize to Bahrain Grand Prix in 2026');
+  assert(normalized2026[1].raceName === 'Barcelona-Catalunya Grand Prix', 'Barcelona GP should normalize to Barcelona-Catalunya Grand Prix in 2026');
+  assert(normalized2026[2].raceName === 'São Paulo Grand Prix', 'Brazilian GP should normalize to São Paulo Grand Prix in >=2021');
+  assert(normalized2026[4].raceName === 'Australian Grand Prix', 'Australian GP should remain unchanged');
+
+  const normalized2025 = normalizeScheduleRaces(races, 2025);
+  assert(normalized2025[0].raceName === 'Bahrain Grand Prix in Malaysia', 'Bahrain GP in Malaysia should only override in 2026');
+
+  console.log('PASS: normalizeScheduleRaces (Bahrain GP override, Barcelona GP override, São Paulo GP rename)');
+}
+
 async function main() {
   testClassifyJolpicaUrl();
   testIsResponseEmpty();
   testGetCacheTtl();
+  testNormalizeScheduleRaces();
   await testScheduleDedup();
   await testRaceResultDedup();
   await test429Backoff();
