@@ -67,6 +67,18 @@ import {
   getSectionContent,
   isSectionEmptyOrPlaceholder
 } from './wiki';
+import {
+  assertAllowedPracticeSessionUrl,
+  UrlAllowlistError,
+} from './url-allowlist';
+import {
+  assertAllowedPublishTitle,
+  assertAllowedStatsTemplateNames,
+  assertPublishTextSize,
+  enforcePublishRateLimit,
+  guardErrorResponse,
+  resolvePublishCredentials,
+} from './publish-guard';
 import { 
   generatePromptContext, 
   generateReportForSection,
@@ -438,10 +450,19 @@ export default {
           fp2 = fp2Fetch?.data ?? null;
           fp3 = fp3Fetch?.data ?? null;
         } else if (fp1Url) {
-          const fp2Url = fp1Url.replace('/practice/1', '/practice/2');
-          const fp3Url = fp1Url.replace('/practice/1', '/practice/3');
+          let safeFp1Url: string;
+          try {
+            safeFp1Url = assertAllowedPracticeSessionUrl(fp1Url);
+          } catch (e: any) {
+            if (e instanceof UrlAllowlistError || e?.name === 'UrlAllowlistError') {
+              return corsResponse({ error: e.message }, 400);
+            }
+            throw e;
+          }
+          const fp2Url = safeFp1Url.replace('/practice/1', '/practice/2');
+          const fp3Url = safeFp1Url.replace('/practice/1', '/practice/3');
           const [fp1Fetch, fp2Fetch, fp3Fetch] = await Promise.all([
-            scrapePracticeSession(fp1Url, drivers).catch(() => null),
+            scrapePracticeSession(safeFp1Url, drivers).catch(() => null),
             scrapePracticeSession(fp2Url, drivers).catch(() => null),
             scrapePracticeSession(fp3Url, drivers).catch(() => null),
           ]);
@@ -511,7 +532,8 @@ export default {
           domain, username, password, 
           title, text, summary, 
           sectionHeader, currentFullText,
-          turnstileToken
+          turnstileToken,
+          ownerToken,
         } = body;
 
         const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
@@ -519,28 +541,39 @@ export default {
           return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
         }
 
-        if (!domain || !username || !password || !title || !text) {
-          return corsResponse({ error: 'Missing required parameters' }, 400);
-        }
-
         try {
+          await enforcePublishRateLimit(_env.F1_WIKI_STATE, request);
+          const creds = resolvePublishCredentials(_env, {
+            domain, username, password, ownerToken,
+          });
+          const safeTitle = assertAllowedPublishTitle(title);
+          const safeText = assertPublishTextSize(text);
+          if (typeof currentFullText === 'string' && currentFullText.length > 0) {
+            assertPublishTextSize(currentFullText);
+          }
+
           const session = await loginToWiki({ 
-            domain, username, botPassword: password,
+            domain: creds.domain,
+            username: creds.username,
+            botPassword: creds.password,
             apiEndpoint: _env.WIKI_API_ENDPOINT,
             proxySecret: _env.PROXY_SECRET,
             kvState: _env.F1_WIKI_STATE
           });
           
-          let finalText = text;
+          let finalText = safeText;
           if (sectionHeader) {
             // Edit section logic
-            const baseText = currentFullText || '';
-            finalText = replaceSectionWikitext(baseText, sectionHeader, text);
+            const baseText = typeof currentFullText === 'string' ? currentFullText : '';
+            finalText = replaceSectionWikitext(baseText, sectionHeader, safeText);
+            assertPublishTextSize(finalText);
           }
 
-          await editPage(domain, session, title, finalText, summary || 'Semi-automated edit (https://christran.io/f1)', _env.WIKI_API_ENDPOINT);
+          await editPage(creds.domain, session, safeTitle, finalText, summary || 'Semi-automated edit (https://christran.io/f1)', _env.WIKI_API_ENDPOINT);
           return corsResponse({ success: true });
         } catch (e: any) {
+          const guarded = guardErrorResponse(e);
+          if (guarded) return corsResponse({ success: false, error: guarded.error }, guarded.status);
           return corsResponse({ success: false, error: e.message }, 500);
         }
       }
@@ -644,7 +677,8 @@ export default {
         const { 
           domain, username, password, 
           round, templatesToUpdate,
-          turnstileToken
+          turnstileToken,
+          ownerToken,
         } = body;
 
         const isTokenValid = await verifyTurnstile(turnstileToken, _env.TURNSTILE_SECRET_KEY, request);
@@ -652,13 +686,21 @@ export default {
           return corsResponse({ error: 'CAPTCHA verification failed. Please try again.' }, 403);
         }
 
-        if (!domain || !username || !password || !round || !templatesToUpdate) {
+        if (!round) {
           return corsResponse({ error: 'Missing required parameters' }, 400);
         }
 
         try {
+          await enforcePublishRateLimit(_env.F1_WIKI_STATE, request);
+          const creds = resolvePublishCredentials(_env, {
+            domain, username, password, ownerToken,
+          });
+          const safeTemplates = assertAllowedStatsTemplateNames(templatesToUpdate);
+
           const session = await loginToWiki({ 
-            domain, username, botPassword: password,
+            domain: creds.domain,
+            username: creds.username,
+            botPassword: creds.password,
             apiEndpoint: _env.WIKI_API_ENDPOINT,
             proxySecret: _env.PROXY_SECRET,
             kvState: _env.F1_WIKI_STATE
@@ -685,9 +727,10 @@ export default {
 
           const publishResults: any[] = [];
 
-          for (const temp of templatesToUpdate) {
+          for (const temp of safeTemplates) {
             const pageTitle = `Template:Stats/${temp}`;
-            const pageInfo = await getPageContent(domain, pageTitle, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
+            assertAllowedPublishTitle(pageTitle);
+            const pageInfo = await getPageContent(creds.domain, pageTitle, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
             
             if (!pageInfo.exists) {
               publishResults.push({ template: temp, status: 'Not found' });
@@ -700,8 +743,9 @@ export default {
               if (raceName) {
                 finalText = updateCorrectionText(finalText, 2026, raceName, winnerCode);
               }
+              assertPublishTextSize(finalText);
               
-              await editPage(domain, session, pageTitle, finalText, `Semi-automated edit of stats template up to 2026 Round ${rd} (${raceName || `Round ${rd}`}) (https://christran.io/f1)`, _env.WIKI_API_ENDPOINT);
+              await editPage(creds.domain, session, pageTitle, finalText, `Semi-automated edit of stats template up to 2026 Round ${rd} (${raceName || `Round ${rd}`}) (https://christran.io/f1)`, _env.WIKI_API_ENDPOINT);
               publishResults.push({ template: temp, status: 'Updated' });
             } else {
               publishResults.push({ template: temp, status: 'No changes' });
@@ -710,6 +754,8 @@ export default {
 
           return corsResponse({ success: true, publishResults });
         } catch (e: any) {
+          const guarded = guardErrorResponse(e);
+          if (guarded) return corsResponse({ success: false, error: guarded.error }, guarded.status);
           return corsResponse({ success: false, error: e.message }, 500);
         }
       }

@@ -11,6 +11,7 @@ import {
 import { trackedKvPut } from './kv-ops';
 import { extractPdfText } from './fia-pdf-parser';
 import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
+import { assertAllowedPracticeSessionUrl } from './url-allowlist';
 
 export {
   createF1ApiContext,
@@ -613,13 +614,19 @@ export async function scrapePracticeSession(
   url: string,
   drivers: Driver[]
 ): Promise<PracticeSessionFetchResult> {
+  // Strict host/path allowlist (www.formula1.com practice results only).
+  const validatedUrl = assertAllowedPracticeSessionUrl(url);
+
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
   };
 
-  const res = await fetch(url, { headers });
+  const res = await fetch(validatedUrl, { headers, redirect: 'manual' });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error('Practice scrape redirect rejected');
+  }
   if (!res.ok) throw new Error(`Failed to fetch F1.com practice page: Status ${res.status}`);
   const html = await res.text();
 
