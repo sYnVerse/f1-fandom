@@ -14,8 +14,10 @@ export function sanitizeWikiPlain(value: unknown, maxLen = DEFAULT_MAX): string 
     prev = s;
     s = s.replace(/<[^>]*>/g, '');
   }
+  // Drop any remaining angle brackets (CodeQL: incomplete multi-char sanitization).
+  s = s.replace(/</g, '').replace(/>/g, '');
   s = s
-    .replace(/[\[\]{}|<>]/g, '')
+    .replace(/[\[\]{}|]/g, '')
     .replace(/[']{2,}/g, "'")
     .replace(/\r?\n/g, ' ')
     .replace(/\s+/g, ' ')
@@ -39,12 +41,15 @@ export function sanitizeConstructorTemplateName(value: unknown): string {
   return cleaned;
 }
 
-/** Lap times / status fragments shown in tables (keep : . + - digits letters). */
+/**
+ * Lap times / status fragments shown in tables.
+ * Strict allowlist only — no tag-stripping regex (avoids incomplete sanitization).
+ * Keeps letters, digits, space, and : . + - ( ) %.
+ */
 export function sanitizeWikiTimeOrStatus(value: unknown): string {
   const s = String(value ?? '')
-    .replace(/<[^>]*>/g, '')
-    .replace(/[\[\]{}|<>]/g, '')
-    .replace(/\r?\n/g, ' ')
+    .replace(/[^A-Za-z0-9 :.+\-()%]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
   return s.slice(0, 40);
 }

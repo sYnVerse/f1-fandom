@@ -15,7 +15,11 @@ import {
   MAX_PUBLISH_WIKITEXT_CHARS,
   resolvePublishCredentials,
 } from '../src/publish-guard';
-import { sanitizeWikiLinkText } from '../src/wikitext-sanitize';
+import {
+  sanitizeWikiLinkText,
+  sanitizeWikiPlain,
+  sanitizeWikiTimeOrStatus,
+} from '../src/wikitext-sanitize';
 import { formatDriverWikiLink, getTeamTemplate } from '../src/wikitext-generator';
 
 function assert(cond: boolean, msg: string): void {
@@ -101,6 +105,28 @@ const poisoned = getTeamTemplate('unknown_team', 'Foo}}{{Script');
 assert(poisoned === '{{FooScript-CON}}', `team template sanitized: ${poisoned}`);
 const link = formatDriverWikiLink('Max]]', '{{Verstappen}}', 'Dutch');
 assert(link === '{{NED}} [[Max Verstappen]]', `driver link sanitized: ${link}`);
+
+// Normal values unchanged
+assert(sanitizeWikiTimeOrStatus('1:23.456') === '1:23.456', 'lap time passthrough');
+assert(sanitizeWikiTimeOrStatus('+5.123') === '+5.123', 'delta passthrough');
+assert(sanitizeWikiTimeOrStatus('DNF') === 'DNF', 'status passthrough');
+assert(sanitizeWikiPlain('Max Verstappen') === 'Max Verstappen', 'name passthrough');
+
+// Nested/broken HTML must leave no angle brackets (CodeQL incomplete sanitization)
+const injectionCases = [
+  '<scr<script>ipt>alert(1)</script>',
+  '<<script>>',
+  '1:23.456<img src=x onerror=1>',
+];
+for (const raw of injectionCases) {
+  const plain = sanitizeWikiPlain(raw);
+  const time = sanitizeWikiTimeOrStatus(raw);
+  assert(!plain.includes('<') && !plain.includes('>'), `plain no brackets: ${JSON.stringify(raw)} -> ${JSON.stringify(plain)}`);
+  assert(!time.includes('<') && !time.includes('>'), `time no brackets: ${JSON.stringify(raw)} -> ${JSON.stringify(time)}`);
+}
+const injectedTime = sanitizeWikiTimeOrStatus('1:23.456<img src=x onerror=1>');
+assert(injectedTime.startsWith('1:23.456'), `time keeps leading lap time: ${injectedTime}`);
+assert(!injectedTime.includes('<') && !injectedTime.includes('>'), 'injected time has no angle brackets');
 console.log('PASS wikitext sanitize');
 
 console.log('verify-security-hardening: all assertions passed');
