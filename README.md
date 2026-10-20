@@ -36,8 +36,9 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 ### Web Dashboard & API Endpoints
 - **Modern Frontend Dashboard**: Responsive F1-themed dark dashboard with interactive tabs.
 - **Interactive Wiki Stats Panel**: Features dedicated controls to preview stats updates round-by-round and deploy specific templates to the wiki with real-time logging.
-- **Bot Connection Test & Publishing**: Validate bot credentials, fetch page content, and edit specific page sections directly from the UI.
-- **Security & Turnstile Integration**: Protects write operations with Cloudflare Turnstile CAPTCHA (with automatic bypass for local development or when `TURNSTILE_SECRET_KEY` is not configured).
+- **Bot Connection Test & Publishing**: Validate bot credentials, fetch page content, and edit specific page sections directly from the UI. Dashboard publishes are limited to allowlisted wiki hosts and page titles (GP pages, Career/Stats/Latest templates, and `User:…/Sandbox` drafts).
+- **Security & Turnstile Integration**: Protects write operations with Cloudflare Turnstile CAPTCHA (with automatic bypass for local development or when `TURNSTILE_SECRET_KEY` is not configured). Optional `DASHBOARD_OWNER_TOKEN` adds an extra shared-secret gate for publish APIs.
+- **Credential Storage**: Bot password and optional owner token are kept in `sessionStorage` only (cleared when the tab closes); domain/username/sandbox settings may persist in `localStorage`.
 
 ### Daily Reporting
 - **Operations Summary Emails**: Integrates with Resend API to deliver a daily report (at 6 AM Pacific Time) to administrators detailing total attempted, succeeded, and failed API actions, including a detailed error log with reasons for any failures.
@@ -63,7 +64,7 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 - **Wiki Integration**: MediaWiki API
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript (tabs and real-time logs)
 - **Python Tools**: Pandas, Requests, BeautifulSoup
-- **Security**: Cloudflare Turnstile verification, CodeQL-safe line-based wikitext parsing
+- **Security**: Cloudflare Turnstile verification; wiki-domain and F1.com URL allowlists; dashboard publish title/credential guards; wikitext field sanitization; CodeQL-safe line-based wikitext parsing
 - **Storage**: Cloudflare KV (state tracking and logging)
 - **Notifications**: Resend API (email reports)
 - **AI**: Cloudflare Workers AI, Google Gemini Flash, OpenAI (with automatic provider fallback)
@@ -83,6 +84,7 @@ A comprehensive automation tool for generating and maintaining Formula One Wiki 
 f1-fandom/
 ├── src/
 │   ├── index.ts                     # Main Cloudflare Worker handler and cron sync
+│   ├── career-results-stint.ts      # Stint-aware Career Results row sync helpers
 │   ├── career-standings-owner.ts    # Latest concluded round ownership helper for career standings
 │   ├── f1-api.ts                    # Jolpi API integration, Ergast fallbacks, and F1.com helpers
 │   ├── f1-api-cache.ts              # Within-run API deduplication and 429 backoff
@@ -90,16 +92,21 @@ f1-fandom/
 │   ├── sync-kv.ts                   # Per-target KV sync flag helpers
 │   ├── kv-ops.ts                    # KV daily write count, log buffering, edit retry/replay, and failure locks
 │   ├── llm-reporter.ts              # LLM prompts, F1.com article crawling, HTML sanitization
-│   ├── season-roster-2026.ts          # Shared 2026 driver-to-constructor roster map
+│   ├── publish-guard.ts             # Dashboard publish title/credential/rate-limit guards
+│   ├── season-roster-2026.ts        # Shared 2026 driver-to-constructor roster map
 │   ├── stats.ts                     # Driver career statistics and template calculations
 │   ├── statsf1.ts                   # StatsF1 classification verification helper
-│   ├── wiki.ts                      # MediaWiki API integration and edit retries
+│   ├── team-drivers-registry.ts     # Template:Team Drivers/{year} stint registry parser
+│   ├── url-allowlist.ts             # Strict https host/URL allowlisting helpers
+│   ├── wiki.ts                      # MediaWiki API integration, domain allowlist, and edit retries
 │   ├── wikitext-generator.ts        # WikiTable formatting and test driver helpers
 │   ├── wikitext-parse.ts            # CodeQL-safe line-based wikitext parsing
+│   ├── wikitext-sanitize.ts         # Sanitize API strings before wikitext interpolation
 │   └── frontend-html.ts             # Web dashboard UI
 ├── scripts/
 │   ├── verify-sync-kv.ts            # KV sync flag smoke tests
 │   ├── verify-career-standings-owner.ts # Multi-round career standings ownership tests
+│   ├── verify-career-stint.ts       # Career Results stint-aware sync tests
 │   ├── verify-wikitext-parse.ts     # Wikitext parsing verification
 │   ├── verify-infobox-update.ts     # Infobox parameter read/update tests
 │   ├── verify-jolpica-cache.ts      # API cache dedup, backoff, and bulk endpoint tests
@@ -111,21 +118,51 @@ f1-fandom/
 │   ├── verify-fia-pdf-parser.ts     # FIA Entry List PDF parser verification
 │   ├── verify-kv-ops.ts             # KV daily write count and edit failure lock tests
 │   ├── verify-wiki-edit-retry.ts    # Edit retry and KV replay queue verification
+│   ├── verify-wiki-domain-allowlist.ts # Wiki domain SSRF allowlist tests
+│   ├── verify-security-hardening.ts # Publish/practice URL/sanitize hardening tests
 │   ├── verify-career-placeholder.ts # Career Results placeholder row tests
 │   ├── verify-legacy-kv.ts          # Legacy KV state fallback tests
 │   └── verify-stats-sync.ts         # Career stats template calculations verification
 ├── f1.py                            # Python wiki table generator
 ├── pyergast.py                      # Python Ergast API wrapper
+├── wrangler.toml                    # Cloudflare Worker name, crons, KV, public vars
 └── README.md
 ```
 
 ## Getting Started
 
-1. Set up wiki authentication credentials (bot account on f1.fandom.com)
-2. Configure environment variables for wiki domain, bot password, LLM configuration (`GEMINI_API_KEY`, `OPENAI_API_KEY`, or `LLM_PROVIDER`), and the optional `STATS_SYNC` gate.
-3. Deploy Cloudflare Worker to enable automated table and report generation
-4. Use the web dashboard or API endpoints to trigger updates
-5. Verify generated wikitext before publishing to wiki
+1. Set up wiki authentication credentials (bot account on f1.fandom.com with a bot password).
+2. Configure Cloudflare Worker secrets and vars (see below).
+3. Deploy the Worker (`npm run deploy` / `wrangler deploy`) to enable cron sync and the dashboard.
+4. Use the web dashboard or API endpoints to preview and publish updates.
+5. Verify generated wikitext before publishing to the wiki.
+
+### Configuration (vars & secrets)
+
+Public vars (also settable in `wrangler.toml` `[vars]`):
+
+| Name | Purpose |
+|------|---------|
+| `DEFAULT_WIKI_DOMAIN` | Default wiki host (default `f1.fandom.com`) |
+| `TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key for the dashboard |
+| `STATS_SYNC` | Set to `TRUE` to enable cron updates of the 21 career Stats templates |
+| `ALLOWED_WIKI_HOSTS` | Optional comma-separated extra allowlisted wiki hostnames |
+| `LLM_PROVIDER` | Optional preferred LLM (`gemini`, `openai`, or `workers-ai`) |
+
+Secrets (via Cloudflare dashboard or `wrangler secret put` — never commit values):
+
+| Name | Purpose |
+|------|---------|
+| `WIKI_BOT_USERNAME` | MediaWiki bot account used by cron and (when set) dashboard publish binding |
+| `WIKI_BOT_PASSWORD` | Bot password for that account |
+| `TURNSTILE_SECRET_KEY` | Turnstile server-side verification secret |
+| `DASHBOARD_OWNER_TOKEN` | Optional shared secret required on `/api/publish` and `/api/publish-stats` |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | Optional LLM provider keys (Workers AI is used when neither is set) |
+| `RESEND_API_KEY` | Optional; enables daily operations summary email |
+| `JOLPICA_API_KEY` | Optional Jolpi/Jolpica API bearer token |
+| `WIKI_API_ENDPOINT` / `PROXY_SECRET` | Optional MediaWiki API proxy URL and shared proxy header |
+
+Cron triggers (see `wrangler.toml`): `*/21 * * * *` (high-frequency race-weekend polling) and `0 * * * *` (hourly). Bind KV namespace `F1_WIKI_STATE` and the Workers AI binding as configured in `wrangler.toml`.
 
 ### Running Tests
 
@@ -133,11 +170,24 @@ f1-fandom/
 npm test
 ```
 
-This runs the TypeScript compiler (`tsc --noEmit`) and all verification scripts in `scripts/`.
+This runs the TypeScript compiler (`tsc --noEmit`) and the verification scripts wired in `package.json` `test`. Additional security suites can be run directly:
+
+```bash
+npx tsx scripts/verify-wiki-domain-allowlist.ts
+npx tsx scripts/verify-security-hardening.ts
+```
 
 ## Recent Updates & Changelog
 
-Summary of improvements (updated July 28, 2026):
+Summary of improvements (updated October 20, 2026):
+
+### Security Hardening (October 2026)
+- **Wiki Domain Allowlist (SSRF)**: `/api/wiki-status` and `/api/wiki-content` accept only allowlisted hosts (default `f1.fandom.com`, plus `DEFAULT_WIKI_DOMAIN` / `ALLOWED_WIKI_HOSTS`) with strict https-only parsing; same-host redirect following on wiki page fetches.
+- **Dashboard Publish Guards**: `/api/publish` and `/api/publish-stats` enforce wiki host allowlisting, allowlisted page titles, wikitext size limits, per-IP rate limiting, Turnstile, optional `DASHBOARD_OWNER_TOKEN`, and credential binding to `WIKI_BOT_USERNAME` / `WIKI_BOT_PASSWORD` when those secrets are configured.
+- **Practice URL Allowlist**: Client-supplied practice scrape URLs must be `https://www.formula1.com/en/results/.../practice/...`.
+- **OpenF1 Fetch Allowlist**: OpenF1 JSON fetches are restricted to `api.openf1.org` with path traversal rejection.
+- **Wikitext Field Sanitization**: API-derived names, numbers, times, and constructor fallbacks are sanitized before interpolation into generated wikitext.
+- **Session Credential Storage**: Dashboard bot password (and optional owner token) use `sessionStorage`; non-secret settings may remain in `localStorage`.
 
 ### F1.com Glued TLA Stripping & Practice Table Protection (July 2026)
 - **Semi-Automated Edit Summaries**: All edit summaries triggered from the front-end dashboard now use `"Semi-automated edit..."` instead of `"automated update"`.
