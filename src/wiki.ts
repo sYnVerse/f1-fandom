@@ -49,6 +49,174 @@ export interface WikiSession {
   kvState?: any;
 }
 
+/** Default F1 Fandom hosts the public wiki read APIs may contact. */
+export const DEFAULT_ALLOWED_WIKI_HOSTS: readonly string[] = ['f1.fandom.com'];
+
+export class WikiDomainError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WikiDomainError';
+  }
+}
+
+export interface WikiHostAllowlistEnv {
+  DEFAULT_WIKI_DOMAIN?: string;
+  ALLOWED_WIKI_HOSTS?: string;
+}
+
+/**
+ * Build the allowlist from the built-in F1 Fandom host, optional DEFAULT_WIKI_DOMAIN,
+ * and optional comma-separated ALLOWED_WIKI_HOSTS (Cloudflare vars/secrets).
+ */
+export function resolveAllowedWikiHosts(env?: WikiHostAllowlistEnv): Set<string> {
+  const hosts = new Set<string>(DEFAULT_ALLOWED_WIKI_HOSTS.map((h) => h.toLowerCase()));
+
+  const addConfiguredHost = (raw: string | undefined) => {
+    if (!raw) return;
+    const trimmed = raw.trim().toLowerCase().replace(/\.$/, '');
+    if (!trimmed) return;
+    // Config must be bare hostnames — ignore URL-shaped values.
+    if (trimmed.includes('://') || trimmed.includes('/') || trimmed.includes('@') || trimmed.includes(':')) {
+      return;
+    }
+    hosts.add(trimmed);
+  };
+
+  addConfiguredHost(env?.DEFAULT_WIKI_DOMAIN);
+  if (env?.ALLOWED_WIKI_HOSTS) {
+    for (const part of env.ALLOWED_WIKI_HOSTS.split(',')) {
+      addConfiguredHost(part);
+    }
+  }
+
+  return hosts;
+}
+
+function isIpLiteralHostname(hostname: string): boolean {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) return true;
+  if (hostname.includes(':')) return true;
+  if (hostname.startsWith('[') && hostname.endsWith(']')) return true;
+  return false;
+}
+
+/** True when the authority includes an explicit port (including default :443). */
+function authorityHasExplicitPort(raw: string): boolean {
+  const withoutScheme = raw.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '');
+  const authority = withoutScheme.split('/')[0].split('?')[0].split('#')[0];
+  if (authority.startsWith('[')) {
+    const end = authority.indexOf(']');
+    if (end === -1) return false;
+    return /^:\d+$/.test(authority.slice(end + 1));
+  }
+  const colon = authority.lastIndexOf(':');
+  if (colon === -1) return false;
+  return /^\d+$/.test(authority.slice(colon + 1));
+}
+
+/**
+ * Strictly parse a client-supplied wiki domain to an allowlisted hostname.
+ * https only, exact host match, no userinfo/ports/IPs/paths/suffix lookalikes.
+ */
+export function assertAllowedWikiDomain(
+  rawDomain: unknown,
+  allowedHosts: ReadonlySet<string>
+): string {
+  if (typeof rawDomain !== 'string' || !rawDomain.trim()) {
+    throw new WikiDomainError('Wiki domain is required');
+  }
+
+  const trimmed = rawDomain.trim();
+  if (trimmed.includes('@')) {
+    throw new WikiDomainError('Wiki domain must not include userinfo');
+  }
+
+  let url: URL;
+  try {
+    // Only treat https:// as an absolute URL. Require :// so bare "host:port"
+    // is not parsed as a custom scheme (e.g. f1.fandom.com:8443).
+    if (/^https:\/\//i.test(trimmed)) {
+      url = new URL(trimmed);
+    } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+      throw new WikiDomainError('Wiki domain must use https');
+    } else {
+      url = new URL(`https://${trimmed}`);
+    }
+  } catch (e: any) {
+    if (e instanceof WikiDomainError || e?.name === 'WikiDomainError') throw e;
+    throw new WikiDomainError('Invalid wiki domain');
+  }
+
+  if (url.protocol !== 'https:') {
+    throw new WikiDomainError('Wiki domain must use https');
+  }
+  if (url.username || url.password) {
+    throw new WikiDomainError('Wiki domain must not include userinfo');
+  }
+  // URL may normalize https://host:443 to an empty port — still reject explicit ports.
+  if (url.port !== '' || authorityHasExplicitPort(trimmed)) {
+    throw new WikiDomainError('Wiki domain must not include a port');
+  }
+  if ((url.pathname && url.pathname !== '/') || url.search || url.hash) {
+    throw new WikiDomainError('Wiki domain must be a hostname only');
+  }
+
+  let host = url.hostname.toLowerCase();
+  if (host.endsWith('.')) {
+    host = host.slice(0, -1);
+  }
+
+  if (!host || isIpLiteralHostname(host)) {
+    throw new WikiDomainError('Wiki domain must not be an IP address');
+  }
+
+  // Exact match only — blocks f1.fandom.com.evil.com and evil-f1.fandom.com.
+  if (!allowedHosts.has(host)) {
+    throw new WikiDomainError('Wiki domain is not allowlisted');
+  }
+
+  return host;
+}
+
+/** Fetch while allowing only same-host redirects (blocks redirect-based SSRF). */
+async function fetchWithSameHostRedirects(
+  url: string,
+  init: RequestInit = {},
+  maxRedirects = 3
+): Promise<Response> {
+  let current = url;
+
+  for (let i = 0; i <= maxRedirects; i++) {
+    const res = await fetch(current, { ...init, redirect: 'manual' });
+    if (res.status < 300 || res.status >= 400) {
+      return res;
+    }
+
+    const location = res.headers.get('Location');
+    if (!location) {
+      throw new Error(`Redirect without Location (HTTP ${res.status})`);
+    }
+
+    const next = new URL(location, current);
+    const cur = new URL(current);
+    const nextHost = next.hostname.toLowerCase();
+    const curHost = cur.hostname.toLowerCase();
+
+    if (
+      next.protocol !== cur.protocol ||
+      nextHost !== curHost ||
+      next.username !== '' ||
+      next.password !== '' ||
+      next.port !== cur.port
+    ) {
+      throw new Error('Redirect to non-allowlisted host rejected');
+    }
+
+    current = next.href;
+  }
+
+  throw new Error('Too many redirects');
+}
+
 // Get the MediaWiki API URL
 function getApiUrl(domain: string, apiEndpoint?: string): string {
   if (apiEndpoint) {
@@ -289,7 +457,7 @@ export async function getPageContent(
     headers['X-Proxy-Secret'] = proxySecret;
   }
 
-  const res = await fetch(`${apiUrl}?${params.toString()}`, { headers });
+  const res = await fetchWithSameHostRedirects(`${apiUrl}?${params.toString()}`, { headers });
 
   if (!res.ok) {
     const errorText = await res.text().catch(() => '');

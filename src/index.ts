@@ -65,7 +65,10 @@ import {
   editPageWithRetry,
   replaceSectionWikitext,
   getSectionContent,
-  isSectionEmptyOrPlaceholder
+  isSectionEmptyOrPlaceholder,
+  assertAllowedWikiDomain,
+  resolveAllowedWikiHosts,
+  WikiDomainError,
 } from './wiki';
 import { 
   generatePromptContext, 
@@ -463,7 +466,19 @@ export default {
         const { domain, title } = body;
         if (!domain || !title) return corsResponse({ error: 'Domain and title required' }, 400);
 
-        const pageInfo = await getPageContent(domain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
+        // No Turnstile here: matches other unauthenticated read APIs (/api/schedule, etc.)
+        // and the dashboard calls these without a CAPTCHA token. SSRF is closed via allowlist.
+        let safeDomain: string;
+        try {
+          safeDomain = assertAllowedWikiDomain(domain, resolveAllowedWikiHosts(_env));
+        } catch (e: any) {
+          if (e instanceof WikiDomainError || e?.name === 'WikiDomainError') {
+            return corsResponse({ error: e.message }, 400);
+          }
+          throw e;
+        }
+
+        const pageInfo = await getPageContent(safeDomain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
         return corsResponse({ exists: pageInfo.exists });
       }
 
@@ -473,7 +488,18 @@ export default {
         const { domain, title } = body;
         if (!domain || !title) return corsResponse({ error: 'Domain and title required' }, 400);
 
-        const pageInfo = await getPageContent(domain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
+        // No Turnstile here: same rationale as /api/wiki-status (read path + dashboard UX).
+        let safeDomain: string;
+        try {
+          safeDomain = assertAllowedWikiDomain(domain, resolveAllowedWikiHosts(_env));
+        } catch (e: any) {
+          if (e instanceof WikiDomainError || e?.name === 'WikiDomainError') {
+            return corsResponse({ error: e.message }, 400);
+          }
+          throw e;
+        }
+
+        const pageInfo = await getPageContent(safeDomain, title, undefined, _env.WIKI_API_ENDPOINT, _env.PROXY_SECRET, _env.F1_WIKI_STATE);
         return corsResponse({ exists: pageInfo.exists, content: pageInfo.content });
       }
 
