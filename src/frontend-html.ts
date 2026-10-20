@@ -574,11 +574,15 @@ export const frontendHtml = `<!DOCTYPE html>
           <label for="sandbox-page">Draft/Sandbox Page</label>
           <input type="text" id="sandbox-page" class="form-control" placeholder="User:Username/Sandbox">
         </div>
+        <div class="form-group">
+          <label for="owner-token">Owner Token (optional)</label>
+          <input type="password" id="owner-token" class="form-control" placeholder="If DASHBOARD_OWNER_TOKEN is set" autocomplete="off">
+        </div>
         <div class="form-group" style="margin-bottom: 15px; display: flex; justify-content: center;">
           <div class="cf-turnstile" id="turnstile-container" data-sitekey="__TURNSTILE_SITE_KEY__" data-theme="dark" data-expired-callback="onTurnstileExpired"></div>
         </div>
         <button class="btn btn-secondary" style="margin-bottom: 12px;" onclick="testWikiConnection()">Test Bot Connection</button>
-        <button class="btn btn-accent" onclick="saveCredentials()">Save Credentials (Local)</button>
+        <button class="btn btn-accent" onclick="saveCredentials()">Save Settings (Session)</button>
       </aside>
 
       <!-- Main Workspace -->
@@ -838,14 +842,22 @@ export const frontendHtml = `<!DOCTYPE html>
   </div>
 
   <script>
-    // Local storage key management
+    // Persist non-secret settings in localStorage; bot password only in sessionStorage
+    // (cleared when the tab closes — avoids durable XSS/disk theft of the bot password).
     const STORAGE_KEY = 'f1_wiki_credentials';
+    const SESSION_PASSWORD_KEY = 'f1_wiki_bot_password';
+    const SESSION_OWNER_TOKEN_KEY = 'f1_wiki_owner_token';
 
     function getTurnstileToken() {
       if (typeof turnstile !== "undefined") {
         return turnstile.getResponse();
       }
       return "";
+    }
+
+    function getOwnerToken() {
+      const el = document.getElementById('owner-token');
+      return el ? el.value : '';
     }
 
     function resetTurnstile() {
@@ -914,10 +926,22 @@ export const frontendHtml = `<!DOCTYPE html>
       const botUsername = document.getElementById('bot-username').value;
       const botPassword = document.getElementById('bot-password').value;
       const sandboxPage = document.getElementById('sandbox-page').value;
+      const ownerToken = getOwnerToken();
 
-      const creds = { wikiDomain, botUsername, botPassword, sandboxPage };
+      // Never persist the bot password in localStorage.
+      const creds = { wikiDomain, botUsername, sandboxPage };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
-      log('Credentials saved securely to local storage.', 'success');
+      if (botPassword) {
+        sessionStorage.setItem(SESSION_PASSWORD_KEY, botPassword);
+      } else {
+        sessionStorage.removeItem(SESSION_PASSWORD_KEY);
+      }
+      if (ownerToken) {
+        sessionStorage.setItem(SESSION_OWNER_TOKEN_KEY, ownerToken);
+      } else {
+        sessionStorage.removeItem(SESSION_OWNER_TOKEN_KEY);
+      }
+      log('Settings saved (password kept in session only, cleared when tab closes).', 'success');
       testWikiConnection();
     }
 
@@ -928,12 +952,26 @@ export const frontendHtml = `<!DOCTYPE html>
           const creds = JSON.parse(raw);
           document.getElementById('wiki-domain').value = creds.wikiDomain || 'f1.fandom.com';
           document.getElementById('bot-username').value = creds.botUsername || '';
-          document.getElementById('bot-password').value = creds.botPassword || '';
           document.getElementById('sandbox-page').value = creds.sandboxPage || '';
-          log('Credentials loaded from local storage.', 'info');
+          // Migrate away from any previously persisted password.
+          if (creds.botPassword) {
+            sessionStorage.setItem(SESSION_PASSWORD_KEY, creds.botPassword);
+            delete creds.botPassword;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(creds));
+            log('Migrated bot password from localStorage to sessionStorage.', 'warning');
+          }
+          log('Settings loaded (password from this browser session only).', 'info');
         } catch (e) {
           log('Failed to parse saved credentials.', 'error');
         }
+      }
+      const sessionPassword = sessionStorage.getItem(SESSION_PASSWORD_KEY);
+      if (sessionPassword) {
+        document.getElementById('bot-password').value = sessionPassword;
+      }
+      const sessionOwner = sessionStorage.getItem(SESSION_OWNER_TOKEN_KEY);
+      if (sessionOwner) {
+        document.getElementById('owner-token').value = sessionOwner;
       }
     }
 
@@ -1443,7 +1481,8 @@ export const frontendHtml = `<!DOCTYPE html>
             text: testContent,
             summary: 'Semi-automated edit: Bot test edit from Cloudflare Automator Worker (https://christran.io/f1)',
             isTest: true,
-            turnstileToken: token
+            turnstileToken: token,
+            ownerToken: getOwnerToken()
           })
         });
 
@@ -1512,7 +1551,8 @@ export const frontendHtml = `<!DOCTYPE html>
             sectionHeader,
             currentFullText: pageText,
             summary: \`Semi-automated edit of \${sectionHeader} section (https://christran.io/f1)\`,
-            turnstileToken: token
+            turnstileToken: token,
+            ownerToken: getOwnerToken()
           })
         });
 
@@ -1563,7 +1603,8 @@ export const frontendHtml = `<!DOCTYPE html>
             title: pageName,
             text: fullText,
             summary: 'Semi-automated edit of complete Grand Prix results page (https://christran.io/f1)',
-            turnstileToken: token
+            turnstileToken: token,
+            ownerToken: getOwnerToken()
           })
         });
         const data = await res.json();
@@ -1907,7 +1948,8 @@ export const frontendHtml = `<!DOCTYPE html>
             password: password,
             round: round,
             templatesToUpdate: templatesToUpdate,
-            turnstileToken: token
+            turnstileToken: token,
+            ownerToken: getOwnerToken()
           })
         });
 

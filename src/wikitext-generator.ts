@@ -17,6 +17,17 @@ import {
 } from './fia-pdf-parser';
 import { DRIVER_TO_CONSTRUCTOR_2026 } from './season-roster-2026';
 import { findSectionRanges, splitLines } from './wikitext-parse';
+import {
+  sanitizeConstructorTemplateName,
+  sanitizeWikiLinkText,
+  sanitizeWikiNumber,
+  sanitizeWikiPlain,
+  sanitizeWikiTimeOrStatus,
+} from './wikitext-sanitize';
+
+function safeTime(value: unknown): string {
+  return sanitizeWikiTimeOrStatus(value);
+}
 
 const FLAGS: Record<string, string> = {
   "British": "{{GBR}}",
@@ -46,7 +57,24 @@ const FLAGS: Record<string, string> = {
 };
 
 export function getFlag(nationality: string): string {
-  return FLAGS[nationality] || "{{NoFlag}}";
+  const key = sanitizeWikiPlain(nationality, 40);
+  return FLAGS[key] || "{{NoFlag}}";
+}
+
+/** Build a sanitized driver wikilink from API name parts. */
+export function formatDriverWikiLink(
+  givenName: string,
+  familyName: string,
+  nationality?: string
+): string {
+  const given = sanitizeWikiLinkText(givenName);
+  const family = sanitizeWikiLinkText(familyName);
+  const display = [given, family].filter(Boolean).join(' ') || 'Unknown';
+  const link = `[[${display}]]`;
+  if (nationality) {
+    return `${getFlag(nationality)} ${link}`;
+  }
+  return link;
 }
 
 export function getNationalityCode(nationality: string): string {
@@ -81,20 +109,25 @@ const STATUSES: Record<string, string> = {
 };
 
 export function getTeamTemplate(constructorId: string, constructorName: string): string {
-  if (CONSTRUCTORS[constructorId]) {
-    return CONSTRUCTORS[constructorId];
+  const id = String(constructorId || '').toLowerCase();
+  if (CONSTRUCTORS[id]) {
+    return CONSTRUCTORS[id];
   }
   // OpenF1 fallback uses constructorId/name "unknown" when standings are unavailable —
   // never emit {{Unknown-CON}} onto wiki pages.
   if (
-    !constructorId ||
-    constructorId === 'unknown' ||
+    !id ||
+    id === 'unknown' ||
     !constructorName ||
     constructorName === 'Unknown'
   ) {
     return '{{Team-Placeholder}}';
   }
-  return `{{${constructorName}-CON}}`;
+  const safeName = sanitizeConstructorTemplateName(constructorName);
+  if (!safeName) {
+    return '{{Team-Placeholder}}';
+  }
+  return `{{${safeName}-CON}}`;
 }
 
 /** True when a team template is usable (not a placeholder / Unknown-CON). */
@@ -179,9 +212,9 @@ export function generateGridWikitext(qualifyingResults: QualifyingResult[]): str
   output += '{{Grid/2-2/34r\n';
 
   for (const q of qualifyingResults) {
-    const name = `${q.driver.givenName} ${q.driver.familyName}`;
-    const lastName = q.driver.familyName;
-    const number = q.number;
+    const name = `${sanitizeWikiLinkText(q.driver.givenName)} ${sanitizeWikiLinkText(q.driver.familyName)}`;
+    const lastName = sanitizeWikiLinkText(q.driver.familyName);
+    const number = sanitizeWikiNumber(q.number);
     const flag = getFlag(q.driver.nationality);
 
     output += `| ${flag} ${number}. [[${name}|${lastName}]]\n`;
@@ -255,9 +288,9 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
   for (let row = 0; row < totalDrivers; row++) {
     const q = qualifyingResults[row];
     const team = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
-    const driver = `${getFlag(q.driver.nationality)} [[${q.driver.givenName} ${q.driver.familyName}]]`;
-    const number = q.number;
-    const pos = q.position;
+    const driver = formatDriverWikiLink(q.driver.givenName, q.driver.familyName, q.driver.nationality);
+    const number = sanitizeWikiNumber(q.number);
+    const pos = sanitizeWikiNumber(q.position);
 
     // Print drop indicators
     if (row === q3Count || row === q3Count + q2ElimCount) {
@@ -280,9 +313,9 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
     }
 
     if (fastestQ1Number === number) {
-      output += `\n| '''${q.Q1}'''`;
+      output += `\n| '''${safeTime(q.Q1)}'''`;
     } else {
-      output += `\n| ${q.Q1 || ''}`;
+      output += `\n| ${safeTime(q.Q1 || '')}`;
     }
 
     // Q2
@@ -296,9 +329,9 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
 
       if (q.Q2 && q.Q2 !== 'nan') {
         if (fastestQ2Number === number) {
-          output += `\n| '''${q.Q2}'''`;
+          output += `\n| '''${safeTime(q.Q2)}'''`;
         } else {
-          output += `\n| ${q.Q2}`;
+          output += `\n| ${safeTime(q.Q2)}`;
         }
       } else {
         output += `\n| `;
@@ -315,9 +348,9 @@ The full qualifying results for the '''{{PAGENAME}}''' are outlined below:
       output += `\n! ${pos}`;
       if (q.Q3 && q.Q3 !== 'nan') {
         if (row === 0) {
-          output += `\n| '''${q.Q3}'''`;
+          output += `\n| '''${safeTime(q.Q3)}'''`;
         } else {
-          output += `\n| ${q.Q3}`;
+          output += `\n| ${safeTime(q.Q3)}`;
         }
       } else {
         output += `\n| `;
@@ -412,9 +445,9 @@ The full Sprint Qualifying results for the '''{{PAGENAME}}''' are outlined below
   for (let row = 0; row < totalDrivers; row++) {
     const q = qualifyingResults[row];
     const team = getTeamTemplate(q.constructor.constructorId, q.constructor.name);
-    const driver = `${getFlag(q.driver.nationality)} [[${q.driver.givenName} ${q.driver.familyName}]]`;
-    const number = q.number;
-    const pos = q.position;
+    const driver = formatDriverWikiLink(q.driver.givenName, q.driver.familyName, q.driver.nationality);
+    const number = sanitizeWikiNumber(q.number);
+    const pos = sanitizeWikiNumber(q.position);
 
     // Print drop indicators
     if (row === q3Count || row === q3Count + q2ElimCount) {
@@ -437,9 +470,9 @@ The full Sprint Qualifying results for the '''{{PAGENAME}}''' are outlined below
     }
 
     if (fastestQ1Number === number) {
-      output += `\n| '''${q.Q1}'''`;
+      output += `\n| '''${safeTime(q.Q1)}'''`;
     } else {
-      output += `\n| ${q.Q1 || ''}`;
+      output += `\n| ${safeTime(q.Q1 || '')}`;
     }
 
     // SQ2
@@ -453,9 +486,9 @@ The full Sprint Qualifying results for the '''{{PAGENAME}}''' are outlined below
 
       if (q.Q2 && q.Q2 !== 'nan') {
         if (fastestQ2Number === number) {
-          output += `\n| '''${q.Q2}'''`;
+          output += `\n| '''${safeTime(q.Q2)}'''`;
         } else {
-          output += `\n| ${q.Q2}`;
+          output += `\n| ${safeTime(q.Q2)}`;
         }
       } else {
         output += `\n| `;
@@ -472,9 +505,9 @@ The full Sprint Qualifying results for the '''{{PAGENAME}}''' are outlined below
       output += `\n! ${pos}`;
       if (q.Q3 && q.Q3 !== 'nan') {
         if (row === 0) {
-          output += `\n| '''${q.Q3}'''`;
+          output += `\n| '''${safeTime(q.Q3)}'''`;
         } else {
-          output += `\n| ${q.Q3}`;
+          output += `\n| ${safeTime(q.Q3)}`;
         }
       } else {
         output += `\n| `;
@@ -533,9 +566,9 @@ The full race results for the '''{{PAGENAME}}''' are outlined below:
   for (let x = 0; x < results.length; x++) {
     const y = results[x];
     const team = getTeamTemplate(y.constructor.constructorId, y.constructor.name);
-    const driver = `${getFlag(y.driver.nationality)} [[${y.driver.givenName} ${y.driver.familyName}]]`;
-    const number = y.number;
-    const pos = y.position;
+    const driver = formatDriverWikiLink(y.driver.givenName, y.driver.familyName, y.driver.nationality);
+    const number = sanitizeWikiNumber(y.number);
+    const pos = sanitizeWikiNumber(y.position);
     
     let gridVal = y.grid;
     if (gridVal === "0") {
@@ -627,7 +660,7 @@ export function generateStandingsWikitext(
     const pos = ds.position;
     const pts = ds.points;
     const driverId = ds.Driver.driverId;
-    const driver = `${getFlag(ds.Driver.nationality)} [[${ds.Driver.givenName} ${ds.Driver.familyName}]]`;
+    const driver = formatDriverWikiLink(ds.Driver.givenName, ds.Driver.familyName, ds.Driver.nationality);
 
     // Position change
     let posChange = '{{X}}';
@@ -911,12 +944,14 @@ The full practice results for the '''{{PAGENAME}}''' are outlined below:
         ?? pdfTestDriverLookup.get(entry.driverName.toLowerCase().replace(/[\s'-]/g, ''))
       : undefined;
     const cached = isTestDriver ? lookupTestDriverEntry(entry.driverName, cachedTestDrivers) : undefined;
-    const num = isTestDriver
-      ? (cached?.number || pdfRow?.number || entry.number || '0')
-      : (entry.permanentNumber || '0');
+    const num = sanitizeWikiNumber(
+      isTestDriver
+        ? (cached?.number || pdfRow?.number || entry.number || '0')
+        : (entry.permanentNumber || '0')
+    );
     const name = isTestDriver
-      ? (cached?.name || canonicalizeTestDriverWikiName(entry.driverName))
-      : `${entry.givenName} ${entry.familyName}`;
+      ? sanitizeWikiLinkText(cached?.name || canonicalizeTestDriverWikiName(entry.driverName))
+      : [sanitizeWikiLinkText(entry.givenName), sanitizeWikiLinkText(entry.familyName)].filter(Boolean).join(' ');
     const flag = isTestDriver
       ? resolveTestDriverFlag(name, pdfRow)
       : getFlag(entry.nationality);
