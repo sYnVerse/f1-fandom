@@ -16,5 +16,6 @@
   },
   "dependencies": {
     "unpdf": "^1.8.1"
-  }
+  },
+  "license": "AGPL-3.0-or-later"
 }
