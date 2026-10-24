@@ -15,7 +15,7 @@
     "wrangler": "^4.95.0"
   },
   "dependencies": {
-    "unpdf": "^1.8.1"
+    "unpdf": "^1.9.1"
   },
   "license": "AGPL-3.0-or-later"
 }
